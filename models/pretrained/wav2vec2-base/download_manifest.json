@@ -1,0 +1,79 @@
+{
+  "repo_id": "facebook/wav2vec2-base",
+  "revision": "0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8",
+  "role": "Backbone for MDD fine-tuning; no trained phoneme head/tokenizer",
+  "verified_at_utc": "2026-10-20T08:58:10.166579+00:00",
+  "weights_file": "pytorch_model.bin",
+  "files": [
+    {
+      "filename": "README.md",
+      "size_bytes": 1997,
+      "sha256": "d633aeaaec1046af8cbacd21039f819304017e1ab6a369c5aff8668f3c35a127",
+      "hub_sha256": null,
+      "hub_blob_id": "4610c70900836897504863c6b96268d319718af9",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/README.md?download=true"
+    },
+    {
+      "filename": "config.json",
+      "size_bytes": 1842,
+      "sha256": "4937977e24d12d1bba70cdce8709c3c04807a8e4ae8ddac4229c48c436ae99ae",
+      "hub_sha256": null,
+      "hub_blob_id": "47d7dc533f6d412e1c021eb181615d006e403bed",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/config.json?download=true"
+    },
+    {
+      "filename": "preprocessor_config.json",
+      "size_bytes": 159,
+      "sha256": "b225d617c025463b9e157e06afea8b90dc7078fc70b013c533328423e0486b4a",
+      "hub_sha256": null,
+      "hub_blob_id": "3f24dc078fcba55ee1d417a413847ead40c093a3",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/preprocessor_config.json?download=true"
+    },
+    {
+      "filename": "pytorch_model.bin",
+      "size_bytes": 380267417,
+      "sha256": "3249fe98bfc62fcbc26067f724716a6ec49d12c4728a2af1df659013905dff21",
+      "hub_sha256": "3249fe98bfc62fcbc26067f724716a6ec49d12c4728a2af1df659013905dff21",
+      "hub_blob_id": "5a7d25a3aaa69557a26fc6afd9a257a0f194381d",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/pytorch_model.bin?download=true"
+    },
+    {
+      "filename": "special_tokens_map.json",
+      "size_bytes": 85,
+      "sha256": "bb7068de1150661a10b55f9e4b12a0e77af8bf91f5e45e1b58afaf1d0e17f675",
+      "hub_sha256": null,
+      "hub_blob_id": "25bc39604f72700b3b8e10bd69bb2f227157edd1",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/special_tokens_map.json?download=true"
+    },
+    {
+      "filename": "tokenizer_config.json",
+      "size_bytes": 163,
+      "sha256": "dc790594f5bc351a4311c6624f40acd95850d4aaf2a5cb3c656c9b610720b608",
+      "hub_sha256": null,
+      "hub_blob_id": "978a15a96dbb2d23e2afbc70137cae6c5ce38c8d",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/tokenizer_config.json?download=true"
+    },
+    {
+      "filename": "vocab.json",
+      "size_bytes": 291,
+      "sha256": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64",
+      "hub_sha256": null,
+      "hub_blob_id": "88181b954aa14df68be9b444b3c36585f3078c0a",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base/resolve/0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8/vocab.json?download=true"
+    }
+  ],
+  "configuration": {
+    "model_type": "wav2vec2",
+    "architectures": [
+      "Wav2Vec2ForPreTraining"
+    ],
+    "hidden_size": 768,
+    "num_hidden_layers": 12,
+    "sampling_rate": 16000
+  },
+  "verification": {
+    "hub_checksums": true,
+    "local_configuration": true,
+    "inference_load_tested": false
+  }
+}

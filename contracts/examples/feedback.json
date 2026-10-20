@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "utterance_id": "example-001",
+  "language": "vi",
+  "summary": "Hệ thống gợi ý luyện âm đầu của từ think.",
+  "tips": [
+    {
+      "error_id": "e1",
+      "explanation": "Âm mong đợi là /θ/; model nhận diện âm /t/. Đây là kết quả ước lượng từ audio.",
+      "instruction": "Đặt nhẹ đầu lưỡi giữa hai hàm răng, thổi hơi liên tục và không rung dây thanh. Sau đó thử đọc lại cả từ.",
+      "practice_words": ["think", "thin", "thank"]
+    }
+  ],
+  "tts_segments": [
+    {"language": "en-US", "purpose": "reference", "text": "I think this is useful."},
+    {"language": "vi-VN", "purpose": "feedback", "text": "Bạn hãy luyện lại âm đầu của từ vừa được đánh dấu, rồi thu âm lại."}
+  ]
+}

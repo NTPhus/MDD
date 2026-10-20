@@ -1,0 +1,88 @@
+{
+  "repo_id": "facebook/wav2vec2-base-960h",
+  "revision": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156",
+  "role": "English character CTC ASR baseline for demo transcripts",
+  "verified_at_utc": "2026-10-20T08:58:50.044546+00:00",
+  "weights_file": "model.safetensors",
+  "files": [
+    {
+      "filename": "README.md",
+      "size_bytes": 4431,
+      "sha256": "fc52a0adfa64e446800f9944c6cf9b90da3127aba548860ea5714516ec8c18c7",
+      "hub_sha256": null,
+      "hub_blob_id": "c7fe2047d7ac9b9816848c657b2a492ee95b264b",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/README.md?download=true"
+    },
+    {
+      "filename": "config.json",
+      "size_bytes": 1596,
+      "sha256": "d3ec255c063d9f95057b553b19c20135b259875834a4fe9deb218a6be25b4cf3",
+      "hub_sha256": null,
+      "hub_blob_id": "8ca9cc7496e145e37d09cec17d0c3bf9b8523c8e",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/config.json?download=true"
+    },
+    {
+      "filename": "feature_extractor_config.json",
+      "size_bytes": 158,
+      "sha256": "d3de0c797bf9b65f90bc65c30cb7b303ebeda341f6fc80af33628c4b26b95632",
+      "hub_sha256": null,
+      "hub_blob_id": "52fdd74dc06f40033506e402269fbde5e7adc21d",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/feature_extractor_config.json?download=true"
+    },
+    {
+      "filename": "model.safetensors",
+      "size_bytes": 377607901,
+      "sha256": "8aa76ab2243c81747a1f832954586bc566090c83a0ac167df6f31f0fa917d74a",
+      "hub_sha256": "8aa76ab2243c81747a1f832954586bc566090c83a0ac167df6f31f0fa917d74a",
+      "hub_blob_id": "942562678fb28df86c055027c18216fa2a7cb5dd",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/model.safetensors?download=true"
+    },
+    {
+      "filename": "preprocessor_config.json",
+      "size_bytes": 159,
+      "sha256": "b225d617c025463b9e157e06afea8b90dc7078fc70b013c533328423e0486b4a",
+      "hub_sha256": null,
+      "hub_blob_id": "3f24dc078fcba55ee1d417a413847ead40c093a3",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/preprocessor_config.json?download=true"
+    },
+    {
+      "filename": "special_tokens_map.json",
+      "size_bytes": 85,
+      "sha256": "bb7068de1150661a10b55f9e4b12a0e77af8bf91f5e45e1b58afaf1d0e17f675",
+      "hub_sha256": null,
+      "hub_blob_id": "25bc39604f72700b3b8e10bd69bb2f227157edd1",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/special_tokens_map.json?download=true"
+    },
+    {
+      "filename": "tokenizer_config.json",
+      "size_bytes": 163,
+      "sha256": "dc790594f5bc351a4311c6624f40acd95850d4aaf2a5cb3c656c9b610720b608",
+      "hub_sha256": null,
+      "hub_blob_id": "978a15a96dbb2d23e2afbc70137cae6c5ce38c8d",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/tokenizer_config.json?download=true"
+    },
+    {
+      "filename": "vocab.json",
+      "size_bytes": 291,
+      "sha256": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64",
+      "hub_sha256": null,
+      "hub_blob_id": "88181b954aa14df68be9b444b3c36585f3078c0a",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/22aad52d435eb6dbaf354bdad9b0da84ce7d6156/vocab.json?download=true"
+    }
+  ],
+  "configuration": {
+    "model_type": "wav2vec2",
+    "architectures": [
+      "Wav2Vec2ForCTC"
+    ],
+    "hidden_size": 768,
+    "num_hidden_layers": 12,
+    "sampling_rate": 16000,
+    "asr_vocabulary_size": 32
+  },
+  "verification": {
+    "hub_checksums": true,
+    "local_configuration": true,
+    "inference_load_tested": false
+  }
+}

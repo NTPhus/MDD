@@ -1,0 +1,2 @@
+# Install using the official CPU wheel index; no CUDA packages on this machine.
+torch==2.7.1+cpu

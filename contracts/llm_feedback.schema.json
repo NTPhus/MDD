@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mdd:feedback:1.0",
+  "title": "LLM pronunciation feedback grounded in the MDD assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "utterance_id", "language", "summary", "tips", "tts_segments"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "utterance_id": {"type": "string", "minLength": 1},
+    "language": {"enum": ["vi", "en"]},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "tips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error_id", "explanation", "instruction", "practice_words"],
+        "properties": {
+          "error_id": {"type": "string", "minLength": 1},
+          "explanation": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "instruction": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "practice_words": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {"type": "string", "minLength": 1, "maxLength": 100}
+          }
+        }
+      }
+    },
+    "tts_segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["language", "purpose", "text"],
+        "properties": {
+          "language": {"enum": ["en-US", "en-GB", "vi-VN"]},
+          "purpose": {"enum": ["reference", "feedback"]},
+          "text": {"type": "string", "minLength": 1, "maxLength": 2000}
+        }
+      }
+    }
+  }
+}

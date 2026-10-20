@@ -1,0 +1,93 @@
+[
+  {
+    "reference": "tts1",
+    "filename": "2018_shen_tacotron2.pdf",
+    "title": "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions",
+    "publication": "ICASSP 2018; arXiv preprint 2017",
+    "source_url": "https://arxiv.org/pdf/1712.05884",
+    "resolved_url": "https://arxiv.org/pdf/1712.05884",
+    "status": "verified",
+    "size_bytes": 339384,
+    "sha256": "7609c6af1f6cf7649747a0b28d4fc50e7bf523cd6c9b756bb6791635d5c9c029",
+    "page_count": 5,
+    "verified_title": true
+  },
+  {
+    "reference": "tts2",
+    "filename": "2021_ren_fastspeech2.pdf",
+    "title": "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech",
+    "publication": "ICLR 2021; arXiv preprint 2020",
+    "source_url": "https://arxiv.org/pdf/2006.04558",
+    "resolved_url": "https://arxiv.org/pdf/2006.04558",
+    "status": "verified",
+    "size_bytes": 1273673,
+    "sha256": "cc63cbd90dbc90107603cd064969f23a9b6b00b986c3bda3c27dc63613147e2a",
+    "page_count": 15,
+    "verified_title": true
+  },
+  {
+    "reference": "tts3",
+    "filename": "2020_kong_hifi_gan.pdf",
+    "title": "HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis",
+    "publication": "NeurIPS 2020",
+    "source_url": "https://papers.neurips.cc/paper/2020/file/c5d736809766d46260d816d8dbc9eb44-Paper.pdf",
+    "resolved_url": "https://papers.neurips.cc/paper/2020/file/c5d736809766d46260d816d8dbc9eb44-Paper.pdf",
+    "status": "verified",
+    "size_bytes": 722195,
+    "sha256": "81e2523fd20e5f7497f0324ae159b1ded5a5a5af895a43b6b9292c47a2f29c32",
+    "page_count": 12,
+    "verified_title": true
+  },
+  {
+    "reference": "tts4",
+    "filename": "2021_kim_vits.pdf",
+    "title": "Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech",
+    "publication": "ICML 2021",
+    "source_url": "https://proceedings.mlr.press/v139/kim21f/kim21f.pdf",
+    "resolved_url": "https://proceedings.mlr.press/v139/kim21f/kim21f.pdf",
+    "status": "verified",
+    "size_bytes": 1412255,
+    "sha256": "e327384e50eb17b1464547348313bbf5c48c4aedfb12ebd725fbcfe8ecfd76e1",
+    "page_count": 11,
+    "verified_title": true
+  },
+  {
+    "reference": "tts5",
+    "filename": "2023_wang_vall_e.pdf",
+    "title": "Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers",
+    "publication": "arXiv preprint 2023",
+    "source_url": "https://arxiv.org/pdf/2301.02111",
+    "resolved_url": "https://arxiv.org/pdf/2301.02111",
+    "status": "verified",
+    "size_bytes": 1391691,
+    "sha256": "3f4d4ddbb4cfb1682aa38a23ec9134eaccbda498e38af0013a69a8d7e8207fa1",
+    "page_count": 16,
+    "verified_title": true
+  },
+  {
+    "reference": "tts6",
+    "filename": "2022_ao_speecht5.pdf",
+    "title": "SpeechT5: Unified-Modal Encoder-Decoder Pre-Training for Spoken Language Processing",
+    "publication": "ACL 2022",
+    "source_url": "https://aclanthology.org/2022.acl-long.393.pdf",
+    "resolved_url": "https://aclanthology.org/2022.acl-long.393.pdf",
+    "status": "verified",
+    "size_bytes": 1609812,
+    "sha256": "46001b95d838aab008d155f2de554a83e525fdf71024b86a949dc4039a869892",
+    "page_count": 16,
+    "verified_title": true
+  },
+  {
+    "reference": "tts7",
+    "filename": "2025_chen_f5_tts.pdf",
+    "title": "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching",
+    "publication": "ACL 2025; arXiv preprint 2024",
+    "source_url": "https://aclanthology.org/2025.acl-long.313.pdf",
+    "resolved_url": "https://aclanthology.org/2025.acl-long.313.pdf",
+    "status": "verified",
+    "size_bytes": 3043364,
+    "sha256": "8d71c965f569231e1c9a128bc7d2addcfe89d643a76ad7d165158d520df13834",
+    "page_count": 17,
+    "verified_title": true
+  }
+]

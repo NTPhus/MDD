@@ -1,0 +1,19 @@
+{
+  "stage": "A",
+  "purpose": "technical_smoke_only",
+  "seed": 42,
+  "device": "cuda",
+  "mixed_precision": "fp16",
+  "batch_size": 1,
+  "gradient_accumulation_steps": 1,
+  "max_steps": 1,
+  "eval_every": 1,
+  "checkpoint_every": 1,
+  "max_train_samples": 2,
+  "max_eval_samples": 2,
+  "max_audio_seconds": 3,
+  "freeze_feature_encoder": true,
+  "freeze_backbone": true,
+  "gradient_checkpointing": false,
+  "save_optimizer": true
+}

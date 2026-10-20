@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mdd:assessment:1.0",
+  "title": "MDD assessment passed from the deterministic adapter to the LLM",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_kind", "utterance_id", "model_id", "status", "target_locale", "reference_text", "asr_text", "confidence_calibrated", "words", "errors"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "data_kind": {"enum": ["inference", "synthetic_example"]},
+    "utterance_id": {"type": "string", "minLength": 1},
+    "model_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["ok", "insufficient_audio", "uncertain"]},
+    "target_locale": {"enum": ["en-US", "en-GB"]},
+    "reference_text": {"type": "string", "minLength": 1},
+    "asr_text": {"type": ["string", "null"]},
+    "confidence_calibrated": {"type": "boolean"},
+    "words": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "text"],
+        "properties": {
+          "index": {"type": "integer", "minimum": 0},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "word_index", "type", "expected_phone", "observed_phone", "expected_ipa", "observed_ipa", "start_sec", "end_sec", "confidence"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "word_index": {"type": "integer", "minimum": 0},
+          "type": {"enum": ["substitution", "deletion", "addition"]},
+          "expected_phone": {"type": ["string", "null"], "minLength": 1},
+          "observed_phone": {"type": ["string", "null"], "minLength": 1},
+          "expected_ipa": {"type": ["string", "null"], "minLength": 1},
+          "observed_ipa": {"type": ["string", "null"], "minLength": 1},
+          "start_sec": {"type": ["number", "null"], "minimum": 0},
+          "end_sec": {"type": ["number", "null"], "minimum": 0},
+          "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+        }
+      }
+    }
+  }
+}

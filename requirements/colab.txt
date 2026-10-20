@@ -1,0 +1,3 @@
+# Keep Colab's CUDA-enabled torch (>=2.6), checked by the notebook.
+# Do not install requirements/cpu-torch.txt on Colab.
+-r training.txt

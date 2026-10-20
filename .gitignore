@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+data/generated/
+
+# Local datasets and reproducible parsed training rows.
+/l2arctic_release_v5.0.zip
+/l2arctic_release_v5.0/
+/data/processed/*/annotations.jsonl
+
+# Downloaded model weights and partial downloads; keep model metadata.
+/models/pretrained/**/*.bin
+/models/pretrained/**/*.safetensors
+/models/pretrained/**/*.part
+
+# Local training outputs: checkpoints, optimizer states, logs and predictions.
+/runs/
+
+# Papers, source code, configs, protocol manifests, vocabulary,
+# normalization rules and dataset audits are intentionally kept in Git.

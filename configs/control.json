@@ -1,0 +1,20 @@
+{
+  "stage": "C",
+  "purpose": "scientific_training",
+  "seed": 42,
+  "fold": 1,
+  "device": "cuda",
+  "mixed_precision": "fp16",
+  "batch_size": 1,
+  "gradient_accumulation_steps": 4,
+  "max_steps": 400,
+  "eval_every": 100,
+  "checkpoint_every": 100,
+  "backbone_learning_rate": 0.00001,
+  "head_learning_rate": 0.0001,
+  "freeze_feature_encoder": true,
+  "freeze_backbone": false,
+  "gradient_checkpointing": true,
+  "selection_metric": "f1",
+  "save_optimizer": true
+}

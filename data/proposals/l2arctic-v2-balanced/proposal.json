@@ -1,0 +1,142 @@
+{
+  "proposal_id": "l2arctic-v2-balanced",
+  "status": "proposed_not_active",
+  "active_protocol_unchanged": "l2arctic-v1",
+  "parent_protocol_id": "l2arctic-v1",
+  "inputs": {
+    "manifest": {
+      "path": "data/protocol/l2arctic-v1/manifest.jsonl",
+      "sha256": "a67ebe69c64e3aa5c832129d7784c2fcda95fb07152bd374a4a2f485aed858f6",
+      "size_bytes": 2583074
+    },
+    "splits": {
+      "path": "data/protocol/l2arctic-v1/splits.json",
+      "sha256": "3a219f95615538fb2421102782c7d6fc0ad700ca30f43fb6a9ade2922025a8c6",
+      "size_bytes": 142956
+    },
+    "protocol": {
+      "path": "data/protocol/l2arctic-v1/protocol.json",
+      "sha256": "d2026c58e40274cd9c20d6ecd2ae331a0a7a65d3fde92677bd2ecd6a6d6c79be",
+      "size_bytes": 1009
+    },
+    "protocol_checksums": {
+      "path": "data/protocol/l2arctic-v1/SHA256SUMS",
+      "sha256": "0ac7a4fc8669b1fc2fa48b47446b962f97b260d94edfbc5f88c797b6f2e27ecb",
+      "size_bytes": 239
+    },
+    "dataset_readme": {
+      "path": "l2arctic_release_v5.0/README.md",
+      "sha256": "2830cad62115ac138de891b581d0678dd8504438418a607086727a2cf2d0f53a",
+      "size_bytes": 12080
+    }
+  },
+  "implementation": {
+    "path": "scripts/propose_balanced_split.py",
+    "sha256": "cdce9741f243f5f0ba52f3309b284b4d2ba0f28f787ed68393b15cb47a5c2a54"
+  },
+  "proposed_splits_sha256": "197c031d59f9862add9b2a5b6802473a80941ffa451643f30a2ebb89ee0641ee",
+  "reason": "Metadata-only balancing: every Vietnamese training pair contains one M and one F speaker while preserving the source partitions and rotating each Vietnamese speaker through train twice, validation once and test once.",
+  "selection_inputs": [
+    "speaker identity",
+    "Vietnamese L1 metadata",
+    "README M/F metadata",
+    "manual-example availability"
+  ],
+  "error_labels_or_test_metrics_used_for_design": false,
+  "data_reuse": "References the original frozen manifest and local raw paths; no raw data or model weights copied.",
+  "validation": {
+    "all_checks_passed": true,
+    "source_partitions_identical_to_parent": true,
+    "folds": [
+      {
+        "fold": 1,
+        "counts": {
+          "train": 300,
+          "validation": 150,
+          "test": 150
+        },
+        "train_gender_by_speaker": {
+          "THV": "F",
+          "TLV": "M"
+        },
+        "speaker_and_audio_sha256_disjoint_from_source": true,
+        "speaker_and_audio_sha256_disjoint_between_target_partitions": true,
+        "exact_target_coverage": true
+      },
+      {
+        "fold": 2,
+        "counts": {
+          "train": 300,
+          "validation": 150,
+          "test": 150
+        },
+        "train_gender_by_speaker": {
+          "HQTV": "M",
+          "THV": "F"
+        },
+        "speaker_and_audio_sha256_disjoint_from_source": true,
+        "speaker_and_audio_sha256_disjoint_between_target_partitions": true,
+        "exact_target_coverage": true
+      },
+      {
+        "fold": 3,
+        "counts": {
+          "train": 300,
+          "validation": 150,
+          "test": 150
+        },
+        "train_gender_by_speaker": {
+          "PNV": "F",
+          "TLV": "M"
+        },
+        "speaker_and_audio_sha256_disjoint_from_source": true,
+        "speaker_and_audio_sha256_disjoint_between_target_partitions": true,
+        "exact_target_coverage": true
+      },
+      {
+        "fold": 4,
+        "counts": {
+          "train": 300,
+          "validation": 150,
+          "test": 150
+        },
+        "train_gender_by_speaker": {
+          "HQTV": "M",
+          "PNV": "F"
+        },
+        "speaker_and_audio_sha256_disjoint_from_source": true,
+        "speaker_and_audio_sha256_disjoint_between_target_partitions": true,
+        "exact_target_coverage": true
+      }
+    ],
+    "role_counts": {
+      "HQTV": {
+        "train": 2,
+        "validation": 1,
+        "test": 1
+      },
+      "PNV": {
+        "train": 2,
+        "validation": 1,
+        "test": 1
+      },
+      "THV": {
+        "train": 2,
+        "validation": 1,
+        "test": 1
+      },
+      "TLV": {
+        "train": 2,
+        "validation": 1,
+        "test": 1
+      }
+    }
+  },
+  "limits": [
+    "No accuracy or F1 improvement is guaranteed without training and held-out evaluation.",
+    "This balances the dataset's recorded binary M/F metadata; four speakers do not establish demographic representativeness.",
+    "Speaker-disjoint evaluation retains shared ARCTIC prompts; this does not establish unseen-sentence or spontaneous-speech generalization.",
+    "Audio disjointness uses frozen manifest SHA256 values, detecting byte identity rather than near duplicates; this script does not rehash the raw WAV files.",
+    "A proposal file is not an active protocol: configs, runtime, notebook, v1 and Colab bundle remain unchanged."
+  ]
+}

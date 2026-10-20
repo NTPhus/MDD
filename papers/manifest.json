@@ -1,0 +1,86 @@
+[
+  {
+    "reference": "p1",
+    "filename": "2020_baevski_wav2vec2.pdf",
+    "title": "wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations",
+    "source_url": "https://arxiv.org/pdf/2006.11477",
+    "resolved_url": "https://arxiv.org/pdf/2006.11477",
+    "status": "verified",
+    "size_bytes": 740863,
+    "sha256": "4a881708378143547a5c053f62090104afb49782a4c71d78441dde0a818758ff",
+    "page_count": 19,
+    "verified_title": true
+  },
+  {
+    "reference": "p2",
+    "filename": "2018_zhao_l2_arctic.pdf",
+    "title": "L2-ARCTIC: A Non-native English Speech Corpus",
+    "source_url": "https://www.isca-archive.org/interspeech_2018/zhao18b_interspeech.pdf",
+    "resolved_url": "https://www.isca-archive.org/interspeech_2018/zhao18b_interspeech.pdf",
+    "status": "verified",
+    "size_bytes": 721794,
+    "sha256": "03a4b836bca32e6bdf3439bc363f8dbc1610d2186c577f492f4d6c243da5a022",
+    "page_count": 5,
+    "verified_title": true
+  },
+  {
+    "reference": "p3",
+    "filename": "2021_peng_wav2vec2_mdd.pdf",
+    "title": "A Study on Fine-Tuning wav2vec2.0 Model for the Task of Mispronunciation Detection and Diagnosis",
+    "source_url": "https://www.isca-archive.org/interspeech_2021/peng21e_interspeech.pdf",
+    "resolved_url": "https://www.isca-archive.org/interspeech_2021/peng21e_interspeech.pdf",
+    "status": "verified",
+    "size_bytes": 1442794,
+    "sha256": "8c56fc608b97146b401aa86ddd5390b405e9809ed31ca3f4ac73d267f4aacce9",
+    "page_count": 5,
+    "verified_title": true
+  },
+  {
+    "reference": "p4",
+    "filename": "2021_xu_explore_wav2vec2_mispronunciation.pdf",
+    "title": "Explore wav2vec 2.0 for Mispronunciation Detection",
+    "source_url": "https://www.isca-archive.org/interspeech_2021/xu21k_interspeech.pdf",
+    "resolved_url": "https://www.isca-archive.org/interspeech_2021/xu21k_interspeech.pdf",
+    "status": "verified",
+    "size_bytes": 815685,
+    "sha256": "d704e365b9aa1ed5242851878c3e3ad43a440901dc4d6c9cbb7d0045e00cb920",
+    "page_count": 5,
+    "verified_title": true
+  },
+  {
+    "reference": "p5",
+    "filename": "2022_peng_text_aware_mdd.pdf",
+    "title": "Text-Aware End-to-end Mispronunciation Detection and Diagnosis",
+    "source_url": "https://arxiv.org/pdf/2206.07289",
+    "resolved_url": "https://arxiv.org/pdf/2206.07289",
+    "status": "verified",
+    "size_bytes": 517340,
+    "sha256": "3fc88f193b6b2316e6ba0c1ddcdd04c84b787b28c287c140ae40c1e67efe7717",
+    "page_count": 5,
+    "verified_title": true
+  },
+  {
+    "reference": "p6",
+    "filename": "2024_whisper_diverse_accents.pdf",
+    "title": "Evaluating OpenAI's Whisper ASR: Performance analysis across diverse accents and speaker traits",
+    "source_url": "https://api.repository.cam.ac.uk/server/api/core/bitstreams/4ef0ef50-0f8a-4325-82bf-7e333cb23565/content",
+    "resolved_url": "https://api.repository.cam.ac.uk/server/api/core/bitstreams/4ef0ef50-0f8a-4325-82bf-7e333cb23565/content",
+    "status": "verified",
+    "size_bytes": 549588,
+    "sha256": "e841580bb82576b57d1f368385f1665e9dfc2eabf8ea71e57543726fee950cc0",
+    "page_count": 23,
+    "verified_title": true
+  },
+  {
+    "reference": "p7",
+    "filename": "2026_liu_interactive_language_learning.pdf",
+    "title": "Unlocking Large Audio-Language Models for Interactive Language Learning",
+    "source_url": "https://aclanthology.org/2026.findings-eacl.190.pdf",
+    "resolved_url": "https://aclanthology.org/2026.findings-eacl.190.pdf",
+    "status": "verified",
+    "size_bytes": 807594,
+    "sha256": "849258fcf4919f09ef8e5010fcf6ca7094dd9502d436d20f63c0a93d898563f3",
+    "page_count": 24,
+    "verified_title": true
+  }
+]

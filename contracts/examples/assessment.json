@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "data_kind": "synthetic_example",
+  "utterance_id": "example-001",
+  "model_id": "example-only-not-a-trained-checkpoint",
+  "status": "ok",
+  "target_locale": "en-US",
+  "reference_text": "I think this is useful.",
+  "asr_text": null,
+  "confidence_calibrated": false,
+  "words": [
+    {"index": 0, "text": "I"},
+    {"index": 1, "text": "think"},
+    {"index": 2, "text": "this"},
+    {"index": 3, "text": "is"},
+    {"index": 4, "text": "useful"}
+  ],
+  "errors": [
+    {
+      "id": "e1",
+      "word_index": 1,
+      "type": "substitution",
+      "expected_phone": "TH",
+      "observed_phone": "T",
+      "expected_ipa": "θ",
+      "observed_ipa": "t",
+      "start_sec": null,
+      "end_sec": null,
+      "confidence": null
+    }
+  ]
+}

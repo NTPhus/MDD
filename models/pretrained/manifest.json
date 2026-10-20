@@ -1,0 +1,21 @@
+{
+  "default_models": [
+    "wav2vec2-base"
+  ],
+  "models": [
+    {
+      "repo_id": "facebook/wav2vec2-base",
+      "revision": "0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8",
+      "directory": "wav2vec2-base",
+      "role": "Backbone for MDD fine-tuning; no trained phoneme head/tokenizer",
+      "size_bytes": 380271954
+    },
+    {
+      "repo_id": "facebook/wav2vec2-base-960h",
+      "revision": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156",
+      "directory": "wav2vec2-base-960h",
+      "role": "English character CTC ASR baseline for demo transcripts",
+      "size_bytes": 377614784
+    }
+  ]
+}
