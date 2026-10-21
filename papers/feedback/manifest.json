@@ -1,0 +1,72 @@
+[
+  {
+    "reference": "feedback1",
+    "filename": "2025_qwen3_technical_report.pdf",
+    "title": "Qwen3 Technical Report",
+    "publication": "arXiv 2025, v1",
+    "source_url": "https://arxiv.org/pdf/2505.09388v1",
+    "relevance": "Model architecture, training stages, distillation and benchmarks for the Qwen3 family, including 0.6B.",
+    "resolved_url": "https://arxiv.org/pdf/2505.09388v1",
+    "status": "verified",
+    "size_bytes": 779424,
+    "sha256": "84a5e2b1fa04bb774bf12ae606d1e6d9dd2147ed2ebe78a4cfeb91ba380ffdd5",
+    "page_count": 35,
+    "verified_title": true
+  },
+  {
+    "reference": "feedback2",
+    "filename": "2021_hu_lora.pdf",
+    "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+    "publication": "arXiv 2021, v2",
+    "source_url": "https://arxiv.org/pdf/2106.09685v2",
+    "relevance": "Train low-rank adapters while freezing pretrained model weights.",
+    "resolved_url": "https://arxiv.org/pdf/2106.09685v2",
+    "status": "verified",
+    "size_bytes": 1609513,
+    "sha256": "e9a0d3128767db616085dc0f4e6e455e672e89af823e8ed1282793682787395a",
+    "page_count": 26,
+    "verified_title": true
+  },
+  {
+    "reference": "feedback3",
+    "filename": "2023_dettmers_qlora.pdf",
+    "title": "QLoRA: Efficient Finetuning of Quantized LLMs",
+    "publication": "arXiv 2023, v1",
+    "source_url": "https://arxiv.org/pdf/2305.14314v1",
+    "relevance": "Four-bit base weights, NF4 and low-rank adapters for memory-efficient fine-tuning.",
+    "resolved_url": "https://arxiv.org/pdf/2305.14314v1",
+    "status": "verified",
+    "size_bytes": 1065470,
+    "sha256": "33a4e757c19d6ea8d3cca8958fce8fe405e290272e135c99ee66065c775d5bd1",
+    "page_count": 26,
+    "verified_title": true
+  },
+  {
+    "reference": "feedback4",
+    "filename": "2023_wang_self_instruct.pdf",
+    "title": "Self-Instruct: Aligning Language Models with Self-Generated Instructions",
+    "publication": "ACL 2023",
+    "source_url": "https://aclanthology.org/2023.acl-long.754.pdf",
+    "relevance": "Construct and filter synthetic instruction-tuning data; methodology rather than pronunciation labels.",
+    "resolved_url": "https://aclanthology.org/2023.acl-long.754.pdf",
+    "status": "verified",
+    "size_bytes": 4193312,
+    "sha256": "87f1d8476fa041d0c6b09b9239253ed698c4efac973347aebe83c487eab91c78",
+    "page_count": 25,
+    "verified_title": true
+  },
+  {
+    "reference": "feedback5",
+    "filename": "2023_hsieh_distilling_step_by_step.pdf",
+    "title": "Distilling Step-by-Step! Outperforming Larger Language Models with Less Training Data and Smaller Model Sizes",
+    "publication": "Findings of ACL 2023",
+    "source_url": "https://aclanthology.org/2023.findings-acl.507.pdf",
+    "relevance": "Transfer task knowledge from a larger teacher into smaller models using additional supervision.",
+    "resolved_url": "https://aclanthology.org/2023.findings-acl.507.pdf",
+    "status": "verified",
+    "size_bytes": 2309986,
+    "sha256": "bf2651f337c936c02ea6609f7b51e5d0a8227983ebb431647bd1504aea1eef32",
+    "page_count": 15,
+    "verified_title": true
+  }
+]

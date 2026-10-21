@@ -149,7 +149,7 @@ class FeedbackService:
             except (OSError, ValueError, RuntimeError):
                 valid_settings = False
             return {
-                "llm_configured": bool(self.llm_factory or (valid_settings and os.environ.get("LLM_API_KEY", "").strip())),
+                "llm_configured": bool(self.llm_factory or (valid_settings and _module("llm_client").is_configured())),
                 "tts_configured": bool(self.tts_factory or (valid_settings and os.environ.get("AI33_API_KEY", "").strip())),
                 "english_voice_configured": bool(self.tts_factory or os.environ.get("AI33_VOICE_EN", "").strip()),
                 "vietnamese_voice_configured": bool(self.tts_factory or os.environ.get("AI33_VOICE_VI", "").strip()),

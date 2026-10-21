@@ -1,6 +1,6 @@
 # Các paper cho project MDD tiếng Anh của người Việt
 
-Bảy file PDF tương ứng với các tài liệu `p1` đến `p7` trong [kế hoạch](../test.md). Đã kiểm tra định dạng PDF, số trang, tiêu đề ở trang đầu và SHA-256. Tổng dung lượng khoảng 5,34 MiB.
+Nhóm MDD gốc có bảy file PDF tương ứng với các tài liệu `p1` đến `p7` trong [kế hoạch](../docs.md). Đã kiểm tra định dạng PDF, số trang, tiêu đề ở trang đầu và SHA-256. Tổng dung lượng nhóm này khoảng 5,34 MiB.
 
 | Mã | Paper và bản PDF local | Số trang | Nguồn tải |
 | --- | --- | --- | --- |
@@ -15,6 +15,24 @@ Bảy file PDF tương ứng với các tài liệu `p1` đến `p7` trong [kế
 Thứ tự đọc theo kế hoạch: **p2 → p3 → p1 → p5**. Đọc p4 để tham khảo hướng phát hiện đúng/sai trên đoạn âm; p6 phục vụ đánh giá STT theo accent; p7 phục vụ thiết kế phản hồi hội thoại.
 
 File p6 là bản lưu công khai tại Cambridge; số trang có thể khác bản dàn trang của tạp chí. File p5 là preprint arXiv. Nguồn tải, dung lượng, số trang và checksum của từng file được lưu trong [manifest.json](manifest.json).
+
+## Huấn luyện model nhỏ để hướng dẫn sửa phát âm
+
+Đã bổ sung năm PDF trong [feedback](feedback/), phục vụ nhánh **assessment MDD → Qwen → hướng dẫn luyện phát âm**. Bài sát tác vụ nhất là **p7**, đã có trong nhóm MDD: [Unlocking Large Audio-Language Models for Interactive Language Learning](2026_liu_interactive_language_learning.pdf), Findings of EACL 2026. Bài này giới thiệu L2-Arctic-plus, giải thích cách tạo và kiểm tra lời hướng dẫn, instruction-tuning và đánh giá phản hồi. [Code và annotation của tác giả](https://github.com/zoeyada/ALMs4Learning).
+
+| Mã | Paper và PDF local | Dùng để nghiên cứu | Nguồn |
+| --- | --- | --- | --- |
+| feedback1 | [Qwen3 Technical Report](feedback/2025_qwen3_technical_report.pdf) | Kiến trúc, các giai đoạn train, distillation và benchmark của họ Qwen3, gồm bản 0.6B | [arXiv 2025](https://arxiv.org/abs/2505.09388) |
+| feedback2 | [LoRA: Low-Rank Adaptation of Large Language Models](feedback/2021_hu_lora.pdf) | Giữ nguyên trọng số nền, học thêm các ma trận adapter có rank nhỏ | [arXiv 2021, v2](https://arxiv.org/abs/2106.09685v2) |
+| feedback3 | [QLoRA: Efficient Finetuning of Quantized LLMs](feedback/2023_dettmers_qlora.pdf) | Nén model nền xuống 4-bit, NF4 và fine-tune adapter để giảm bộ nhớ | [arXiv 2023](https://arxiv.org/abs/2305.14314) |
+| feedback4 | [Self-Instruct: Aligning Language Models with Self-Generated Instructions](feedback/2023_wang_self_instruct.pdf) | Sinh và lọc các cặp instruction/response cho instruction-tuning | [ACL 2023](https://aclanthology.org/2023.acl-long.754/) |
+| feedback5 | [Distilling Step-by-Step!](feedback/2023_hsieh_distilling_step_by_step.pdf) | Chuyển kiến thức tác vụ từ model lớn sang model nhỏ bằng dữ liệu giám sát bổ sung | [Findings of ACL 2023](https://aclanthology.org/2023.findings-acl.507/) |
+
+Thứ tự đọc đề xuất cho nhánh này: **p7 → feedback1 → feedback2 → feedback3 → feedback4 → feedback5**. Dataset âm thanh nền được mô tả trong **p2**; cách fine-tune wav2vec2 cho nhận diện lỗi phát âm nằm ở **p3**.
+
+Các bài LoRA, QLoRA, Self-Instruct và Distilling Step-by-Step mô tả phương pháp huấn luyện tổng quát; chúng không chứng minh Qwen3-0.6B hướng dẫn phát âm hiệu quả. Kết quả của các ALM trong p7 cũng cần được phân biệt với pipeline Qwen nhận assessment bằng văn bản của project. Dữ liệu hướng dẫn tiếng Việt và hiệu quả sau fine-tune vẫn cần đánh giá riêng.
+
+Nguồn tải chính xác, phiên bản PDF, số trang, dung lượng và SHA-256 của năm file mới nằm trong [feedback/manifest.json](feedback/manifest.json). Bản p7 hiện có được dùng lại, không lưu một bản PDF trùng.
 
 ## Nền tảng TTS
 

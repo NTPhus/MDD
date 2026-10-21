@@ -13,11 +13,18 @@ data/generated/
 /l2arctic_release_v5.0/
 /*.crdownload
 /data/processed/*/annotations.jsonl
+/data/processed/feedback-*/
+/data/feedback/*.jsonl
+!/data/feedback/review.example.jsonl
 
 # Downloaded model weights and partial downloads; keep model metadata.
 /models/pretrained/**/*.bin
 /models/pretrained/**/*.safetensors
 /models/pretrained/**/*.part
+# Large downloaded Qwen tokenizer assets are reproduced by the pinned downloader.
+/models/pretrained/Qwen3-0.6B/tokenizer.json
+/models/pretrained/Qwen3-0.6B/vocab.json
+/models/pretrained/Qwen3-0.6B/merges.txt
 
 # Local training outputs: checkpoints, optimizer states, logs and predictions.
 /runs/

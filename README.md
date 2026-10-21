@@ -157,7 +157,47 @@ Demo MDD một model hiển thị **câu tham chiếu do người dùng chọn/n
 
 ## LLM chính
 
-Sử dụng gateway `https://llm.mrdnd.dev/v1`, endpoint `/chat/completions`, model ID `claude-sonnet-5` theo cấu hình đã chọn. Adapter [scripts/llm_client.py](scripts/llm_client.py) hỗ trợ chat và phản hồi phát âm theo contract hiện có. Gateway nhận key bằng header `Authorization: Bearer ...`.
+Adapter [scripts/llm_client.py](scripts/llm_client.py) có hai backend: `LLM_BACKEND=api` dùng gateway hiện có; `LLM_BACKEND=local` chạy **Qwen3-0.6B** trực tiếp bằng Transformers, không gọi gateway và không cần LLM API key. Cả hai nhận assessment từ wav2vec2, kiểm tra JSON/liên kết lỗi và chuyển văn bản hợp lệ sang **ai33 TTS** như trước. Khi local lỗi, hệ thống trả hướng dẫn mẫu, không tự chuyển sang API.
+
+Chọn Qwen3-0.6B theo GPU đã ghi trong notebook: **RTX 3050 Laptop 4 GB**, khoảng 3,2 GB trống tại thời điểm đo. [Model card Qwen](https://huggingface.co/Qwen/Qwen3-0.6B) công bố hỗ trợ đa ngôn ngữ, giấy phép Apache 2.0 và tắt thinking bằng chat template. Đây là model sinh hướng dẫn; nó không nhận audio hoặc sửa độ chính xác nhận dạng của wav2vec2. Khả năng tiếng Việt và hướng dẫn ngữ âm của checkpoint gốc cần được đánh giá trên tác vụ này.
+
+Tải checkpoint công khai (~1,5 GB), khóa revision và kiểm SHA-256 với Hub:
+
+```powershell
+.venv/Scripts/python.exe scripts/download_feedback_model.py
+.venv/Scripts/python.exe scripts/download_feedback_model.py --verify-only
+.venv/Scripts/python.exe scripts/llm_client.py --env-file configs/feedback_local.env.example --assessment contracts/examples/assessment.json --output data/generated/llm/qwen-baseline.json --trace
+```
+
+Linux dùng `.venv/bin/python` thay cho `.venv/Scripts/python.exe`. File [feedback_local.env.example](configs/feedback_local.env.example) dùng CPU inference để giữ VRAM cho train; giới hạn context 4.096 token, tắt thinking. Có thể chọn `LLM_LOCAL_DEVICE=cuda` sau khi đo bộ nhớ thực. Lượt thử trên assessment minh họa chỉ kiểm tra tích hợp, không chứng minh chất lượng hướng dẫn. Bản gốc đã cho lời giải thích sai/chung chung ở âm TH dù JSON hợp lệ; **chưa kích hoạt backend này thay gateway trên demo**. Không bật cho người học chỉ vì schema hợp lệ.
+
+Fine-tune phần hướng dẫn dùng dữ liệu **assessment → feedback đã được người có chuyên môn duyệt**. L2-ARCTIC hiện có audio/nhãn âm vị, chưa có nhãn lời hướng dẫn. [review.example.jsonl](data/feedback/review.example.jsonl) là mẫu tổng hợp **chưa duyệt**, không phải dữ liệu train. Có thể nhập JSON tải từ demo thành hàng đợi duyệt:
+
+```powershell
+.venv/Scripts/python.exe scripts/prepare_feedback_data.py draft path/to/downloaded-result.json --output data/feedback/drafts.jsonl
+```
+
+Người duyệt sửa nội dung hướng dẫn, xác nhận âm mong đợi/âm model nhận diện, `error_id`, từ, cách đặt môi/lưỡi và bài luyện; sau đó điền `review.approved=true`, `review.reviewer`, `review.reviewed_at` (ISO date). `group_id` gom các biến thể cùng bài luyện hoặc cùng người học để không rò rỉ giữa các tập. Script còn gộp các nhóm dùng chung câu tham chiếu. Không đánh dấu dữ liệu tổng hợp thành suy luận audio thật. Thu thập khoảng 200–500 cặp đa dạng làm tập khởi đầu; đây là ngân sách đề xuất, chưa có bằng chứng số lượng này đủ cải thiện.
+
+```powershell
+.venv/Scripts/python.exe -m pip install -r requirements/feedback.txt
+.venv/Scripts/python.exe scripts/prepare_feedback_data.py prepare data/feedback/reviewed.jsonl --output data/processed/feedback-v1
+.venv/Scripts/python.exe scripts/train_feedback_model.py --check-data-only
+.venv/Scripts/python.exe scripts/train_feedback_model.py --config configs/feedback_qlora_rtx3050.json
+```
+
+Recipe [QLoRA cho RTX 3050](configs/feedback_qlora_rtx3050.json) dùng NF4 4-bit, LoRA rank 8 ở `q_proj`/`v_proj`, batch 1, tích lũy gradient 8, context tối đa 3.072 token và gradient checkpointing. Chỉ token câu trả lời assistant đóng góp loss; prompt được mask `-100`. Model nền giữ nguyên; train các adapter LoRA. Chọn checkpoint bằng validation loss, không dùng test để train. Chạy riêng với tiến trình train MDD; khả năng vừa VRAM và tốc độ trên RTX 3050 cần xác nhận bằng lượt train thật. Hiện chưa có dữ liệu đã duyệt hoặc lượt QLoRA khoa học hoàn tất.
+
+Đánh giá model gốc và adapter trên cùng validation; sau khi khóa recipe mới dùng test. Hai báo cáo lưu cả phản hồi để giáo viên so sánh tính đúng, cụ thể và dễ thực hành:
+
+```powershell
+.venv/Scripts/python.exe scripts/evaluate_feedback_model.py --split validation --output data/generated/llm/qwen-validation-base.json
+.venv/Scripts/python.exe scripts/evaluate_feedback_model.py --split validation --adapter runs/feedback-qwen3-06b-v1/adapter --output data/generated/llm/qwen-validation-adapter.json
+```
+
+Báo cáo tự động chỉ đo tỷ lệ phản hồi hợp lệ/liên kết đúng assessment, kể cả tỷ lệ đúng ngay lần đầu; không đo tính đúng của hướng dẫn hoặc sự tiến bộ của người học. Muốn đo cải thiện phát âm, cần thu lại bài đọc trước/sau luyện và chấm độc lập. Chỉ sau khi đạt chất lượng mới chép các thiết lập local vào `.env`, điền `LLM_LOCAL_ADAPTER_PATH` và khởi động lại server demo. Giữ nguyên các thiết lập `AI33_*`.
+
+Backend API hiện có dùng gateway `https://llm.mrdnd.dev/v1`, endpoint `/chat/completions`, model ID `claude-sonnet-5`. Gateway nhận key bằng header `Authorization: Bearer ...`.
 
 Điền `LLM_API_KEY` vào `.env` local; `.env.example` chỉ chứa biến mẫu, không chứa key thật. Có thể đổi `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_TIMEOUT_SEC`, `LLM_MAX_TOKENS`. Biến môi trường được ưu tiên hơn file. Adapter cần `jsonschema`, cùng dependency với script kiểm tra contract; không cần SDK riêng của nhà cung cấp.
 

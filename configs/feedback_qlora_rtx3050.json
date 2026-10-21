@@ -1,0 +1,16 @@
+{
+  "model_path": "models/pretrained/Qwen3-0.6B",
+  "dataset_dir": "data/processed/feedback-v1",
+  "output_dir": "runs/feedback-qwen3-06b-v1",
+  "max_length": 3072,
+  "epochs": 3,
+  "learning_rate": 0.0001,
+  "gradient_accumulation_steps": 8,
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "target_modules": ["q_proj", "v_proj"],
+  "min_train_examples": 100,
+  "min_validation_examples": 20,
+  "seed": 42
+}

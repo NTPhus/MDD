@@ -1,4 +1,4 @@
-"""Main LLM gateway: chat and validated pronunciation feedback."""
+"""Local small model or API gateway: chat and validated pronunciation feedback."""
 
 import argparse
 from dataclasses import asdict, dataclass, field
@@ -21,6 +21,48 @@ else:
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def local_backend():
+    if __package__:
+        from . import local_feedback_model
+    else:
+        import local_feedback_model
+    return local_feedback_model
+
+
+def feedback_messages(assessment, *, local=False):
+    name = "pronunciation_feedback_local.txt" if local else "pronunciation_feedback.txt"
+    prompt = (ROOT / "prompts" / name).read_text(encoding="utf-8")
+    schema = read_json(ROOT / "contracts/llm_feedback.schema.json")
+    return [
+        {"role": "system", "content": prompt + "\nJSON schema:\n" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))},
+        {"role": "user", "content": json.dumps(assessment, ensure_ascii=False, separators=(",", ":"))},
+    ]
+
+
+def validate_local_feedback(assessment, feedback):
+    """Enforce coaching/TTS completeness in addition to the shared JSON contract."""
+    if assessment["status"] != "ok":
+        return
+    if assessment["errors"] and not feedback["tips"]:
+        raise ValueError("Local coaching must explain at least one existing error")
+    if len(feedback["tips"]) > 3:
+        raise ValueError("Local coaching supports at most three tips per response")
+    purposes = sorted(segment["purpose"] for segment in feedback["tts_segments"])
+    if purposes != ["feedback", "reference"]:
+        raise ValueError("Local coaching needs exactly one reference and one Vietnamese feedback TTS segment")
+
+
+def is_configured():
+    backend = os.environ.get("LLM_BACKEND", "api").strip()
+    if backend == "local":
+        try:
+            local_backend().settings()
+            return True
+        except (OSError, ValueError):
+            return False
+    return backend == "api" and bool(os.environ.get("LLM_API_KEY", "").strip())
 
 
 class LLMError(RuntimeError):
@@ -112,6 +154,20 @@ def parse_feedback(content):
 
 class LLMClient:
     def __init__(self):
+        self.backend = os.environ.get("LLM_BACKEND", "api").strip()
+        if self.backend not in {"api", "local"}:
+            raise LLMError("LLM_BACKEND must be api or local.")
+        if self.backend == "local":
+            try:
+                self.local_settings = local_backend().settings()
+                self.timeout = float(os.environ.get("LLM_LOCAL_TIMEOUT_SEC", "180"))
+                self.max_tokens = int(os.environ.get("LLM_LOCAL_MAX_TOKENS", "1024"))
+            except (OSError, ValueError) as error:
+                raise LLMError(str(error)) from None
+            if not math.isfinite(self.timeout) or self.timeout <= 0 or self.max_tokens < 1:
+                raise LLMError("Local timeout and token limit must be positive and finite.")
+            self.model = "Qwen/Qwen3-0.6B"
+            return
         self.key = os.environ.get("LLM_API_KEY", "").strip()
         if not self.key:
             raise LLMError("Set LLM_API_KEY in the local .env file first.")
@@ -139,6 +195,11 @@ class LLMClient:
             for item in messages
         ):
             raise LLMError("Provide a nonempty list of role/content messages.")
+        if self.backend == "local":
+            try:
+                return Completion(**local_backend().complete(messages, self.local_settings, self.max_tokens, self.timeout))
+            except (OSError, ValueError, RuntimeError, ImportError) as error:
+                raise LLMError("Local feedback generation failed: " + str(error)) from None
         payload = {"model": self.model, "messages": messages, "max_tokens": self.max_tokens}
         request = Request(
             self.base_url + "/chat/completions", method="POST",
@@ -179,12 +240,7 @@ class LLMClient:
         validate_pair(assessment, fallback)
         if assessment["status"] != "ok":
             return FeedbackResult(fallback, "template", "assessment_not_ok", [])
-        prompt = (ROOT / "prompts/pronunciation_feedback.txt").read_text(encoding="utf-8")
-        schema = read_json(ROOT / "contracts/llm_feedback.schema.json")
-        messages = [
-            {"role": "system", "content": prompt + "\n\nJSON schema:\n" + json.dumps(schema, ensure_ascii=False)},
-            {"role": "user", "content": json.dumps(assessment, ensure_ascii=False)},
-        ]
+        messages = feedback_messages(assessment, local=self.backend == "local")
         completions = []
         validation_errors = []
         for attempt in range(2):
@@ -196,6 +252,8 @@ class LLMClient:
             try:
                 feedback = parse_feedback(completion.content)
                 validate_pair(assessment, feedback)
+                if self.backend == "local":
+                    validate_local_feedback(assessment, feedback)
             except (ValueError, ValidationError) as exc:
                 if isinstance(exc, ValidationError):
                     path = ".".join(str(part) for part in exc.absolute_path) or "root"
