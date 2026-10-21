@@ -1,0 +1,81 @@
+# Standalone loopback-only ingress for ONE verified HTTPS ngrok endpoint.
+# Render after retrieving public_url from the local ngrok agent API.
+# Keep this ingress closed until the exact domain is known; never use a wildcard.
+worker_processes 1;
+pid "@@RUNTIME_DIRECTORY@@/nginx.pid";
+error_log "@@RUNTIME_DIRECTORY@@/error.log" warn;
+
+events {
+    worker_connections 256;
+}
+
+http {
+    server_tokens off;
+    access_log off;
+
+    # Raw, case-sensitive authority checks. Public TLS uses default port 443;
+    # the local ingress port must never be accepted as a public authority.
+    map $http_host $mdd_ngrok_host_allowed {
+        default 0;
+        ~^@@PUBLIC_HOST_REGEX@@(?::443)?$ 1;
+    }
+
+    # Only this exact public hostname is trusted. An explicit/default :443 is
+    # equivalent on either side, but a different ngrok hostname is not allowed.
+    map "$http_host|$http_origin" $mdd_ngrok_origin_allowed {
+        default 0;
+        ~^@@PUBLIC_HOST_REGEX@@(?::443)?[|]$ 1;
+        ~^@@PUBLIC_HOST_REGEX@@(?::443)?[|]https://@@PUBLIC_HOST_REGEX@@(?::443)?$ 1;
+    }
+
+    # An absent/empty Origin stays absent. Rewrite a supplied HTTPS Origin only
+    # after the exact public Host/Origin checks have succeeded.
+    map $http_origin $mdd_ngrok_backend_origin {
+        "" "";
+        default "http://127.0.0.1:@@BACKEND_PORT@@";
+    }
+
+    server {
+        listen 127.0.0.1:@@INGRESS_PORT@@ default_server;
+        server_name @@PUBLIC_HOST@@;
+
+        if ($mdd_ngrok_host_allowed = 0) { return 403; }
+        if ($mdd_ngrok_origin_allowed = 0) { return 403; }
+        if ($http_transfer_encoding != "") { return 400; }
+
+        client_max_body_size 16m;
+        client_header_timeout 15s;
+        client_body_timeout 60s;
+        keepalive_timeout 30s;
+        send_timeout 60s;
+        client_body_temp_path "@@RUNTIME_DIRECTORY@@/client_body_temp";
+
+        # Never expose the repository or the ngrok inspection/control API.
+        # The application's existing route/static-file allowlist owns all paths.
+        location / {
+            proxy_pass http://127.0.0.1:@@BACKEND_PORT@@;
+            proxy_http_version 1.1;
+            proxy_set_header Host "127.0.0.1:@@BACKEND_PORT@@";
+            proxy_set_header Origin $mdd_ngrok_backend_origin;
+            proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;
+            proxy_set_header Connection "";
+            proxy_set_header Forwarded "";
+            proxy_set_header X-Forwarded-Host "";
+            proxy_set_header X-Forwarded-Proto "";
+            proxy_set_header X-Forwarded-For "";
+
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 1500s;
+            proxy_next_upstream off;
+            proxy_request_buffering off;
+            proxy_buffering off;
+            proxy_max_temp_file_size 0;
+            proxy_temp_path "@@RUNTIME_DIRECTORY@@/proxy_temp";
+            proxy_cache off;
+            proxy_store off;
+            proxy_intercept_errors off;
+            proxy_redirect off;
+        }
+    }
+}

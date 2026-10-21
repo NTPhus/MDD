@@ -1,5 +1,6 @@
 """Validate CPU command selection without importing or training the speech model."""
 
+import os
 from pathlib import Path
 import shlex
 import shutil
@@ -12,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts/run_local_training.sh"
 
 
+@unittest.skipUnless(os.name == "posix" and shutil.which("bash"),
+                     "The Bash CPU launcher requires a POSIX host and bash; native Windows uses the PowerShell launcher.")
 class LocalLauncherTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -50,11 +50,29 @@ def verify_file(path, expected):
 
 def download_file(url, path, expected):
     if path.is_file():
-        return verify_file(path, expected)
+        try:
+            return verify_file(path, expected)
+        except ValueError as error:
+            # A Windows checkout can change tracked JSON/Markdown to CRLF. Keep
+            # the existing file until a byte-exact replacement passes Hub checks.
+            print(f"  Replacing invalid {path.name}: {error}", flush=True)
     partial = path.with_name(path.name + ".part")
     expected_size = expected.get("size") or expected.get("lfs", {}).get("size")
     offset = partial.stat().st_size if partial.exists() else 0
-    if offset != expected_size:
+    if offset and offset == expected_size:
+        try:
+            result = verify_file(partial, expected)
+        except ValueError:
+            offset = 0
+        else:
+            partial.replace(path)
+            result["filename"] = path.name
+            return result
+    elif expected_size is not None and offset > expected_size:
+        offset = 0
+    # A partial transfer may already contain corruption. Resume first; if the
+    # completed candidate fails verification, retry once from byte zero.
+    while True:
         headers = {"User-Agent": "MDD-Checkpoint-Downloader/1.0"}
         if offset:
             headers["Range"] = f"bytes={offset}-"
@@ -71,7 +89,15 @@ def download_file(url, path, expected):
                     if transferred - last_report >= 64 * 1024 * 1024:
                         print(f"  {path.name}: {transferred / 1024**2:.0f} MiB", flush=True)
                         last_report = transferred
-    result = verify_file(partial, expected)
+        try:
+            result = verify_file(partial, expected)
+        except ValueError:
+            if not append:
+                raise
+            print(f"  Restarting invalid resumed download: {path.name}", flush=True)
+            offset = 0
+            continue
+        break
     partial.replace(path)
     result["filename"] = path.name
     return result

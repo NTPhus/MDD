@@ -1,0 +1,4 @@
+# Frozen data and upstream model manifests are verified byte for byte.
+/data/protocol/** text eol=lf
+/data/processed/** text eol=lf
+/models/pretrained/** text=auto eol=lf

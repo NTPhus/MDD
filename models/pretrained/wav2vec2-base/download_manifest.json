@@ -2,7 +2,7 @@
   "repo_id": "facebook/wav2vec2-base",
   "revision": "0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8",
   "role": "Backbone for MDD fine-tuning; no trained phoneme head/tokenizer",
-  "verified_at_utc": "2026-10-20T08:58:10.166579+00:00",
+  "verified_at_utc": "2026-10-20T12:58:17.651221+00:00",
   "weights_file": "pytorch_model.bin",
   "files": [
     {

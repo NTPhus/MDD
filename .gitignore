@@ -4,11 +4,14 @@
 __pycache__/
 *.py[cod]
 .venv/
+.tools/
+.ipynb_checkpoints/
 data/generated/
 
 # Local datasets and reproducible parsed training rows.
 /l2arctic_release_v5.0.zip
 /l2arctic_release_v5.0/
+/*.crdownload
 /data/processed/*/annotations.jsonl
 
 # Downloaded model weights and partial downloads; keep model metadata.

@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 
 from scripts.ai33_tts import AI33Error, AI33TTS, load_env
@@ -61,6 +61,7 @@ class AI33Tests(unittest.TestCase):
                 "text": "I think this is useful.", "voice_id": "example-english", "speed": 1.0,
             })
             downloaded = download.call_args.args[0]
+            self.assertEqual(downloaded.get_header("User-agent"), "Mozilla/5.0")
             self.assertIsNone(downloaded.get_header("Xi-api-key"))
             self.assertIsNone(downloaded.get_header("Authorization"))
         receipt_text = next(self.cache.glob("*.json")).read_text()
@@ -119,10 +120,71 @@ class AI33Tests(unittest.TestCase):
             with self.assertRaisesRegex(AI33Error, "timed out"):
                 self.client.wait("example-task")
 
+    def test_processing_task_url_is_not_used_before_completed_status(self):
+        url = "https://cdn.example/future.mp3"
+        with patch.object(self.client, "request", side_effect=[
+                {"status": "processing", "audio_url": url},
+                {"status": "completed", "audio_url": url}]) as request, \
+                patch("scripts.ai33_tts.time.sleep") as sleep:
+            self.assertEqual(self.client.wait("still-rendering"), url)
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual([call.args[0] for call in request.call_args_list], ["GET", "GET"])
+        sleep.assert_called_once()
+
+    def test_transient_cdn_404_download_retries_get_without_auth_or_submission(self):
+        url = "https://cdn.example/propagating.mp3?signature=private"
+        error = HTTPError(url, 404, "not propagated", {}, None)
+        audio = b"ID3\x04test-mp3-audio"
+        with patch.object(self.client.downloads, "open", side_effect=[error, Response(audio, "audio/mpeg")]) as download, \
+                patch.object(self.client.api, "open") as api, patch("scripts.ai33_tts.time.sleep") as sleep:
+            path, _ = self.client.download(url, self.cache / "propagating")
+        self.assertEqual(path.suffix, ".mp3")
+        self.assertEqual(path.read_bytes(), audio)
+        self.assertEqual(download.call_count, 2)
+        sleep.assert_called_once_with(1)
+        api.assert_not_called()
+        for call in download.call_args_list:
+            request = call.args[0]
+            self.assertEqual(request.get_method(), "GET")
+            self.assertEqual(request.get_header("User-agent"), "Mozilla/5.0")
+            self.assertIsNone(request.get_header("Xi-api-key"))
+            self.assertIsNone(request.get_header("Authorization"))
+
+    def test_cdn_connection_failure_is_retried_as_read_only_get(self):
+        with patch.object(self.client.downloads, "open", side_effect=[URLError("temporary"), self.audio_response()]) as download, \
+                patch.object(self.client.api, "open") as api, patch("scripts.ai33_tts.time.sleep") as sleep:
+            path, _ = self.client.download("https://cdn.example/a.wav", self.cache / "temporary")
+        self.assertTrue(path.is_file())
+        self.assertEqual(download.call_count, 2)
+        sleep.assert_called_once_with(1)
+        api.assert_not_called()
+
+    def test_persistent_transient_cdn_failure_is_bounded_to_three_gets(self):
+        error = HTTPError("https://cdn.example/a.wav", 503, "not ready", {}, None)
+        with patch.object(self.client.downloads, "open", side_effect=error) as download, \
+                patch("scripts.ai33_tts.time.sleep") as sleep:
+            with self.assertRaises(AI33Error):
+                self.client.download("https://cdn.example/a.wav", self.cache / "unavailable")
+        self.assertEqual(download.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+        self.assertEqual(list(self.cache.iterdir()), [])
+
+    def test_cdn_authentication_failure_is_not_retried(self):
+        error = HTTPError("https://cdn.example/a.wav", 401, "denied", {}, None)
+        with patch.object(self.client.downloads, "open", side_effect=error) as download, \
+                patch("scripts.ai33_tts.time.sleep") as sleep:
+            with self.assertRaises(AI33Error):
+                self.client.download("https://cdn.example/a.wav", self.cache / "denied")
+        self.assertEqual(download.call_count, 1)
+        sleep.assert_not_called()
+
     def test_html_error_page_is_not_saved_as_audio(self):
-        with patch.object(self.client.downloads, "open", return_value=Response(b"<html>Error</html>", "text/html")):
+        with patch.object(self.client.downloads, "open", return_value=Response(b"<html>Error</html>", "text/html")) as download, \
+                patch("scripts.ai33_tts.time.sleep") as sleep:
             with self.assertRaises(AI33Error):
                 self.client.download("https://cdn.example/a.mp3", self.cache / "example")
+        self.assertEqual(download.call_count, 1)
+        sleep.assert_not_called()
         self.assertEqual(list(self.cache.iterdir()), [])
 
     def test_list_voices_sends_required_provider_and_encoded_search(self):

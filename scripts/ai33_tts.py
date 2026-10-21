@@ -135,9 +135,9 @@ class AI33TTS:
             if status in {"failed", "error", "cancelled", "canceled"}:
                 raise AI33Error(f"AI33 task failed ({status}); cached task ID retained.")
             audio_url = field(result, "audio_url", "output_uri", "output_url")
-            if audio_url:
-                return audio_url
             if status in {"done", "completed", "success", "succeeded", "finished"}:
+                if audio_url:
+                    return audio_url
                 raise AI33Error("Task completed but audio URL was not recognized. "
                                 "Check the authenticated response schema; cached task ID retained.")
             if not status:
@@ -150,12 +150,24 @@ class AI33TTS:
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise AI33Error("AI33 returned an invalid HTTPS audio URL.")
         # CDN download deliberately has no xi-api-key or Authorization header.
-        try:
-            with self.downloads.open(Request(url), timeout=30) as response:
-                content_type = response.headers.get_content_type()
-                data = response.read(25 * 1024 * 1024 + 1)
-        except (HTTPError, URLError, TimeoutError, OSError):
-            raise AI33Error("Audio download failed; rerun to resume the existing task.") from None
+        for attempt in range(3):
+            try:
+                # A completed task can precede CDN propagation. Retry only
+                # these read-only downloads; task submission is never retried.
+                # The CDN also rejects urllib's default user agent.
+                with self.downloads.open(Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=30) as response:
+                    content_type = response.headers.get_content_type()
+                    data = response.read(25 * 1024 * 1024 + 1)
+                break
+            except HTTPError as error:
+                transient = error.code in {403, 404, 429} or 500 <= error.code < 600
+                error.close()
+                if not transient or attempt == 2:
+                    raise AI33Error("Audio download failed; rerun to resume the existing task.") from None
+            except (URLError, TimeoutError, OSError):
+                if attempt == 2:
+                    raise AI33Error("Audio download failed; rerun to resume the existing task.") from None
+            time.sleep(attempt + 1)
         if not data or len(data) > 25 * 1024 * 1024:
             raise AI33Error("Audio is empty or exceeds this demo's 25 MiB limit.")
         suffix = None

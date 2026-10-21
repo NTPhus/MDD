@@ -279,7 +279,7 @@ def prepare(manifest, output, root=ROOT, verify_audio=False, overwrite=False):
     for name, content in outputs.items():
         path = output / name
         if not path.exists() or overwrite:
-            path.write_text(content, encoding="utf-8")
+            path.write_text(content, encoding="utf-8", newline="\n")
     return audit
 
 

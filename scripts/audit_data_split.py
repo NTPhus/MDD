@@ -179,21 +179,21 @@ def build_audit(root=ROOT):
     inputs = {name: {"path": str(path.relative_to(root)), "sha256": sha256(path),
                      "size_bytes": path.stat().st_size} for name, path in paths.items()}
     for name in ("protocol_checksums", "processed_checksums"):
-        for line in paths[name].read_text().splitlines():
+        for line in paths[name].read_text(encoding="utf-8").splitlines():
             checksum, filename = line.split(maxsplit=1)
             if sha256(paths[name].parent / filename.lstrip("*")) != checksum:
                 raise ValueError(f"Frozen checksum mismatch in {name}: {filename}")
-    protocol = json.loads(paths["protocol"].read_text())
+    protocol = json.loads(paths["protocol"].read_text(encoding="utf-8"))
     for name in ("manifest", "splits"):
         if inputs[name]["sha256"] != protocol[name + "_sha256"]:
             raise ValueError(f"Protocol hash mismatch: {name}")
-    manifest = index_rows((json.loads(line) for line in paths["manifest"].read_text().splitlines()), "manifest")
-    annotations = index_rows((json.loads(line) for line in paths["annotations"].read_text().splitlines()), "annotations")
+    manifest = index_rows((json.loads(line) for line in paths["manifest"].read_text(encoding="utf-8").splitlines()), "manifest")
+    annotations = index_rows((json.loads(line) for line in paths["annotations"].read_text(encoding="utf-8").splitlines()), "annotations")
     if manifest.keys() != annotations.keys():
         raise ValueError("Processed annotations do not cover exactly the frozen manifest")
     if len(manifest) != protocol["utterance_count"]:
         raise ValueError("Protocol utterance count does not match the actual manifest")
-    speakers = read_speaker_metadata(paths["dataset_readme"].read_text())
+    speakers = read_speaker_metadata(paths["dataset_readme"].read_text(encoding="utf-8"))
     verified = Counter()
     for key, row in annotations.items():
         source = manifest[key]
@@ -210,7 +210,7 @@ def build_audit(root=ROOT):
             if path.stat().st_size != entry["size_bytes"] or sha256(path) != entry["sha256"]:
                 raise ValueError(f"Raw source checksum mismatch: {entry['path']}")
             verified[field] += 1
-        if row["prompt_text"] != (root / source["transcript"]["path"]).read_text().strip():
+        if row["prompt_text"] != (root / source["transcript"]["path"]).read_text(encoding="utf-8").strip():
             raise ValueError(f"Prompt transcript mismatch: {key}")
         speaker = speakers[row["speaker_id"]]
         if speaker["native_language"] != row["native_language"]:
@@ -220,7 +220,7 @@ def build_audit(root=ROOT):
     rows = list(annotations.values())
     if Counter(row["speaker_id"] for row in rows) != Counter(protocol["counts_by_speaker"]):
         raise ValueError("Protocol speaker counts do not match the actual manifest")
-    splits = json.loads(paths["splits"].read_text())
+    splits = json.loads(paths["splits"].read_text(encoding="utf-8"))
     source_train = select_rows(annotations, splits["source_train_ids"])
     source_validation = select_rows(annotations, splits["source_validation_ids"])
     vn_ids = {row["utterance_id"] for row in rows if row["native_language"] == "Vietnamese"}

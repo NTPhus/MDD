@@ -118,15 +118,29 @@ class AnnotationTests(unittest.TestCase):
             record = entry()
             for key, (name, contents) in files.items():
                 path = root / name
-                path.write_text(contents, encoding="utf-8")
-                record[key] = {"path": name, "sha256": hashlib.sha256(contents.encode()).hexdigest()}
+                source_bytes = contents.encode("utf-8")
+                path.write_bytes(source_bytes)
+                record[key] = {"path": name, "sha256": hashlib.sha256(source_bytes).hexdigest()}
             manifest = root / "manifest.jsonl"
-            manifest.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            manifest.write_bytes((json.dumps(record) + "\n").encode("utf-8"))
             first = prepare(manifest, root / "prepared", root=root, verify_audio=True)
+            first_outputs = {path.name: path.read_bytes() for path in (root / "prepared").iterdir()}
             second = prepare(manifest, root / "prepared", root=root, verify_audio=True)
             self.assertEqual(first, second)
             self.assertTrue(first["audio_sha256_verified"])
-            (root / "item.TextGrid").write_text("tampered", encoding="utf-8")
+            # Fresh output directories must contain identical bytes on Windows/Linux;
+            # universal-newline text reads would hide a CRLF checksum regression.
+            prepare(manifest, root / "prepared-copy", root=root, verify_audio=True)
+            second_outputs = {path.name: path.read_bytes() for path in (root / "prepared-copy").iterdir()}
+            self.assertEqual(first_outputs, second_outputs)
+            for name, contents in first_outputs.items():
+                with self.subTest(output=name):
+                    self.assertTrue(contents.endswith(b"\n"))
+                    self.assertNotIn(b"\r\n", contents)
+            for line in first_outputs["SHA256SUMS"].decode("utf-8").splitlines():
+                digest, name = line.split(maxsplit=1)
+                self.assertEqual(hashlib.sha256(first_outputs[name]).hexdigest(), digest, name)
+            (root / "item.TextGrid").write_bytes(b"tampered")
             with self.assertRaisesRegex(ValueError, "Source checksum mismatch"):
                 prepare(manifest, root / "prepared-again", root=root)
 

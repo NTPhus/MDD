@@ -1,0 +1,87 @@
+# Render only validated addresses, numeric ports, and a workspace runtime path.
+# See deploy/nginx/README.md for the placeholder and authority contract.
+worker_processes 1;
+pid "@@RUNTIME_DIRECTORY@@/nginx.pid";
+error_log "@@RUNTIME_DIRECTORY@@/error.log" warn;
+
+events {
+    worker_connections 256;
+}
+
+http {
+    server_tokens off;
+    access_log off;
+
+    # Use raw Host, not $host: $host normalizes case and may supply a fallback.
+    # Regex maps are deliberately case-sensitive; plain map strings are not.
+    map $http_host $mdd_host_allowed {
+        default 0;
+        ~^(?:@@LAN_ADDRESS_REGEX@@|127[.]0[.]0[.]1|localhost)@@AUTHORITY_PORT_REGEX@@$ 1;
+    }
+
+    # Match the SAME hostname on both sides, not two independent allowlists.
+    # Port 80 may be omitted or explicit; other public ports are mandatory.
+    # An empty Origin is treated as absent and is not forwarded to the backend.
+    map "$http_host|$http_origin" $mdd_origin_allowed {
+        default 0;
+        ~^(?:@@LAN_ADDRESS_REGEX@@|127[.]0[.]0[.]1|localhost)@@AUTHORITY_PORT_REGEX@@[|]$ 1;
+        ~^(?P<mdd_external_hostname>@@LAN_ADDRESS_REGEX@@|127[.]0[.]0[.]1|localhost)@@AUTHORITY_PORT_REGEX@@[|]http://(?P=mdd_external_hostname)@@AUTHORITY_PORT_REGEX@@$ 1;
+    }
+
+    # Only an already-validated, nonempty external Origin is rewritten.
+    # Nginx removes a proxy header whose value is empty.
+    map $http_origin $mdd_backend_origin {
+        "" "";
+        default "http://127.0.0.1:@@BACKEND_PORT@@";
+    }
+
+    server {
+        listen 127.0.0.1:@@PUBLIC_PORT@@ default_server;
+        listen @@LAN_ADDRESS@@:@@PUBLIC_PORT@@ default_server;
+        server_name 127.0.0.1 localhost @@LAN_ADDRESS@@;
+
+        if ($mdd_host_allowed = 0) { return 403; }
+        if ($mdd_origin_allowed = 0) { return 403; }
+
+        # The backend requires a fixed Content-Length and rejects chunked input.
+        # Reject Transfer-Encoding before proxying, rather than buffering audio.
+        if ($http_transfer_encoding != "") { return 400; }
+
+        client_max_body_size 16m;
+        client_header_timeout 15s;
+        client_body_timeout 60s;
+        keepalive_timeout 30s;
+        send_timeout 60s;
+        client_body_temp_path "@@RUNTIME_DIRECTORY@@/client_body_temp";
+
+        # All paths, including static assets and unknown/private paths, go
+        # through the backend's explicit route/static-file allowlist.
+        location / {
+            proxy_pass http://127.0.0.1:@@BACKEND_PORT@@;
+            proxy_http_version 1.1;
+            proxy_set_header Host "127.0.0.1:@@BACKEND_PORT@@";
+            proxy_set_header Origin $mdd_backend_origin;
+            proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;
+            proxy_set_header Connection "";
+            proxy_set_header Forwarded "";
+            proxy_set_header X-Forwarded-Host "";
+            proxy_set_header X-Forwarded-Proto "";
+            proxy_set_header X-Forwarded-For "";
+
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 1500s;
+
+            # Never retry an LLM/TTS POST or save request/response recordings.
+            proxy_next_upstream off;
+            proxy_request_buffering off;
+            proxy_buffering off;
+            proxy_max_temp_file_size 0;
+            proxy_temp_path "@@RUNTIME_DIRECTORY@@/proxy_temp";
+            proxy_cache off;
+            proxy_store off;
+            proxy_intercept_errors off;
+            proxy_redirect off;
+        }
+    }
+}

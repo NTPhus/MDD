@@ -20,4 +20,4 @@ Adapter LLM chính đã có ở [llm_client.py](../scripts/llm_client.py), cấu
 
 TTS chỉ nhận từng `tts_segments[].text` với đúng ngôn ngữ. Nếu backend TTS chưa hỗ trợ một ngôn ngữ, vẫn hiển thị feedback bằng chữ thay vì đọc bằng giọng sai ngôn ngữ.
 
-TTS đã chọn là **ai33 API**. Adapter [ai33_tts.py](../scripts/ai33_tts.py) nhận text và locale qua `AI33TTS.synthesize`; cách cấu hình API key local và nối segment xem [README.md](../README.md). Key không thuộc JSON MDD/LLM. Adapter TTS đã kiểm tra với HTTP giả lập; nối model MDD thật và UI vẫn cần triển khai.
+TTS đã chọn là **ai33 API**. Adapter [ai33_tts.py](../scripts/ai33_tts.py) nhận text và locale qua `AI33TTS.synthesize`; cách cấu hình API key local và nối segment xem [README.md](../README.md). Key không thuộc JSON MDD/LLM. Adapter TTS đã kiểm tra với HTTP giả lập. Demo local hiện dùng JSON suy luận riêng (features/phone/comparison), chưa phát assessment theo contract này và chưa nối LLM/TTS.

@@ -1,0 +1,6 @@
+# Notebook tools only. Reuse the existing training/CUDA environment.
+jupyterlab>=4.4,<5
+ipykernel>=6.29,<7
+nbconvert>=7.16,<8
+pandas>=2.2.3,<3
+matplotlib>=3.10,<4
