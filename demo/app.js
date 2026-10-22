@@ -131,12 +131,6 @@ function renderPractice() {
   }
   $('live-enabled').disabled = blocked || !available;
   $('word-practice').hidden = state.practiceMode !== 'word';
-  $('practice-mode-hint').textContent = !available
-    ? state.referenceInfo?.missing_words?.length
-      ? `Chưa có âm chuẩn cho: ${state.referenceInfo.missing_words.join(', ')}. Sửa từ hoặc chọn một câu mẫu để dùng realtime.`
-      : 'Realtime và từng từ cần model A/B/C cùng câu có âm chuẩn. Câu tự nhập sẽ được tra từ điển tiếng Anh Mỹ.'
-    : !state.liveEnabled ? 'Phân tích sau khi dừng thu. Bật cập nhật trực tiếp để xem kết quả trong lúc đọc.'
-      : 'Cập nhật khoảng mỗi giây cộng thời gian xử lý. Kết quả tạm thời có thể đổi; phần chưa đọc ở trạng thái chờ.';
   const words = $('reference-text').value.trim().split(/\s+/).filter(Boolean);
   state.wordIndex = Math.max(0, Math.min(state.wordIndex, words.length - 1));
   const signature = JSON.stringify([words, state.wordIndex, state.wordResults, blocked]);
@@ -264,18 +258,6 @@ const MODEL_GROUPS = {
   other: 'Checkpoint khác',
 };
 
-function modelDescription(model) {
-  if (!model) return 'Chưa tìm thấy mô hình sẵn sàng. Hãy kiểm tra thư mục model và checkpoint.';
-  if (model.ready === false) return model.warning || 'Mô hình chưa sẵn sàng để phân tích.';
-  if (model.kind === 'backbone') return 'BASE trước fine-tune MDD · Chỉ trích xuất đặc trưng âm thanh, chưa có đầu phone-CTC để chỉ lỗi phát âm.';
-  if (model.experimental) return 'Checkpoint thử nghiệm · Có thể xem âm vị, chưa dùng để đánh giá phát âm.';
-  if (modelPhase(model) === 'source') return 'A đã huấn luyện MDD trên source · Mốc trước thích nghi tiếng Việt để so với B.';
-  if (modelPhase(model) === 'adapted_vi') return 'B đã thích nghi tiếng Việt · Chọn cùng bản thu và câu tham chiếu để so với A trước thích nghi.';
-  if (modelPhase(model) === 'control') return 'C là đối chứng source-only · Dùng để đối chiếu với B sau thích nghi tiếng Việt.';
-  if (model.warning) return model.warning;
-  return 'Mô hình phone-CTC · Đối chiếu âm vị khi có câu tham chiếu trong bộ dữ liệu.';
-}
-
 function renderModels(models, defaultId) {
   const previousId = state.modelId;
   state.models = Array.isArray(models) ? models : [];
@@ -311,7 +293,6 @@ function renderModels(models, defaultId) {
   state.modelId = selected ? selected.id : '';
   if (previousId && previousId !== state.modelId) clearResult();
   select.value = state.modelId;
-  $('model-note').textContent = modelDescription(selected);
   updateControls();
 }
 
@@ -332,19 +313,12 @@ async function refreshStatus() {
     const gpu = system.gpu || system.gpu_name || system.cuda_device;
     $('training-device').textContent = typeof gpu === 'string' ? gpu : 'Huấn luyện trên máy';
     $('last-updated').textContent = `Lần đọc gần nhất ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
-    $('training-count').textContent = state.training.length;
-    $('training-count').hidden = !state.training.length;
-    const latest = state.training[0];
-    $('training-peek-text').textContent = latest
-      ? `${latest.run_id} · ${displayNumber(latest.step, 0)} / ${displayNumber(latest.max_steps, 0)} bước · ${statusLabel(latest.status)}`
-      : 'Chưa có phiên chạy. Các checkpoint sẽ tự xuất hiện khi được tạo.';
     if (!$('training-view').hidden) renderTraining();
   } catch (error) {
     $('connection-error').textContent = `Chưa kết nối được demo local. ${error.message}`;
     $('connection-error').hidden = false;
     $('connection-dot').classList.remove('online');
     $('sidebar-system').textContent = 'Đang chờ máy chủ local';
-    $('training-peek-text').textContent = 'Chưa đọc được trạng thái. Kiểm tra cửa sổ máy chủ demo.';
     $('last-updated').textContent = 'Mất kết nối · đang thử lại';
   } finally { state.statusPending = false; }
 }
@@ -1357,7 +1331,6 @@ $('reference-text').addEventListener('input', () => {
 $('model-select').addEventListener('change', (event) => {
   state.wordResults = {};
   state.modelId = event.target.value;
-  $('model-note').textContent = modelDescription(state.models.find((item) => item.id === state.modelId));
   clearResult(); updateControls();
 });
 $('analyze-button').addEventListener('click', analyze);

@@ -40,9 +40,7 @@
     <nav class="navigation" aria-label="Điều hướng chính">
       <button class="nav-item active" data-view="practice" aria-current="page"><svg><use href="#i-wave"/></svg><span>Luyện phát âm</span><span class="nav-dot"></span></button>
       <button class="nav-item" data-view="chat"><svg><use href="#i-chat"/></svg><span>Đối thoại AI</span></button>
-      <button class="nav-item" data-view="training"><svg><use href="#i-chart"/></svg><span>Huấn luyện</span><span id="training-count" class="nav-count" hidden>0</span></button>
     </nav>
-    <div class="sidebar-note"><span class="note-line"></span><p>Mỗi giọng nói<br>đều có một hành trình.</p><span>Hãy bắt đầu bằng việc lắng nghe.</span></div>
     <div class="sidebar-bottom"><span class="local-computer"><svg><use href="#i-chip"/></svg></span><div><strong>Không gian local</strong><span id="sidebar-system">Đang kết nối máy của bạn…</span></div><span id="connection-dot" class="connection-dot"></span></div>
   </aside>
 
@@ -62,7 +60,6 @@
 
           <fieldset class="practice-modes"><legend>CÁCH LUYỆN</legend><div class="mode-buttons"><button id="mode-sentence" type="button" class="mode-button selected" aria-pressed="true">Đọc cả câu</button><button id="mode-word" type="button" class="mode-button" aria-pressed="false">Kiểm tra từng từ</button></div></fieldset>
           <label class="live-toggle"><input id="live-enabled" type="checkbox" checked> Hiện kết quả khi đang đọc</label>
-          <p id="practice-mode-hint" class="small-description">Kết quả tạm thời cập nhật theo phần đã đọc. Nhấn dừng để chốt bản thu.</p>
           <div id="word-practice" class="word-practice" hidden><p class="small-label">CHỌN TỪ CẦN LUYỆN</p><div id="practice-words" class="practice-words"></div><div class="word-target"><span id="word-target-label"></span><button id="word-next" type="button" class="text-button">Từ tiếp theo →</button></div><p class="small-description">Đọc một từ rồi ngừng khoảng một giây để tự chốt, hoặc nhấn dừng. Tải file lên cần đúng một từ đã chọn.</p></div>
           <p id="live-status" class="live-status" role="status" aria-live="polite" hidden></p>
 
@@ -70,10 +67,7 @@
           <div class="audio-alternatives"><button id="upload-button" class="subtle-button" type="button"><svg><use href="#i-upload"/></svg>Tải âm thanh lên</button><span>hoặc</span><button id="sample-button" class="subtle-button" type="button"><svg><use href="#i-play"/></svg>Dùng bản thu mẫu</button><input id="audio-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" hidden></div>
           <div id="audio-error" class="inline-message error-text" role="alert" hidden></div>
           <div class="model-row"><label for="model-select"><svg><use href="#i-chip"/></svg>Mô hình phân tích</label><select id="model-select"><option value="">Đang tải mô hình…</option></select></div>
-          <p id="model-note" class="model-note">Đang kiểm tra mô hình trên máy…</p>
-          <p class="model-comparison-note">So trước/sau thích nghi tiếng Việt: chọn A rồi B với cùng bản thu. BASE trước fine-tune MDD chỉ cho xem đặc trưng âm thanh.</p>
           <button id="analyze-button" class="primary-button" type="button" disabled><span>Phân tích bản thu</span><svg><use href="#i-arrow"/></svg></button>
-          <div class="privacy-note"><svg><use href="#i-check"/></svg><span>Âm thanh được gửi tới máy chạy demo để phân tích. Khi tạo hướng dẫn, câu và kết quả âm vị được gửi tới LLM; nội dung giọng đọc được gửi tới ai33.</span></div>
         </section>
 
         <section id="result-card" class="result-card card" aria-labelledby="result-title"><div class="card-heading"><div class="section-label"><span class="step-number">02</span><h2 id="result-title">Lắng nghe kết quả</h2></div><button id="save-result" class="icon-button" type="button" aria-label="Lưu kết quả JSON" title="Lưu kết quả JSON" hidden><svg><use href="#i-download"/></svg></button></div>
@@ -104,8 +98,6 @@
         </section>
       </div>
 
-      <section class="training-peek" aria-labelledby="peek-title"><div class="peek-icon"><svg><use href="#i-chart"/></svg></div><div class="peek-copy"><h2 id="peek-title">Phòng huấn luyện vẫn đang mở</h2><p id="training-peek-text">Đang đọc trạng thái các phiên huấn luyện…</p></div><button class="text-button" type="button" data-view="training">Xem tiến trình<svg><use href="#i-arrow"/></svg></button></section>
-      <footer class="page-footer"><span>MDD STUDIO <span class="footer-dot">·</span> ÂM THANH ĐẦU VÀO, HIỂU BIẾT ĐẦU RA</span><span>Chậm lại một nhịp. Tiến thêm một bước.</span></footer>
     </section>
 
     <section id="training-view" class="view" aria-labelledby="training-title" hidden><div class="page-intro"><div><div class="eyebrow"><span></span> HỌC HỎI TỪNG BƯỚC</div><h1 id="training-title">Để mô hình <em>lắng nghe tốt hơn.</em></h1><p>Theo dõi các phiên huấn luyện thực tế, ngay trên máy của bạn.</p></div><button id="refresh-training" class="secondary-button" type="button"><svg><use href="#i-refresh"/></svg>Làm mới</button></div><div class="training-overview"><div><span class="small-label">KHÔNG GIAN LÀM VIỆC</span><strong id="training-device">Local GPU</strong><span>Huấn luyện độc lập với phần phân tích âm thanh.</span></div><div><span class="small-label">CẬP NHẬT</span><strong class="live-label"><span class="status-dot"></span>Theo thời gian thực</strong><span id="last-updated">Đang kết nối…</span></div><div><span class="small-label">CHẾ ĐỘ PHÂN TÍCH</span><strong>CPU inference</strong><span>Giữ GPU cho công việc huấn luyện.</span></div></div><div id="training-runs" class="training-runs"></div><div class="training-note"><svg><use href="#i-info"/></svg><p>Các phiên kiểm tra kỹ thuật (smoke) chỉ xác minh pipeline. Kết quả đó chưa đại diện cho chất lượng nhận diện lỗi phát âm. Chỉ số được hiển thị khi phiên chạy đã ghi nhận dữ liệu.</p></div></section>
