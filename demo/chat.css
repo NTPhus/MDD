@@ -597,6 +597,7 @@ body.chat-room-open .toast{left:50%;background:#38294e;color:#f7f4fb}
 .chat-scenario h2{font-size:17px;line-height:1.5;color:#40304f;margin:10px 0 7px}
 .chat-scenario p{font-size:14px;line-height:1.75;color:#8a7e98;margin:0}
 .chat-reply-word.is-read{color:#4c1d95;background:#f1eaff;font-weight:650}
+.chat-sentence-text{margin:12px 0 4px;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
 body.chat-room-open .chat-reply-word.is-read{color:#4c1d95;background:#f1eaff;font-weight:650}
 @media(min-width:1001px){
   body.chat-room-open>.sidebar{display:flex}

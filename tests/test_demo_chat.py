@@ -145,6 +145,97 @@ class ChatTests(unittest.TestCase):
         with self.assertRaises(ChatError):
             self.service.voice({**voice_payload, "text":"client supplied text"})
 
+    def sentence_voice_done(self, identifier):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            result = self.service.poll(identifier)
+            if result['sentence_voice']['status'] != 'generating': return result
+            time.sleep(.01)
+        self.fail('Sentence voice worker did not finish')
+
+    def test_sentence_voice_reads_reference_independently_from_reply_and_reuses_audio(self):
+        self.service.capability_loader = lambda: {'tts_configured': True, 'english_voice_configured': True,
+                                                  'vietnamese_voice_configured': True}
+        audio = self.service.cache_dir / 'sentence.mp3'
+        audio.parent.mkdir(parents=True)
+        audio.write_bytes(b'ID3sentence')
+        tts = SimpleNamespace(synthesize=Mock(return_value=audio))
+        self.service.tts_factory = lambda: tts
+        identifier = self.service.submit(self.payload())['id']
+        completed(self.service, identifier)
+        self.service._jobs[identifier].speech = {'transcript': 'Curly am a engineer',
+            'reference_text': 'Currently, I am a software engineer.'}
+        self.service._jobs[identifier].voice = {'status': 'ready', 'url': '/original-reply'}
+        self.service._jobs[identifier].voice_locale = 'vi-VN'
+        payload = {'job_id': identifier, 'locale': 'en-US', 'target': 'sentence'}
+        self.service.voice(payload)
+        result = self.sentence_voice_done(identifier)
+        tts.synthesize.assert_called_once_with('Currently, I am a software engineer.', locale='en-US')
+        self.assertEqual(result['voice'], {'status': 'ready', 'url': '/original-reply'})
+        self.assertEqual(self.service.voice(payload)['sentence_voice'], result['sentence_voice'])
+        self.assertEqual(tts.synthesize.call_count, 1)
+        self.assertEqual(self.service.audio(result['sentence_voice']['url'].split('/')[-1]),
+                         (b'ID3sentence', 'audio/mpeg'))
+        for invalid in ({**payload, 'text': 'untrusted input'}, {**payload, 'locale': 'vi-VN'},
+                        {**payload, 'target': 'unknown'}):
+            with self.subTest(invalid=invalid), self.assertRaises(ChatError): self.service.voice(invalid)
+        self.service._jobs[identifier].speech = None
+        with self.assertRaises(ChatError): self.service.voice(payload)
+
+    def test_sentence_voice_can_resume_and_new_reference_does_not_play_stale_audio(self):
+        from scripts.ai33_tts import AI33Error
+        self.service.capability_loader = lambda: {'tts_configured': True, 'english_voice_configured': True}
+        audio = self.service.cache_dir / 'resumed-sentence.mp3'
+        audio.parent.mkdir(parents=True)
+        audio.write_bytes(b'ID3sentence')
+        tts = SimpleNamespace(synthesize=Mock(side_effect=AI33Error('private failure')),
+                              resume=Mock(return_value=audio), can_resume=Mock(return_value=True))
+        self.service.tts_factory = lambda: tts
+        identifier = self.service.submit(self.payload())['id']
+        completed(self.service, identifier)
+        self.service._jobs[identifier].speech = {'transcript': 'The first sentence.'}
+        payload = {'job_id': identifier, 'locale': 'en-US', 'target': 'sentence'}
+        self.service.voice(payload)
+        failed = self.sentence_voice_done(identifier)
+        self.assertTrue(failed['sentence_voice']['retryable'])
+        self.assertNotIn('private failure', json.dumps(failed))
+        self.service.voice(payload)
+        self.assertEqual(self.sentence_voice_done(identifier)['sentence_voice']['status'], 'ready')
+        tts.synthesize.assert_called_once()
+        tts.resume.assert_called_once_with('The first sentence.', locale='en-US')
+        # A changed reference is read from the server again, never from the old
+        # sentence URL or the bot reply. The underlying provider cache is reused.
+        self.service._jobs[identifier].speech['reference_text'] = 'The corrected sentence.'
+        tts.synthesize = Mock(return_value=audio)
+        self.service.voice(payload)
+        self.assertEqual(self.sentence_voice_done(identifier)['sentence_voice']['status'], 'ready')
+        tts.synthesize.assert_called_once_with('The corrected sentence.', locale='en-US')
+
+    def test_sentence_voice_ignores_completion_from_old_reference_revision(self):
+        self.service.capability_loader = lambda: {'tts_configured': True, 'english_voice_configured': True}
+        entered, release = threading.Event(), threading.Event()
+        audio = self.service.cache_dir / 'old.mp3'
+        audio.parent.mkdir(parents=True)
+        audio.write_bytes(b'ID3old')
+        def synthesize(*args, **kwargs):
+            entered.set(); release.wait(2); return audio
+        self.service.tts_factory = lambda: SimpleNamespace(synthesize=synthesize)
+        identifier = self.service.submit(self.payload())['id']
+        completed(self.service, identifier)
+        job = self.service._jobs[identifier]
+        job.speech = {'transcript': 'Old sentence.'}
+        self.service.voice({'job_id': identifier, 'locale': 'en-US', 'target': 'sentence'})
+        self.assertTrue(entered.wait(1))
+        with self.service._lock:
+            job.generation_revision += 1
+            job.sentence_voice = {'status': 'not_requested'}
+            job.sentence_voice_text = None
+        release.set()
+        self.assertTrue(self.service._voice_slot.acquire(timeout=2))
+        self.service._voice_slot.release()
+        self.assertEqual(job.sentence_voice, {'status': 'not_requested'})
+        self.assertEqual(self.service._voices, {})
+
     def test_voice_failure_resumes_cached_task_without_another_synthesis(self):
         from scripts.ai33_tts import AI33Error
         self.service.capability_loader = lambda: {"tts_configured": True, "vietnamese_voice_configured": True}

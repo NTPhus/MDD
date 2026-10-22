@@ -57,6 +57,8 @@ class ChatJob:
     error: dict | None = None
     voice: dict = field(default_factory=lambda: {"status": "not_requested"})
     voice_locale: str | None = None
+    sentence_voice: dict = field(default_factory=lambda: {"status": "not_requested"})
+    sentence_voice_text: str | None = None
     speech: dict | None = None
     speech_context: dict | None = None
     generation_revision: int = 0
@@ -303,6 +305,10 @@ class ChatService:
                 # must not interrupt playback, discard a useful reply or spend
                 # another Qwen generation on the same spoken words.
                 job.speech = speech
+                sentence = str(speech.get('reference_text') or speech.get('transcript') or '').strip()
+                if job.sentence_voice_text != sentence:
+                    job.sentence_voice = {'status': 'not_requested'}
+                    job.sentence_voice_text = None
                 job.metadata['pronunciation_reference_source'] = 'user_confirmed'
                 response = self.poll(job.identifier)
                 response['reference_update'] = {'changed': False, 'regenerated_reply': False}
@@ -327,6 +333,8 @@ class ChatService:
             job.created = time.monotonic()
             job.voice = {'status': 'not_requested'}
             job.voice_locale = None
+            job.sentence_voice = {'status': 'not_requested'}
+            job.sentence_voice_text = None
             self._voices = {key: value for key, value in self._voices.items() if value[0] != job.identifier}
             context = deepcopy(job.speech_context or {'history': [], 'topic_id': job.metadata.get('topic_id'),
                                                       'model_id': job.model_id, 'rewrite_enabled': True})
@@ -396,7 +404,8 @@ class ChatService:
 
     def _prune(self):
         while len(self._jobs) > 32:
-            key = next((key for key, j in self._jobs.items() if j.status in {"ready", "error", "cancelled"} and j.voice.get("status") != "generating"), None)
+            key = next((key for key, j in self._jobs.items() if j.status in {"ready", "error", "cancelled"}
+                        and j.voice.get("status") != "generating" and j.sentence_voice.get("status") != "generating"), None)
             if key is None:
                 break
             self._jobs.pop(key)
@@ -446,7 +455,8 @@ class ChatService:
             speech = None if job.speech is None else {key: value for key, value in job.speech.items() if not key.startswith('_')}
             return {"id": job.identifier, "model_id": job.model_id, "status": job.status, "text": job.text,
                     "elapsed_sec": round(time.monotonic() - job.created, 2), "metadata": deepcopy(job.metadata),
-                    "error": deepcopy(job.error), "voice": deepcopy(job.voice), "speech": deepcopy(speech)}
+                    "error": deepcopy(job.error), "voice": deepcopy(job.voice),
+                    "sentence_voice": deepcopy(job.sentence_voice), "speech": deepcopy(speech)}
 
     def cancel(self, payload):
         if not isinstance(payload, dict) or set(payload) != {"job_id"}:
@@ -459,20 +469,32 @@ class ChatService:
             return self.poll(job.identifier)
 
     def voice(self, payload):
-        if not isinstance(payload, dict) or set(payload) != {"job_id", "locale"} or payload.get("locale") not in ("vi-VN", "en-US"):
+        if (not isinstance(payload, dict) or set(payload) - {"job_id", "locale", "target"}
+                or not {"job_id", "locale"} <= set(payload) or payload.get("locale") not in ("vi-VN", "en-US")
+                or payload.get("target", "reply") not in ("reply", "sentence")):
             raise ChatError(400, "invalid_chat_voice", "Yêu cầu giọng đọc không hợp lệ.")
+        target = payload.get("target", "reply")
+        field = "sentence_voice" if target == "sentence" else "voice"
         with self._lock:
             job = self._job(payload["job_id"])
-            if (job.speech is not None or job.metadata.get('input') == 'topic') and payload["locale"] != "en-US":
+            if (target == "sentence" or job.speech is not None or job.metadata.get('input') == 'topic') and payload["locale"] != "en-US":
                 raise ChatError(400, "speech_voice_language", "Speech practice uses an English voice.")
             if job.status != "ready":
                 raise ChatError(409, "chat_not_ready", "Chờ Qwen trả lời xong rồi tạo giọng đọc.")
-            resuming = job.voice["status"] == "error" and job.voice.get("retryable") is True
-            if job.voice_locale is not None and job.voice_locale != payload["locale"]:
+            spoken = job.text
+            if target == "sentence":
+                speech = job.speech or {}
+                spoken = str(speech.get("reference_text") or speech.get("transcript") or "").strip()
+                if not spoken or len(spoken) > 5000:
+                    raise ChatError(400, "sentence_voice_unavailable", "Chưa có câu để đọc mẫu.")
+                if job.sentence_voice_text != spoken:
+                    job.sentence_voice = {"status": "not_requested"}
+                    job.sentence_voice_text = spoken
+            voice = getattr(job, field)
+            resuming = voice["status"] == "error" and voice.get("retryable") is True
+            if target == "reply" and job.voice_locale is not None and job.voice_locale != payload["locale"]:
                 raise ChatError(409, "chat_voice_locale", "Lượt này đã chọn ngôn ngữ giọng đọc khác.")
-            if job.voice["status"] != "not_requested" and not resuming:
-                if job.voice_locale != payload["locale"]:
-                    raise ChatError(409, "chat_voice_locale", "Lượt này đã chọn ngôn ngữ giọng đọc khác.")
+            if voice["status"] != "not_requested" and not resuming:
                 return self.poll(job.identifier)
             caps = self.capability_loader()
             key = "vietnamese_voice_configured" if payload["locale"] == "vi-VN" else "english_voice_configured"
@@ -480,25 +502,31 @@ class ChatService:
                 raise ChatError(503, "chat_voice_unavailable", "Giọng ai33 cho ngôn ngữ này chưa được cấu hình.")
             if not self._voice_slot.acquire(blocking=False):
                 raise ChatError(409, "chat_voice_busy", "Đang tạo một giọng đọc khác; hãy thử lại sau.")
-            job.voice_locale = payload["locale"]
-            revision, spoken, locale = job.generation_revision, job.text, job.voice_locale
-            job.voice = {"status": "generating", 'reference_revision': revision}
-        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming), daemon=True, name="chat-ai33-voice").start()
+            locale = payload["locale"]
+            if target == "reply":
+                job.voice_locale = locale
+            revision = job.generation_revision
+            setattr(job, field, {"status": "generating", 'reference_revision': revision})
+        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming, target), daemon=True, name="chat-ai33-voice").start()
         return self.poll(job.identifier)
 
-    def _synthesize(self, job, revision, spoken, locale, resuming=False):
+    def _synthesize(self, job, revision, spoken, locale, resuming=False, target="reply"):
         client = None
+        field = "sentence_voice" if target == "sentence" else "voice"
+        def current():
+            return (revision == job.generation_revision
+                    and (target != "sentence" or job.sentence_voice_text == spoken))
         try:
             client = self.tts_factory() if self.tts_factory else self._module("ai33_tts").AI33TTS(cache_dir=self.cache_dir)
             action = client.resume if resuming else client.synthesize
             path = Path(action(spoken[:5000], locale=locale)).resolve()
             self._read_voice(path)
             with self._lock:
-                if revision != job.generation_revision:
+                if not current():
                     return
                 identifier = secrets.token_hex(16)
                 self._voices[identifier] = (job.identifier, path)
-                job.voice = {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision}
+                setattr(job, field, {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision})
         except Exception as error:
             code = getattr(error, "code", "voice_local_error")
             if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,60}", code):
@@ -512,10 +540,10 @@ class ChatService:
             logging.getLogger(__name__).warning("Chat voice failed: job=%s code=%s exception=%s cached_resume=%s",
                 job.identifier, code, type(error).__name__, retryable)
             with self._lock:
-                if revision == job.generation_revision:
-                    job.voice = {"status": "error", "code": code, "retryable": retryable,
+                if current():
+                    setattr(job, field, {"status": "error", "code": code, "retryable": retryable,
                                  "message": "Chưa tải được giọng đọc. Bấm Thử lại giọng đọc để tải tiếp tác vụ đã có."
-                                    if retryable else "Chưa tạo được giọng đọc. Bạn có thể chọn giọng trình duyệt trong Settings."}
+                                    if retryable else "Chưa tạo được giọng đọc. Bạn có thể chọn giọng trình duyệt trong Settings."})
         finally:
             self._voice_slot.release()
 

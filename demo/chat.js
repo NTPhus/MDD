@@ -190,6 +190,16 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     for (const button of document.querySelectorAll('.chat-hint-keywords button')) button.disabled = audioLocked;
     node('chat-stop-voice').hidden = !state.speaking;
     for (const button of document.querySelectorAll('.chat-correction-listen,.chat-rewrite-listen,.chat-word-listen,.chat-sentence-listen,.chat-sound-listen')) button.disabled = audioLocked;
+    for (const turn of conversations()) {
+      const button = state.rows.get(turn.id)?.details.querySelector('.chat-sentence-listen');
+      if (!button) continue;
+      const voice = turn.sentenceVoice;
+      const waiting = state.voiceTasks.has(`sentence-${turn.id}:${turnRevision(turn)}`);
+      button.disabled = audioLocked || turn.status !== 'ready' || waiting;
+      button.lastChild.textContent = waiting ? 'Đang tạo giọng Sarah…'
+        : state.speaking === 'sentence-' + turn.id ? 'Dừng đọc câu'
+          : voice?.status === 'error' && voice.retryable ? 'Thử lại giọng Sarah' : 'Nghe cả câu';
+    }
     for (const button of document.querySelectorAll('.chat-correction-practise')) button.disabled = locked || state.recording || !button.dataset.jobId;
     if (node('chat-repeat-clear')) node('chat-repeat-clear').disabled = locked || state.recording;
     const statuses = { transcribing: 'Listening…', correcting: 'Preparing suggestions…', analyzing: 'Checking sounds…', generating: 'Replying…', coaching: 'Checking pronunciation…', cancelling: 'Stopping…' };
@@ -288,10 +298,18 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     }
     const target = String(speech.reference_text || speech.transcript).trim();
     if (target) {
+      const text = make('p', 'chat-sentence-text'), timing = make('span', 'chat-word-timing');
+      const sentenceRow = { text, timing }; timing.hidden = true;
+      paintText(sentenceRow, target, null);
+      const row = state.rows.get(turnId); if (row) row.sentenceRow = sentenceRow;
       const listenSentence = make('button', 'text-button chat-sentence-listen', 'Nghe cả câu'); listenSentence.type = 'button';
       listenSentence.prepend(icon('i-speaker'));
-      listenSentence.addEventListener('click', () => speakText(target, 'sentence-' + turnId));
-      box.append(listenSentence);
+      listenSentence.addEventListener('click', () => {
+        const turn = conversations().find(t => t.id === turnId);
+        if (state.speaking === 'sentence-' + turnId) stopSpeech();
+        else if (turn) speak(turn, true);
+      });
+      box.append(text, timing, listenSentence);
     }
   }
   function render() {
@@ -937,7 +955,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   function stopSpeech() {
     state.voiceStopped = true; state.speechEpoch++;
     const playback = state.playback; state.playback = null; playback?.tracker?.dispose();
-    const activeRow = state.rows.get(playback?.turnId || state.speaking);
+    const activeRow = playback?.row || state.rows.get(playback?.turnId || state.speaking);
     if (activeRow) { activeRow.readUntil = 0; paintText(activeRow, activeRow.shownText || '', null, null, 0); }
     if (state.audioFrame !== null) cancelAnimationFrame(state.audioFrame); state.audioFrame = null;
     state.liveReply?.mute(); cancelBrowserSpeech();
@@ -974,40 +992,47 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       }, turn ? .98 : .92);
     } catch (error) { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } }
   }
-  async function speak(turn) {
-    if (state.referenceOperation?.regenerating) return;
-    if (node('chat-voice-provider').value !== 'ai33') { speakText(turn.content, turn.id, turn); return; }
+  async function speak(turn, sentence = false) {
+    if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating) return;
+    const text = sentence ? String(turn.speech?.reference_text || turn.speech?.transcript || '').trim() : turn.content;
+    const playId = sentence ? 'sentence-' + turn.id : turn.id;
+    const voiceField = sentence ? 'sentence_voice' : 'voice', turnField = sentence ? 'sentenceVoice' : 'voice';
+    if (!text) return;
+    if (node('chat-voice-provider').value !== 'ai33') { speakText(text, playId, sentence ? null : turn); return; }
     if (!turn.jobId || turn.status !== 'ready') { showError('ai33 needs a completed reply from this page session.'); return; }
-    const revision = turnRevision(turn), taskKey = `${turn.id}:${revision}`;
+    const revision = turnRevision(turn), taskKey = `${playId}:${revision}`;
     if (state.voiceTasks.has(taskKey)) return;
     showError();
     stopSpeech(); state.voiceTasks.add(taskKey); const model = state.model, epoch = state.speechEpoch;
     const current = () => epoch === state.speechEpoch && revision === turnRevision(turn) && !state.destroyed;
     try {
-      let job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US' });
+      let job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US', ...(sentence ? { target: 'sentence' } : {}) });
       if (!current() || (job.metadata?.reference_revision || 0) !== revision) return;
-      turn.voice = job.voice; render();
-      while (job.voice.status === 'generating') {
+      turn[turnField] = job[voiceField]; render();
+      while (job[voiceField]?.status === 'generating') {
         await pause(1000); if (!current()) return;
         job = await api('/api/chat/jobs/' + turn.jobId);
         if (!current() || (job.metadata?.reference_revision || 0) !== revision) return;
-        turn.voice = job.voice; render();
+        turn[turnField] = job[voiceField]; render();
       }
-      if (job.voice.status === 'error') throw new Error(job.voice.message);
-      if (job.voice.status === 'ready' && /^\/api\/chat\/audio\/[0-9a-f]{32}$/.test(job.voice.url) && state.visible && state.model === model && epoch === state.speechEpoch) {
+      const voice = job[voiceField];
+      if (voice?.status === 'error') throw new Error(voice.message);
+      if (voice?.status === 'ready' && /^\/api\/chat\/audio\/[0-9a-f]{32}$/.test(voice.url) && state.visible && state.model === model && epoch === state.speechEpoch) {
         // ai33 currently returns audio without word timestamps. Follow the real
         // playhead using an explicitly estimated word map, for the exact slice
         // synthesized by ChatService._synthesize (not the rest of a long reply).
-        if (state.liveTurnId === turn.id) state.liveReply?.revealAll();
-        const audio = new Audio(job.voice.url), playback = { turnId: turn.id, range: null, mode: null };
+        if (!sentence && state.liveTurnId === turn.id) state.liveReply?.revealAll();
+        const row = sentence ? state.rows.get(turn.id)?.sentenceRow : state.rows.get(turn.id);
+        if (row) paintText(row, text, null, null, 0);
+        const audio = new Audio(voice.url), playback = { turnId: playId, row, range: null, mode: null };
         state.audio = audio; state.playback = playback;
         const valid = () => current() && state.audio === audio && state.playback === playback;
-        const spokenText = [...turn.content].slice(0, 5000).join('');
+        const spokenText = [...text].slice(0, 5000).join('');
         const tracker = new window.MDDSpeechHighlight.SpeechWordTracker(spokenText, {
           onUpdate: (range, mode) => {
             if (!valid()) return;
             playback.range = range; playback.mode = mode;
-            const row = state.rows.get(turn.id); if (row) paintText(row, turn.content, range, mode);
+            if (row) paintText(row, text, range, mode);
           },
         });
         playback.tracker = tracker;
@@ -1017,12 +1042,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         const finish = (completed = false) => {
           if (!valid()) return;
           clearFrame(); tracker.dispose(); state.playback = null; state.audio = null; state.speaking = null; render();
-          const row = state.rows.get(turn.id);
-          if (row) paintText(row, turn.content, null, null, completed ? spokenText.length : 0);
+          if (row) paintText(row, text, null, null, completed ? spokenText.length : 0);
         };
         audio.onplaying = () => {
           if (!valid()) return;
-          clearFrame(); tracker.start(); state.speaking = turn.id; updateTime(); render(); tick();
+          clearFrame(); tracker.start(); state.speaking = playId; updateTime(); render(); tick();
         };
         audio.ontimeupdate = updateTime; audio.onseeked = updateTime;
         audio.onpause = () => { if (valid()) { clearFrame(); tracker.end(); state.speaking = null; render(); } };
@@ -1031,7 +1055,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         await audio.play();
       }
     } catch (error) { if (current()) { stopSpeech(); showError(error.message || 'The English voice could not be played.'); } }
-    finally { state.voiceTasks.delete(taskKey); }
+    finally { state.voiceTasks.delete(taskKey); render(); }
   }
   async function cancel() {
     if (!state.activeTurn) return;
