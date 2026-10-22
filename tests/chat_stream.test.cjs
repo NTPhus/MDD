@@ -132,3 +132,17 @@ test('missing browser TTS never blocks the complete text response', () => {
   const h = harness({ speak: null }); h.reply.update('A complete response', { final: true }); h.flush();
   assert.equal(h.reply.visibleText, 'A complete response'); assert.equal(h.spoken.length, 0);
 });
+
+test('read progress accumulates across clauses, completes the whole reply and resets on stop', () => {
+  const h = harness(), text = 'One two. Three four.';
+  h.reply.update(text, { final: true });
+  h.spoken[0].callbacks.boundary(0); assert.equal(h.reply.readUntil, 3);
+  h.spoken[0].callbacks.boundary(4); assert.equal(h.reply.readUntil, 8);
+  h.reply.update(text, { final: true }); assert.equal(h.reply.readUntil, 8);
+  h.spoken[0].callbacks.end(); assert.equal(h.reply.readUntil, 8);
+  h.spoken[1].callbacks.boundary(0); assert.equal(h.reply.readUntil, 14);
+  h.spoken[1].callbacks.end(); assert.equal(h.reply.readUntil, text.length);
+  assert.equal(h.reply.range, null); assert.equal(h.reply.visibleText, text);
+  h.reply.mute(); assert.equal(h.reply.readUntil, 0);
+  h.spoken[1].callbacks.boundary(6); assert.equal(h.reply.readUntil, 0);
+});

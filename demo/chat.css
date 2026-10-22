@@ -592,6 +592,18 @@ body.chat-room-open .toast{left:50%;background:#38294e;color:#f7f4fb}
 }
 
 /* Topic landing and focused conversation use the same light app theme. */
+.chat-scenario{max-width:520px;margin:8px auto 24px;padding:22px 26px;text-align:center;border:1px solid #eee6f8;border-radius:16px;background:#fcfaff}
+.chat-scenario>span{font-size:11px;letter-spacing:.8px;font-weight:600;color:#9a8ba9}
+.chat-scenario h2{font-size:17px;line-height:1.5;color:#40304f;margin:10px 0 7px}
+.chat-scenario p{font-size:14px;line-height:1.75;color:#8a7e98;margin:0}
+.chat-reply-word.is-read{color:#4c1d95;background:#f1eaff;font-weight:650}
+body.chat-room-open .chat-reply-word.is-read{color:#4c1d95;background:#f1eaff;font-weight:650}
+@media(min-width:1001px){
+  body.chat-room-open>.sidebar{display:flex}
+  body.chat-room-open .main{margin-left:220px}
+  body.chat-room-open #chat-layout,body.chat-room-open #chat-layout.with-hints{max-width:900px}
+}
+@media(max-width:700px){.chat-scenario{margin:4px auto 20px;padding:17px 18px}.chat-scenario h2{font-size:15px}.chat-scenario p{font-size:13px}}
 .chat-view{--chat-muted:#777084}
 .chat-view .page-intro{padding:30px 0 24px}
 .chat-view .page-intro h1{font-family:var(--sans);font-size:clamp(27px,3vw,40px);font-weight:700;letter-spacing:-1.1px;line-height:1.25}

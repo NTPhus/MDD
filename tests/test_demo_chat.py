@@ -145,6 +145,34 @@ class ChatTests(unittest.TestCase):
         with self.assertRaises(ChatError):
             self.service.voice({**voice_payload, "text":"client supplied text"})
 
+    def test_voice_failure_resumes_cached_task_without_another_synthesis(self):
+        from scripts.ai33_tts import AI33Error
+        self.service.capability_loader = lambda: {"tts_configured": True, "vietnamese_voice_configured": True}
+        audio = self.service.cache_dir / "recovered.mp3"
+        audio.parent.mkdir(parents=True)
+        audio.write_bytes(b"ID3testaudio")
+        tts = SimpleNamespace(synthesize=Mock(side_effect=AI33Error("SECRET private failure")),
+                              resume=Mock(return_value=audio), can_resume=Mock(return_value=True))
+        self.service.tts_factory = lambda: tts
+        job = self.service.submit(self.payload())
+        completed(self.service, job["id"])
+        payload = {"job_id": job["id"], "locale": "vi-VN"}
+        self.service.voice(payload)
+        def voice_finished():
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                value = self.service.poll(job["id"])
+                if value["voice"]["status"] != "generating": return value
+                time.sleep(.01)
+            self.fail("Voice worker did not finish")
+        failed = voice_finished()
+        self.assertTrue(failed["voice"]["retryable"])
+        self.assertNotIn("SECRET", json.dumps(failed))
+        self.service.voice(payload)
+        self.assertEqual(voice_finished()["voice"]["status"], "ready")
+        tts.synthesize.assert_called_once()
+        tts.resume.assert_called_once_with(failed["text"], locale="vi-VN")
+
     def test_http_chat_routes_keep_original_routes_and_origin_guards(self):
         assets = self.root / "demo"
         assets.mkdir()

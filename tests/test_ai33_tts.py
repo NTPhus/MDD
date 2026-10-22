@@ -93,6 +93,35 @@ class AI33Tests(unittest.TestCase):
             self.assertEqual(request.call_count, 1)
             self.assertEqual(download.call_count, 2)
 
+    def test_resume_without_receipt_never_submits_a_new_task(self):
+        with patch.object(self.client, "request") as request:
+            self.assertFalse(self.client.can_resume("Not submitted."))
+            with self.assertRaisesRegex(AI33Error, "No cached task"):
+                self.client.resume("Not submitted.")
+            request.assert_not_called()
+
+    def test_explicit_resume_recovers_existing_task_using_only_get(self):
+        with patch.object(self.client, "request", side_effect=[{"task_id": "existing"}, AI33Error("temporary")]):
+            with self.assertRaises(AI33Error):
+                self.client.synthesize("Hello.")
+        self.assertTrue(self.client.can_resume("Hello."))
+        with patch.object(self.client, "request", return_value={"status": "done", "audio_url": "https://cdn.example/a.wav"}) as request, \
+                patch.object(self.client.downloads, "open", return_value=self.audio_response()):
+            self.assertTrue(self.client.resume("Hello.").exists())
+            self.assertEqual([call.args[0] for call in request.call_args_list], ["GET"])
+
+    def test_transient_task_get_retries_but_authentication_failure_does_not(self):
+        transient = HTTPError("https://api.ai33.pro/v1/task/existing", 503, "secret", {}, None)
+        with patch.object(self.client.api, "open", side_effect=[transient, Response(b'{"status":"done"}')]) as api, \
+                patch("scripts.ai33_tts.time.sleep"):
+            self.assertEqual(self.client.request("GET", "/v1/task/existing"), {"status": "done"})
+            self.assertEqual([call.args[0].get_method() for call in api.call_args_list], ["GET", "GET"])
+        unauthorized = HTTPError("https://api.ai33.pro/v1/task/existing", 401, "secret", {}, None)
+        with patch.object(self.client.api, "open", side_effect=unauthorized) as api:
+            with self.assertRaises(AI33Error):
+                self.client.request("GET", "/v1/task/existing")
+            self.assertEqual(api.call_count, 1)
+
     def test_english_voice_required_before_submission(self):
         del os.environ["AI33_VOICE_EN"]
         with patch.object(self.client, "request") as request:

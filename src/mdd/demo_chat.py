@@ -10,6 +10,7 @@ import binascii
 import io
 import importlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -466,7 +467,10 @@ class ChatService:
                 raise ChatError(400, "speech_voice_language", "Speech practice uses an English voice.")
             if job.status != "ready":
                 raise ChatError(409, "chat_not_ready", "Chờ Qwen trả lời xong rồi tạo giọng đọc.")
-            if job.voice["status"] != "not_requested":
+            resuming = job.voice["status"] == "error" and job.voice.get("retryable") is True
+            if job.voice_locale is not None and job.voice_locale != payload["locale"]:
+                raise ChatError(409, "chat_voice_locale", "Lượt này đã chọn ngôn ngữ giọng đọc khác.")
+            if job.voice["status"] != "not_requested" and not resuming:
                 if job.voice_locale != payload["locale"]:
                     raise ChatError(409, "chat_voice_locale", "Lượt này đã chọn ngôn ngữ giọng đọc khác.")
                 return self.poll(job.identifier)
@@ -479,13 +483,15 @@ class ChatService:
             job.voice_locale = payload["locale"]
             revision, spoken, locale = job.generation_revision, job.text, job.voice_locale
             job.voice = {"status": "generating", 'reference_revision': revision}
-        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale), daemon=True, name="chat-ai33-voice").start()
+        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming), daemon=True, name="chat-ai33-voice").start()
         return self.poll(job.identifier)
 
-    def _synthesize(self, job, revision, spoken, locale):
+    def _synthesize(self, job, revision, spoken, locale, resuming=False):
+        client = None
         try:
             client = self.tts_factory() if self.tts_factory else self._module("ai33_tts").AI33TTS(cache_dir=self.cache_dir)
-            path = Path(client.synthesize(spoken[:5000], locale=locale)).resolve()
+            action = client.resume if resuming else client.synthesize
+            path = Path(action(spoken[:5000], locale=locale)).resolve()
             self._read_voice(path)
             with self._lock:
                 if revision != job.generation_revision:
@@ -493,10 +499,23 @@ class ChatService:
                 identifier = secrets.token_hex(16)
                 self._voices[identifier] = (job.identifier, path)
                 job.voice = {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision}
-        except Exception:
+        except Exception as error:
+            code = getattr(error, "code", "voice_local_error")
+            if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,60}", code):
+                code = "voice_local_error"
+            retryable = (code != "ai33_task_failed" and client is not None
+                         and callable(getattr(client, "can_resume", None))
+                         and callable(getattr(client, "resume", None))
+                         and client.can_resume(spoken[:5000], locale=locale) is True)
+            # Only typed error identifiers are logged, never raw provider errors,
+            # credentials, signed CDN URLs or learner/conversation text.
+            logging.getLogger(__name__).warning("Chat voice failed: job=%s code=%s exception=%s cached_resume=%s",
+                job.identifier, code, type(error).__name__, retryable)
             with self._lock:
                 if revision == job.generation_revision:
-                    job.voice = {"status": "error", "message": "Chưa tạo được giọng ai33. Nội dung chữ vẫn được giữ; lượt này không tự gửi lại."}
+                    job.voice = {"status": "error", "code": code, "retryable": retryable,
+                                 "message": "Chưa tải được giọng đọc. Bấm Thử lại giọng đọc để tải tiếp tác vụ đã có."
+                                    if retryable else "Chưa tạo được giọng đọc. Bạn có thể chọn giọng trình duyệt trong Settings."}
         finally:
             self._voice_slot.release()
 

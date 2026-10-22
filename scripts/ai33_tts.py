@@ -19,7 +19,9 @@ CACHE = ROOT / "data/generated/tts/ai33"
 
 
 class AI33Error(RuntimeError):
-    pass
+    def __init__(self, message, *, code="ai33_error", retryable=False):
+        super().__init__(message)
+        self.code, self.retryable = code, retryable
 
 
 def load_env(path):
@@ -98,6 +100,18 @@ class AI33TTS:
         self.downloads = build_opener()
 
     def request(self, method, path, payload=None, timeout=30):
+        # Only read-only requests can be retried automatically. A failed POST
+        # may already have created a billable task, so it is sent exactly once.
+        attempts = 3 if method == "GET" else 1
+        for attempt in range(attempts):
+            try:
+                return self._request_once(method, path, payload, timeout)
+            except AI33Error as error:
+                if not error.retryable or attempt + 1 == attempts:
+                    raise
+                time.sleep(attempt + 1)
+
+    def _request_once(self, method, path, payload=None, timeout=30):
         body = None if payload is None else json.dumps(payload).encode("utf-8")
         req = Request(self.base_url + path, data=body, method=method, headers={
             "xi-api-key": self.key,
@@ -109,12 +123,16 @@ class AI33TTS:
                 result = json.loads(response.read())
         except HTTPError as exc:
             # Do not print response bodies: these can echo credentials or inputs.
-            raise AI33Error(f"AI33 HTTP {exc.code} for {method} {path.split('?')[0]}.") from None
+            status = exc.code
+            exc.close()
+            raise AI33Error(f"AI33 HTTP {status} for {method} {path.split('?')[0]}.",
+                            code=f"ai33_http_{status}",
+                            retryable=method == "GET" and (status in {404, 429} or 500 <= status < 600)) from None
         except (URLError, TimeoutError, OSError):
             message = "AI33 connection failed."
             if method == "POST":
                 message += " No automatic retry; check task history before submitting again."
-            raise AI33Error(message) from None
+            raise AI33Error(message, code="ai33_connection", retryable=method == "GET") from None
         except (ValueError, UnicodeError):
             raise AI33Error("AI33 returned invalid JSON; check the account API documentation.") from None
         if isinstance(result, dict) and (result.get("success") is False or result.get("error")):
@@ -133,7 +151,7 @@ class AI33TTS:
                                   timeout=max(0.001, min(30, remaining)))
             status = (field(result, "status", "state") or "").lower()
             if status in {"failed", "error", "cancelled", "canceled"}:
-                raise AI33Error(f"AI33 task failed ({status}); cached task ID retained.")
+                raise AI33Error(f"AI33 task failed ({status}); cached task ID retained.", code="ai33_task_failed")
             audio_url = field(result, "audio_url", "output_uri", "output_url")
             if status in {"done", "completed", "success", "succeeded", "finished"}:
                 if audio_url:
@@ -188,7 +206,7 @@ class AI33TTS:
         path.write_bytes(data)
         return path, hashlib.sha256(data).hexdigest()
 
-    def synthesize(self, text, locale="en-US", voice_id=None):
+    def _cache_request(self, text, locale, voice_id=None):
         """Return a cached local audio Path; reruns resume a previously submitted task."""
         if locale not in {"en-US", "en-GB", "vi-VN"}:
             raise AI33Error("Supported locales: en-US, en-GB, vi-VN.")
@@ -203,6 +221,23 @@ class AI33TTS:
         digest = hashlib.sha256(json.dumps(cache_input, sort_keys=True).encode()).hexdigest()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         receipt_path = self.cache_dir / (digest + ".json")
+        return payload, receipt_path, digest, voice_id
+
+    def can_resume(self, text, locale="en-US"):
+        try:
+            _, path, _, _ = self._cache_request(text, locale)
+            task = json.loads(path.read_text(encoding="utf-8")).get("task_id")
+            return isinstance(task, str) and bool(task.strip())
+        except (OSError, ValueError, AI33Error):
+            return False
+
+    def resume(self, text, locale="en-US"):
+        """User-initiated cache recovery. This path can never submit a new POST."""
+        return self.synthesize(text, locale=locale, resume_only=True)
+
+    def synthesize(self, text, locale="en-US", voice_id=None, *, resume_only=False):
+        """Return cached audio; retain the accepted task before polling/download."""
+        payload, receipt_path, digest, voice_id = self._cache_request(text, locale, voice_id)
         if receipt_path.exists():
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             if receipt.get("audio_file"):
@@ -211,6 +246,8 @@ class AI33TTS:
                     return audio
             task_id = receipt["task_id"]
         else:
+            if resume_only:
+                raise AI33Error("No cached task to resume; no new request was submitted.", code="ai33_no_cached_task")
             result = self.request("POST", "/v3/text-to-speech", payload)
             task_id = field(result, "task_id")
             if not task_id:

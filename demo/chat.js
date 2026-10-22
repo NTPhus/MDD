@@ -8,13 +8,13 @@ class LiveReply {
     Object.assign(this, { onUpdate, onVoice, onError, speak, cancelSpeech });
     this.text = ''; this.visible = 0; this.queuedUntil = 0; this.queue = []; this.active = null;
     this.final = false; this.muted = !voice || !speak; this.closed = false;
-    this.epoch = 0; this.range = null; this.rangeMode = null;
+    this.epoch = 0; this.range = null; this.rangeMode = null; this.readUntil = 0;
   }
   get visibleText() { return this.text.slice(0, this.visible); }
   revealAll() {
     if (this.closed) return;
     this.visible = this.text.length;
-    this.onUpdate(this.visibleText, this.range, this.rangeMode);
+    this.onUpdate(this.visibleText, this.range, this.rangeMode, this.readUntil);
   }
   update(text, { final = false } = {}) {
     if (this.closed) return;
@@ -26,7 +26,7 @@ class LiveReply {
     this.text = text; this.final ||= final;
     this.visible = this.final ? this.text.length : 0;
     // Paint all text synchronously before onVoice/speak can start playback.
-    this.onUpdate(this.visibleText, this.range, this.rangeMode);
+    this.onUpdate(this.visibleText, this.range, this.rangeMode, this.readUntil);
     if (this.final && !this.muted) {
       this._queueClauses();
       this._play();
@@ -59,19 +59,20 @@ class LiveReply {
       const start = part.offset + index + (word[0].length - word[0].trimStart().length);
       this.range = { start, end: part.offset + index + word[0].length };
       this.rangeMode = mode;
-      this.onUpdate(this.visibleText, this.range, this.rangeMode);
+      this.readUntil = this.range.end;
+      this.onUpdate(this.visibleText, this.range, this.rangeMode, this.readUntil);
     };
     try {
       part.utterance = this.speak(part.text, {
         start: () => boundary(0, 'estimated'), boundary: (index, mode = 'boundary') => boundary(index, mode),
-        end: () => { if (!valid()) return; this.active = null; this.range = null; this.rangeMode = null; this.onUpdate(this.visibleText, null); this.onVoice(false); this._play(); },
+        end: () => { if (!valid()) return; this.readUntil = part.offset + part.text.length; this.active = null; this.range = null; this.rangeMode = null; this.onUpdate(this.visibleText, null, null, this.readUntil); this.onVoice(false); this._play(); },
         error: error => { if (!valid()) return; this.mute(); this.onError(error); },
       });
     } catch (error) { if (valid()) { this.mute(); this.onError(error); } }
   }
   mute() {
-    this.muted = true; this.epoch++; this.queue = []; this.active = null; this.range = null; this.rangeMode = null;
-    this.cancelSpeech(); this.onVoice(false); this.onUpdate(this.visibleText, null);
+    this.muted = true; this.epoch++; this.queue = []; this.active = null; this.range = null; this.rangeMode = null; this.readUntil = 0;
+    this.cancelSpeech(); this.onVoice(false); this.onUpdate(this.visibleText, null, null, 0);
   }
   dispose() {
     this.closed = true; this.mute();
@@ -196,6 +197,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       : state.starting ? 'Starting…' : state.speaking ? 'Speaking…' : state.busy ? statuses[state.activeTurn?.status] || 'Thinking…' : 'Your turn';
     node('chat-current-model').textContent = state.repeatTarget ? 'Practise your sentence' : node('chat-mode').value === 'reading' ? 'Read & practise' : state.config?.topics?.find(t => t.id === state.topic)?.title || 'English conversation';
     node('chat-topic-level').textContent = state.config?.topics?.find(t => t.id === state.topic)?.level || 'EN';
+    const scenario = state.config?.topics?.find(t => t.id === state.topic);
+    node('chat-scenario').hidden = !scenario || node('chat-mode').value !== 'conversation';
+    node('chat-scenario-title').textContent = scenario?.title || '';
+    node('chat-scenario-description').textContent = scenario?.description || '';
     node('chat-settings-label').textContent = state.visible && state.inRoom
       ? node('chat-voice-provider').value === 'ai33' ? (state.config?.english_voice_name?.split(' - ')[0] || 'ai33 · English') : 'Giọng đọc' : 'Settings';
     node('chat-settings').querySelector('summary').setAttribute('aria-label', 'Giọng đọc và cài đặt hội thoại');
@@ -371,7 +376,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         }); row.actions.append(replay);
       }
       if (turn.role === 'assistant' && turn.content && terminal(turn.status)) {
-        const read = make('button', '', state.speaking === turn.id ? 'Dừng giọng đọc' : turn.voice?.status === 'generating' ? 'Đang tạo giọng…' : 'Phát lại');
+        const read = make('button', '', state.speaking === turn.id ? 'Dừng giọng đọc' : turn.voice?.status === 'generating' ? 'Đang tạo giọng…' : turn.voice?.status === 'error' && turn.voice.retryable ? 'Thử lại giọng đọc' : 'Phát lại');
         read.prepend(icon('i-speaker'));
         read.type = 'button'; read.disabled = turn.voice?.status === 'generating' || Boolean(state.referenceOperation?.regenerating);
         read.addEventListener('click', () => state.speaking === turn.id ? stopSpeech() : speak(turn)); row.actions.append(read);
@@ -722,8 +727,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     stopSpeech(); clearReply(); state.repeatTarget = null; state.topic = null; state.inRoom = true; node('chat-mode').value = mode;
     resetRows(); showError(); node('chat-audio-retry').hidden = true; state.lastAudio = null; render(); save();
   }
-  function paintText(row, text, range, mode = null) {
-    if (!text.startsWith(row.shownText || '')) { row.text.replaceChildren(); row.shownText = ''; }
+  function paintText(row, text, range, mode = null, readUntil = null) {
+    if (!text.startsWith(row.shownText || '')) { row.text.replaceChildren(); row.shownText = ''; row.readUntil = 0; }
+    if (Number.isInteger(readUntil) && readUntil >= 0) row.readUntil = Math.min(readUntil, text.length);
+    else if (range) row.readUntil = range.end;
     const from = (row.shownText || '').length;
     // Append words as safe DOM text, keeping earlier spans stable while speaking.
     for (const match of text.slice(from).matchAll(/\s+|\S+/g)) {
@@ -736,6 +743,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     row.shownText = text;
     for (const span of row.text.querySelectorAll('.chat-reply-word')) {
       const active = Boolean(range && +span.dataset.start < range.end && +span.dataset.end > range.start);
+      span.classList.toggle('is-read', +span.dataset.end <= (row.readUntil || 0));
       span.classList.toggle('is-speaking', active);
       if (active) span.setAttribute('aria-current', 'true'); else span.removeAttribute('aria-current');
     }
@@ -770,11 +778,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       voice: state.visible && node('chat-auto-read').checked && node('chat-voice-provider').value === 'browser',
       speak: window.speechSynthesis && window.SpeechSynthesisUtterance ? browserVoice : null,
       cancelSpeech: cancelBrowserSpeech,
-      onUpdate: (text, range, mode) => {
+      onUpdate: (text, range, mode, readUntil) => {
         const row = state.rows.get(turn.id); if (!row) return;
         if (state.playback?.turnId === turn.id) return;
         const scrollSnapshot = chatScrollSnapshot();
-        paintText(row, text, range, mode); restoreChatScroll(scrollSnapshot);
+        paintText(row, text, range, mode, readUntil); restoreChatScroll(scrollSnapshot);
       },
       onVoice: active => { if (active) state.speaking = turn.id; else if (!state.playback && state.speaking === turn.id) state.speaking = null; render(); },
       onError: () => showError('Voice could not start. Tap Listen when the reply is ready.'),
@@ -929,6 +937,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   function stopSpeech() {
     state.voiceStopped = true; state.speechEpoch++;
     const playback = state.playback; state.playback = null; playback?.tracker?.dispose();
+    const activeRow = state.rows.get(playback?.turnId || state.speaking);
+    if (activeRow) { activeRow.readUntil = 0; paintText(activeRow, activeRow.shownText || '', null, null, 0); }
     if (state.audioFrame !== null) cancelAnimationFrame(state.audioFrame); state.audioFrame = null;
     state.liveReply?.mute(); cancelBrowserSpeech();
     if (state.recordingAudio) { state.recordingAudio.pause(); state.recordingAudio = null; }
@@ -936,6 +946,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   }
   function speakText(text, id, turn = null) {
     if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating) return;
+    showError();
     stopSpeech();
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { showError('Browser speech is unavailable. Select ai33 to hear a completed reply.'); return; }
     const epoch = state.speechEpoch;
@@ -943,8 +954,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     const playback = turn ? { turnId: turn.id, range: null, mode: null } : null;
     state.playback = playback;
     const valid = () => epoch === state.speechEpoch && !state.destroyed && (!playback || state.playback === playback);
-    const finish = () => {
+    const finish = (completed = false) => {
       if (!valid()) return;
+      const row = turn && state.rows.get(turn.id);
+      if (row) paintText(row, turn.content, null, null, completed ? text.length : 0);
       state.playback = null; state.speaking = null; render();
     };
     try {
@@ -956,7 +969,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
           playback.range = range; playback.mode = mode;
           const row = state.rows.get(turn.id); if (row) paintText(row, turn.content, range, mode);
         },
-        end: finish,
+        end: () => finish(true),
         error: () => { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } },
       }, turn ? .98 : .92);
     } catch (error) { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } }
@@ -967,6 +980,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     if (!turn.jobId || turn.status !== 'ready') { showError('ai33 needs a completed reply from this page session.'); return; }
     const revision = turnRevision(turn), taskKey = `${turn.id}:${revision}`;
     if (state.voiceTasks.has(taskKey)) return;
+    showError();
     stopSpeech(); state.voiceTasks.add(taskKey); const model = state.model, epoch = state.speechEpoch;
     const current = () => epoch === state.speechEpoch && revision === turnRevision(turn) && !state.destroyed;
     try {
@@ -988,7 +1002,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         const audio = new Audio(job.voice.url), playback = { turnId: turn.id, range: null, mode: null };
         state.audio = audio; state.playback = playback;
         const valid = () => current() && state.audio === audio && state.playback === playback;
-        const tracker = new window.MDDSpeechHighlight.SpeechWordTracker([...turn.content].slice(0, 5000).join(''), {
+        const spokenText = [...turn.content].slice(0, 5000).join('');
+        const tracker = new window.MDDSpeechHighlight.SpeechWordTracker(spokenText, {
           onUpdate: (range, mode) => {
             if (!valid()) return;
             playback.range = range; playback.mode = mode;
@@ -999,9 +1014,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         const clearFrame = () => { if (state.audioFrame !== null) cancelAnimationFrame(state.audioFrame); state.audioFrame = null; };
         const updateTime = () => { if (valid() && !audio.paused) tracker.audioTime(audio.currentTime, audio.duration); };
         const tick = () => { if (!valid() || audio.paused) return; updateTime(); state.audioFrame = requestAnimationFrame(tick); };
-        const finish = () => {
+        const finish = (completed = false) => {
           if (!valid()) return;
           clearFrame(); tracker.dispose(); state.playback = null; state.audio = null; state.speaking = null; render();
+          const row = state.rows.get(turn.id);
+          if (row) paintText(row, turn.content, null, null, completed ? spokenText.length : 0);
         };
         audio.onplaying = () => {
           if (!valid()) return;
@@ -1009,7 +1026,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         };
         audio.ontimeupdate = updateTime; audio.onseeked = updateTime;
         audio.onpause = () => { if (valid()) { clearFrame(); tracker.end(); state.speaking = null; render(); } };
-        audio.onended = finish;
+        audio.onended = () => finish(true);
         audio.onerror = () => { if (valid()) { finish(); showError('Không phát được audio ai33. Bạn thử Phát lại.'); } };
         await audio.play();
       }
