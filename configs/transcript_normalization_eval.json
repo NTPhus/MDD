@@ -1,0 +1,22 @@
+{
+  "version": "transcript-normalization-eval-v1",
+  "purpose": "Development regression cases, not an independent benchmark or a semantic annotation dataset",
+  "controls": [
+    {"id": "format", "transcript": "i work as an engineer", "reference": "I work as an engineer."},
+    {"id": "compound", "transcript": "i am a soft ware engineer", "reference": "I am a software engineer."},
+    {"id": "compound-negation", "transcript": "i do not repair hard ware", "reference": "I do not repair hardware."},
+    {"id": "apostrophe", "transcript": "i dont like coffee", "reference": "I don't like coffee."},
+    {"id": "keep-grammar", "transcript": "i usually wakes up at seven am", "reference": "I usually wakes up at seven am."},
+    {"id": "keep-past-errors", "transcript": "Yesterday I wake up then I no brush teeth", "reference": "Yesterday I wake up. Then I no brush teeth."},
+    {"id": "keep-repetition", "transcript": "I I want one coffee", "reference": "I I want one coffee."},
+    {"id": "keep-quantity", "transcript": "I want two coffees not three", "reference": "I want two coffees, not three."},
+    {"id": "keep-uncertainty", "transcript": "maybe I might go tomorrow", "reference": "Maybe I might go tomorrow."},
+    {"id": "keep-name", "transcript": "My name is Curly", "reference": "My name is Curly."},
+    {"id": "keep-oov", "transcript": "My fravorit is tea", "reference": "My fravorit is tea."},
+    {"id": "unverified-intent", "transcript": "Curly am ma a sockway engineer", "reference": "Curly am ma a sockway engineer.", "note": "Currently I am a software engineer is only a hypothetical interpretation; no recording or confirmed transcript was supplied.", "history": [{"role": "assistant", "content": "What do you do for work?"}]},
+    {"id": "keep-price", "transcript": "It costs $15.50 not $50", "reference": "It costs $15.50, not $50."},
+    {"id": "keep-signed-number", "transcript": "the temperature is -5", "reference": "The temperature is -5."},
+    {"id": "keep-fragment", "transcript": "Japan", "reference": "Japan.", "history": [{"role": "assistant", "content": "Where would you like to travel?"}]},
+    {"id": "keep-topic-change", "transcript": "actually the train was late", "reference": "Actually, the train was late.", "history": [{"role": "assistant", "content": "What coffee would you like?"}]}
+  ]
+}

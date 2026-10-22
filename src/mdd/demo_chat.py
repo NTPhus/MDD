@@ -131,6 +131,7 @@ class ChatService:
                 "pronunciation_method": "ctc_variant_posterior_margin_v1", "pronunciation_uncertainty": True,
                 "pronunciation_feedback": "collapsed", "voice_content": "reply_only",
                 "reference_confirmation": True,
+                "transcript_normalization": "lexical_preserving_v1",
                 "reference_regenerates_reply": True,
                 "reference_regenerates_only_on_change": True,
                 "pronunciation_review": "immediate_provisional",
@@ -306,7 +307,7 @@ class ChatService:
             self._requests[request_id] = (fingerprint, job.identifier)
             self._prune()
         request = {"audio_base64": encoded, "history": cleaned[1:-1],
-                   'rewrite_enabled': True,
+                   'rewrite_enabled': True, 'normalization_enabled': True,
                    "reference_text": corrected_reference or PRACTICE_PROMPTS.get(practice_id), "model_id": model_id, "topic_id": topic_id,
                    'reference_source': 'corrected_sentence' if corrected_reference else 'reading_prompt' if practice_id else 'asr'}
         threading.Thread(target=self._generate_speech, args=(job, request), daemon=True, name="local-speech-job").start()
@@ -333,6 +334,7 @@ class ChatService:
             if job.status != 'ready':
                 raise ChatError(409, 'chat_reference_not_ready', 'Chờ lượt hiện tại xử lý xong rồi đối chiếu lại.')
             speech['conversation_text'] = speech['reference_text']
+            speech['conversation_source'] = 'user_confirmed'
             previous_text = original.get('conversation_text') or original.get('reference_text') or original.get('transcript')
             changed = spoken_text_key(speech['reference_text']) != spoken_text_key(previous_text)
             if not changed:
@@ -346,6 +348,7 @@ class ChatService:
                     job.sentence_voice_text = None
                     job.sentence_voice_options = {}
                 job.metadata['pronunciation_reference_source'] = 'user_confirmed'
+                job.metadata['conversation_source'] = 'user_confirmed'
                 response = self.poll(job.identifier)
                 response['reference_update'] = {'changed': False, 'regenerated_reply': False}
                 return response

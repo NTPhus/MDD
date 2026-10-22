@@ -19,8 +19,8 @@ def _validate_text(value, name):
     return value.strip()
 
 
-def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, source='asr', missing_words=()):
-    """Select server-confirmed conversation text and its independent clarity.
+def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, source='asr', missing_words=(), normalized_text=None):
+    """Select confirmed text or a guarded ASR formatting view and its clarity.
 
     ``user_confirmed`` is an internal service provenance, not a client flag.
     The caller must bind it to the recording/reference revision before calling.
@@ -41,8 +41,14 @@ def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, sou
         if dialogue_text is not None and dialogue_text != raw_transcript:
             raise ValueError('A changed dialogue_text requires user_confirmed provenance')
         effective = raw_transcript
+        if normalized_text is not None:
+            from scripts.transcript_normalization import preservation_reason
+            if source != 'asr' or preservation_reason(raw_transcript, normalized_text):
+                raise ValueError('Normalization must preserve the ASR lexical content')
+            effective = _validate_text(normalized_text, 'normalized_text')
+            source = 'asr_normalized'
         missing_count = len(missing_words)
-        needs_clarification = source == 'asr' and missing_count >= 2 and missing_count / max(len(effective.split()), 1) >= .25
+        needs_clarification = source in {'asr', 'asr_normalized'} and missing_count >= 2 and missing_count / max(len(effective.split()), 1) >= .25
     view['conversation_source'] = source
     view['needs_clarification'] = needs_clarification
     return {'text': effective, 'request': view,

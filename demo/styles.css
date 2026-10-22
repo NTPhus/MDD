@@ -1,23 +1,24 @@
-/* Shared monochrome tokens for practice, conversation, and training. */
+/* Shared purple and white palette for practice, conversation, and training. */
 :root {
-  --paper: #fafafa;
+  --paper: #ffffff;
   --surface: #ffffff;
-  --surface-soft: #f5f5f5;
-  --surface-hover: #ededed;
-  --line: #e5e5e5;
-  --line-strong: #d4d4d4;
-  --subtle: #a3a3a3;
-  --muted: #737373;
-  --text: #525252;
-  --strong: #404040;
-  --ink: #171717;
-  --accent: var(--ink);
-  --accent-soft: var(--surface-soft);
+  --surface-soft: #f7f3ff;
+  --surface-hover: #f0e9fc;
+  --line: #e7def2;
+  --line-strong: #d8c8ee;
+  --subtle: #9a88ad;
+  --muted: #776b86;
+  --text: #514461;
+  --strong: #38284d;
+  --ink: #241831;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-soft: #f1eaff;
   /* Existing components use these aliases for actions and assessment states. */
   --green: var(--accent);
   --green-light: var(--accent-soft);
-  --gold: var(--muted);
-  --danger: var(--ink);
+  --gold: #a96518;
+  --danger: #b4233c;
   --serif: Georgia, 'Times New Roman', serif;
   --sans: 'Segoe UI', Tahoma, Arial, sans-serif;
   font-family: var(--sans);
@@ -271,25 +272,25 @@ h1+p,.page-intro h1+p{font-size:13px;line-height:1.8}
 .word.listening { color: var(--text); background: var(--surface-hover); border: 1px dashed var(--muted); }
 .mode-button:disabled, .practice-word:disabled { opacity: .55; cursor: not-allowed; }
 
-/* Keep the workspace quiet and readable, with black primary actions. */
+/* White workspace with purple primary actions. */
 .sidebar { background: var(--surface); border-color: var(--line); }
-.brand, .brand-period { color: var(--ink); }
-.brand-mark { background: var(--ink); color: var(--surface); }
-.nav-item.active { background: var(--surface-soft); color: var(--ink); font-weight: 600; }
+.brand, .brand-period { color: var(--accent); }
+.brand-mark { background: var(--accent); color: var(--surface); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav-item:hover { background: var(--surface-soft); }
-.nav-dot, .status-dot, .connection-dot.online { background: var(--ink); }
+.nav-dot, .status-dot, .connection-dot.online { background: var(--accent); }
 .local-pill { background: var(--surface); border-color: var(--line); }
 .page-intro h1 { font-family: var(--sans); font-weight: 650; letter-spacing: -1.2px; }
-.page-intro h1 em { color: var(--text); font-style: normal; font-weight: inherit; }
+.page-intro h1 em { color: var(--accent); font-style: normal; font-weight: inherit; }
 .eyebrow, .intro-symbol { color: var(--muted); }
 .card { border-color: var(--line); box-shadow: 0 2px 8px #17171703; }
-.record-button, .primary-button { background: var(--ink); color: var(--surface); }
+.record-button, .primary-button { background: var(--accent); color: var(--surface); }
 .record-button { box-shadow: 0 0 0 5px var(--surface-soft); }
-.primary-button:hover:not(:disabled), .record-button:hover { background: var(--strong); }
-.recording .record-button { background: var(--ink); box-shadow: 0 0 0 6px var(--line); }
-.recording .audio-state-dot { background: var(--ink); }
-.mode-button.selected { color: var(--ink); background: var(--surface-soft); border-color: var(--ink); }
-.practice-word.selected { outline-color: var(--ink); }
+.primary-button:hover:not(:disabled), .record-button:hover { background: var(--accent-hover); }
+.recording .record-button { background: var(--accent-hover); box-shadow: 0 0 0 6px var(--accent-soft); }
+.recording .audio-state-dot { background: var(--accent); }
+.mode-button.selected { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.practice-word.selected { outline-color: var(--accent); }
 .practice-word.difference, .word.difference { background: var(--surface-hover); border-color: var(--ink); }
 .word.listening { color: var(--ink); border-color: var(--ink); }
 .word.difference { border-bottom-style: dashed; }
@@ -298,5 +299,5 @@ h1+p,.page-intro h1+p{font-size:13px;line-height:1.8}
 .error-banner, .error-text, .result-warning { color: var(--ink); }
 .error-banner, .result-warning { border-color: var(--line-strong); background: var(--surface-soft); }
 button:focus-visible, a:focus-visible, select:focus-visible, textarea:focus-visible,
-input:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-input[type=checkbox] { accent-color: var(--ink); }
+input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); }

@@ -112,7 +112,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   const turnRevision = turn => Math.max(Number.isSafeInteger(turn.referenceRevision) ? turn.referenceRevision : 0,
     Number.isSafeInteger(turn.metadata?.reference_revision) ? turn.metadata.reference_revision : 0);
   const userConversationText = turn => turn.confirmedSource === 'user_confirmed' && typeof turn.confirmedText === 'string'
-    && turn.confirmedText.trim() && turn.confirmedText.length <= 1000 ? turn.confirmedText : turn.content;
+    && turn.confirmedText.trim() && turn.confirmedText.length <= 1000 ? turn.confirmedText
+      : turn.normalizedSource === 'asr_normalized' && typeof turn.normalizedText === 'string'
+        && turn.normalizedText.trim() && turn.normalizedText.length <= 1000 ? turn.normalizedText : turn.content;
   const lexicalText = text => (String(text || '').normalize('NFKC').replace(/’/g, "'").toLowerCase()
     .match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) || []).join('\u0000');
   function diagnosticView(speech) {
@@ -931,6 +933,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       while (!state.destroyed) {
         turn.content = job.text || ''; turn.status = job.status; turn.metadata = job.metadata; turn.error = job.error?.message; turn.jobId = job.id;
         turn.speech = job.speech; if (job.speech?.transcript) user.content = job.speech.transcript;
+        if (job.speech?.conversation_source === 'asr_normalized' && job.speech?.normalization?.lexical_preservation === true) {
+          user.normalizedText = job.speech.conversation_text; user.normalizedSource = 'asr_normalized';
+        }
         if (['error', 'cancelled'].includes(job.status)) stopSpeech();
         state.liveReply?.update(turn.content, { final: job.status === 'coaching' || terminal(job.status) });
         render(); if (terminal(job.status)) break;

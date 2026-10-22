@@ -195,6 +195,15 @@ class LocalSpeechEngine:
         started = time.monotonic()
         emit({"type": "stage", "stage": "transcribing"})
         result = self.analyze(base64.b64decode(request["audio_base64"], validate=True), request.get("reference_text"))
+        if request.get('normalization_enabled') is True and not request.get('reference_text'):
+            from scripts.transcript_normalization import normalize
+            # Keep all acoustic references/posteriors and the raw transcript.
+            # This result is only a conservative text view for conversation.
+            emit({'type': 'speech', 'speech': {**result, 'normalization': {'status': 'pending'}}})
+            emit({'type': 'stage', 'stage': 'correcting'})
+            result['normalization'] = normalize(result['transcript'], qwen, cancelled,
+                                                 history=conversation_history(request))
+            if cancelled.is_set(): return {'finish_reason': 'cancelled'}
         return self._respond(request, result, cancelled, emit, qwen, started)
 
     def regenerate(self, request, cancelled, emit, qwen):
@@ -219,12 +228,15 @@ class LocalSpeechEngine:
         from scripts.conversation_context import prepare_dialogue_context
         result["reference_source"] = request.get('reference_source') or ("reading_prompt" if request.get("reference_text") else "asr")
         prepared = prepare_dialogue_context(request, result['transcript'], dialogue_text=request.get('dialogue_text'),
-                                            source=result['reference_source'], missing_words=result.get('missing_words', []))
+                                            source=result['reference_source'], missing_words=result.get('missing_words', []),
+                                            normalized_text=result.get('normalization', {}).get('text')
+                                                if result['reference_source'] == 'asr' else None)
         request, dialogue_text = prepared['request'], prepared['text']
         result['transcript_clarity'] = prepared['clarity']
         needs_clarification = prepared['clarity']['needs_clarification']
-        if result['reference_source'] == 'user_confirmed':
+        if prepared['request']['conversation_source'] in {'user_confirmed', 'asr_normalized'}:
             result['conversation_text'] = dialogue_text
+        result['conversation_source'] = prepared['request']['conversation_source']
         result.pop('spoken_response', None)
         reference = result.pop("reference", None)
         topic_id = request.get('topic_id')
@@ -432,7 +444,7 @@ class LocalSpeechEngine:
                 'rewrite_mode': 'grammar_and_natural' if rewrite_enabled else 'not_needed',
                 'rewrite_status': result['rewrite']['status'], 'rewrite_latency_sec': rewrite_latency,
                 'coaching_latency_sec': coaching_latency,
-                'conversation_source': result['reference_source'],
+                'conversation_source': result['conversation_source'],
                 'regenerated_from_reference': request.get('operation') == 'regenerate_reference',
                 'topic_id': topic_id,
                 "input": "audio", "language": "en-US", "latency_sec": round(time.monotonic() - started, 3)}
