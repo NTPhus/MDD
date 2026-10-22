@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#7c3aed">
+  <meta name="theme-color" content="#ffffff">
   <meta name="description" content="Không gian luyện phát âm và theo dõi huấn luyện MDD trên máy của bạn.">
   <title>Âm — Không gian luyện phát âm</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%237c3aed'/%3E%3Cpath d='M10 17v6m5-11v16m5-20v24m5-20v16m5-11v6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23171717'/%3E%3Cpath d='M10 17v6m5-11v16m5-20v24m5-20v16m5-11v6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/chat.css">
   <script defer src="/app.js"></script>
@@ -112,10 +112,45 @@
     <section id="chat-view" class="view chat-view" aria-labelledby="chat-title" hidden>
       <div class="page-intro"><div><span class="chat-eyebrow">YOUR ENGLISH, EVERY DAY</span><h1 id="chat-title">Luyện nói <em>theo cách của bạn.</em></h1><p>Chọn một chủ đề. Bắt đầu trò chuyện bằng tiếng Anh.</p></div><details id="chat-settings" class="chat-settings"><summary><svg aria-hidden="true"><use href="#i-speaker"/></svg><span id="chat-settings-label">Settings</span><span>⌄</span></summary><div class="chat-settings-panel">
         <section class="chat-settings-card"><label for="chat-mode">Mode</label><select id="chat-mode"><option value="conversation">Conversation</option><option value="reading">Read a sentence</option></select><div id="chat-practice-panel" hidden><label for="chat-practice">Sentence</label><select id="chat-practice"></select><p id="chat-practice-text" class="chat-practice-text"></p><button id="chat-read-prompt" class="text-button" type="button">Listen to sentence</button></div><label for="chat-model">Pronunciation coach</label><select id="chat-model" disabled><option>Loading models…</option></select><p id="chat-model-description"></p><p id="chat-model-note" hidden></p></section>
-        <section class="chat-settings-card"><label for="chat-voice-provider">Voice</label><select id="chat-voice-provider"><option value="browser">Browser · Live voice</option><option value="ai33" disabled>ai33 · Unavailable</option></select><label class="chat-check"><input id="chat-auto-read" type="checkbox" checked>Read bot replies aloud</label><p id="chat-speech-note">Only the bot’s reply is read aloud. Open pronunciation feedback when you want to practise.</p><p class="chat-voice-cost">ai33 reads the finished reply; API credits may apply.</p><details class="chat-about"><summary>About speaking practice</summary><p>Qwen follows the conversation. Pronunciation feedback stays collapsed until you open it; optional sentence completion and practice are inside. Sound differences are model estimates. Conversation mode uses an ASR transcript; reading mode uses the selected sentence. Conversation replies use original Qwen. The coach selection affects pronunciation tips.</p><button class="text-button" type="button" data-view="practice">Pronunciation workspace →</button></details></section>
+        <section class="chat-settings-card"><label for="chat-voice-provider">Voice</label><select id="chat-voice-provider"><option value="browser">Browser · Live voice</option><option value="ai33" disabled>ai33 · Unavailable</option></select><label for="chat-english-voice">Giọng tiếng Anh · ai33</label><select id="chat-english-voice" aria-label="Giọng tiếng Anh ai33"></select><label for="chat-voice-speed">Tốc độ đọc</label><select id="chat-voice-speed"><option value="0.85">Chậm · 0.85×</option><option value="1" selected>Bình thường · 1×</option><option value="1.15">Nhanh · 1.15×</option></select><p>Giọng và tốc độ áp dụng cho các lượt đọc mới.</p><label class="chat-check"><input id="chat-auto-read" type="checkbox" checked>Read bot replies aloud</label><p id="chat-speech-note">Only the bot’s reply is read aloud. Open pronunciation feedback when you want to practise.</p><p class="chat-voice-cost">ai33 reads the finished reply; API credits may apply.</p><details class="chat-about"><summary>About speaking practice</summary><p>Qwen follows the conversation. Pronunciation feedback stays collapsed until you open it; optional sentence completion and practice are inside. Sound differences are model estimates. Conversation mode uses an ASR transcript; reading mode uses the selected sentence. Conversation replies use original Qwen. The coach selection affects pronunciation tips.</p><button class="text-button" type="button" data-view="practice">Pronunciation workspace →</button></details></section>
         <div class="chat-session-actions"><button id="chat-new" class="text-button" type="button">Cuộc trò chuyện mới</button><button id="chat-export" class="text-button" type="button" aria-label="Export conversation"><svg><use href="#i-download"/></svg>Xuất hội thoại</button></div>
       </div></details></div>
       <section id="chat-topic-picker" class="chat-topic-picker" aria-labelledby="chat-topics-title"><div class="chat-topic-heading"><div><h2 id="chat-topics-title">Hôm nay, mình nói về điều gì?</h2><p>Bot mở lời trước. Bạn cứ thong thả trả lời.</p></div><span class="chat-learning-tag"><span class="status-dot"></span> English speaking practice</span></div><div id="chat-topic-grid" class="chat-topic-grid" aria-label="Chủ đề luyện nói"></div><div class="chat-other-modes"><span>Hoặc bắt đầu theo cách của bạn</span><button id="chat-free-talk" type="button">Free conversation <span>↗</span></button><button id="chat-open-reading" type="button">Read a sentence <span>↗</span></button></div></section>
+      <dialog id="chat-topic-setup" class="topic-setup" aria-labelledby="topic-setup-title">
+        <header class="topic-setup-header">
+          <span class="topic-setup-mark" aria-hidden="true"><svg><use href="#i-wave"/></svg></span>
+          <div><span class="topic-setup-eyebrow">SẴN SÀNG CHO CUỘC TRÒ CHUYỆN</span><h2 id="topic-setup-title"></h2></div>
+          <span id="topic-setup-level" class="chat-topic-level"></span>
+          <button id="topic-setup-close" class="icon-button" type="button" aria-label="Đóng thiết lập"><svg><use href="#i-close"/></svg></button>
+        </header>
+        <div class="topic-setup-body">
+          <section class="topic-setup-brief" aria-label="Bối cảnh hội thoại">
+            <div class="topic-brief-card"><h3><svg aria-hidden="true"><use href="#i-chat"/></svg>Bối cảnh</h3><p id="topic-setup-description"></p></div>
+            <div class="topic-brief-card"><h3>Đối tác hội thoại</h3><p id="topic-setup-role"></p><span>Qwen sẽ nhập vai và mở lời trước.</span></div>
+            <div class="topic-brief-card topic-brief-turn"><h3><svg aria-hidden="true"><use href="#i-mic"/></svg>Lượt của bạn</h3><p>Lắng nghe, sau đó nhấn micro để trả lời bằng tiếng Anh. Bạn có thể dùng các từ gợi ý để bắt đầu.</p></div>
+            <p class="topic-setup-note"><svg aria-hidden="true"><use href="#i-speaker"/></svg>Nghe thử và chọn một giọng bạn muốn luyện cùng.</p>
+          </section>
+          <section class="topic-setup-options" aria-label="Giọng và tốc độ đọc">
+            <div class="topic-voice-heading"><h3>Giọng nói</h3><span id="topic-voice-count"></span></div>
+            <label class="sr-only" for="topic-voice-search">Tìm giọng đọc</label>
+            <input id="topic-voice-search" class="topic-voice-search" type="search" placeholder="Tìm tên giọng đọc…" autocomplete="off">
+            <div class="topic-voice-filters" role="group" aria-label="Lọc accent">
+              <button type="button" data-voice-locale="" aria-pressed="true">Tất cả</button>
+              <button type="button" data-voice-locale="en-US" aria-pressed="false">US · Giọng Mỹ</button>
+              <button type="button" data-voice-locale="en-GB" aria-pressed="false">UK · Giọng Anh</button>
+            </div>
+            <fieldset class="topic-voice-list"><legend class="sr-only">Chọn giọng đọc</legend><div id="topic-voice-options"></div></fieldset>
+            <fieldset class="topic-speed"><legend>Tốc độ</legend><div class="topic-speed-options">
+              <label><input type="radio" name="topic-speed" value="0.85"><span>Chậm <small>0.85×</small></span></label>
+              <label><input type="radio" name="topic-speed" value="1" checked><span>Bình thường <small>1×</small></span></label>
+              <label><input type="radio" name="topic-speed" value="1.15"><span>Nhanh <small>1.15×</small></span></label>
+            </div></fieldset>
+            <label class="topic-auto-read"><span>Tự đọc câu trả lời<small>Bạn cũng có thể nhấn Phát lại bất kỳ lúc nào.</small></span><input id="topic-setup-auto-read" type="checkbox" checked></label>
+            <p id="topic-setup-status" class="topic-setup-status" role="status" aria-live="polite"></p>
+          </section>
+        </div>
+        <footer class="topic-setup-footer"><p id="topic-setup-selection"></p><button id="topic-setup-start" class="primary-button" type="button">Bắt đầu trò chuyện<svg aria-hidden="true"><use href="#i-arrow"/></svg></button></footer>
+      </dialog>
       <div id="chat-layout" class="chat-layout" hidden>
         <section class="chat-room card" aria-label="Cuộc trò chuyện">
           <div class="chat-room-toolbar"><div class="chat-tutor-heading"><button id="chat-topics" class="chat-back" type="button" aria-label="Quay lại chủ đề" title="Quay lại chủ đề">←</button><div class="chat-tutor-avatar" aria-hidden="true">Q<span></span></div><div class="chat-tutor-copy"><strong class="chat-tutor-name">Qwen</strong><div class="chat-topic-line"><span id="chat-topic-level" class="chat-level-badge">A2</span><strong id="chat-current-model">English conversation</strong></div><span id="chat-room-status" role="status">Ready</span></div></div><div class="chat-toolbar-actions"><button id="chat-stop-voice" class="chat-stop" type="button" hidden>Stop voice</button><button id="chat-start-new" class="chat-new-visible" type="button" aria-label="Bắt đầu cuộc trò chuyện mới">Chat mới</button><button id="chat-end" class="chat-end" type="button"><svg aria-hidden="true"><use href="#i-arrow"/></svg>Kết thúc</button></div></div>

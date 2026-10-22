@@ -1,0 +1,357 @@
+{
+  "updated_at": "2026-10-22T09:10:10.844593+00:00",
+  "voices": [
+    {
+      "id": "edge_en-US-AndrewNeural",
+      "name": "Andrew",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AndrewNeural.mp3"
+    },
+    {
+      "id": "edge_en-GB-LibbyNeural",
+      "name": "Libby",
+      "locale": "en-GB",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-GB-LibbyNeural.mp3"
+    },
+    {
+      "id": "edge_en-GB-MaisieNeural",
+      "name": "Maisie",
+      "locale": "en-GB",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-GB-MaisieNeural.mp3"
+    },
+    {
+      "id": "edge_en-GB-RyanNeural",
+      "name": "Ryan",
+      "locale": "en-GB",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-GB-RyanNeural.mp3"
+    },
+    {
+      "id": "edge_en-GB-SoniaNeural",
+      "name": "Sonia",
+      "locale": "en-GB",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-GB-SoniaNeural.mp3"
+    },
+    {
+      "id": "edge_en-GB-ThomasNeural",
+      "name": "Thomas",
+      "locale": "en-GB",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-GB-ThomasNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-AnaNeural",
+      "name": "Ana",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AnaNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-AndrewMultilingualNeural",
+      "name": "AndrewMultilingual",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AndrewMultilingualNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-AriaNeural",
+      "name": "Aria",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AriaNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-AvaNeural",
+      "name": "Ava",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AvaNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-AvaMultilingualNeural",
+      "name": "AvaMultilingual",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-AvaMultilingualNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-BrianNeural",
+      "name": "Brian",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-BrianNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-BrianMultilingualNeural",
+      "name": "BrianMultilingual",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-BrianMultilingualNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-ChristopherNeural",
+      "name": "Christopher",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-ChristopherNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-EmmaNeural",
+      "name": "Emma",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-EmmaNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-EmmaMultilingualNeural",
+      "name": "EmmaMultilingual",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-EmmaMultilingualNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-EricNeural",
+      "name": "Eric",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-EricNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-GuyNeural",
+      "name": "Guy",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-GuyNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-JennyNeural",
+      "name": "Jenny",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-JennyNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-MichelleNeural",
+      "name": "Michelle",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-MichelleNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-RogerNeural",
+      "name": "Roger",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-RogerNeural.mp3"
+    },
+    {
+      "id": "edge_en-US-SteffanNeural",
+      "name": "Steffan",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "edge",
+      "preview_url": "https://cdn.ai33.pro/persists/samples/edge_sample_en-US-SteffanNeural.mp3"
+    },
+    {
+      "id": "elevenlabs_Xb7hH8MSUJpSbSDYk0k2",
+      "name": "Alice - Clear, Engaging Educator",
+      "locale": "en-GB",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/d10f7534-11f6-41fe-a012-2de1e482d336.mp3"
+    },
+    {
+      "id": "elevenlabs_pFZP5JQG7iQjIQuC4Bku",
+      "name": "Lily - Velvety Actress",
+      "locale": "en-GB",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/89b68b35-b3dd-4348-a84a-a3c13a3c2b30.mp3"
+    },
+    {
+      "id": "elevenlabs_hEZploiPJinU5zriiU1l",
+      "name": "Mason - Bright, Clear, Educator",
+      "locale": "en-GB",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/737a59baaa5c4d52a52f36aaa396d084/voices/hEZploiPJinU5zriiU1l/dAzzZRxiS9d9r8c80oFD.mp3"
+    },
+    {
+      "id": "elevenlabs_hpp4J3VqNfWAUOO0d1Us",
+      "name": "Bella - Professional, Bright, Warm",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3"
+    },
+    {
+      "id": "elevenlabs_pqHfZKP75CvOlQylNhV4",
+      "name": "Bill - Wise, Mature, Balanced",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3"
+    },
+    {
+      "id": "elevenlabs_YdUviBmqjF2nOCyoiXKm",
+      "name": "Bryce - Casual Conversation",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/9c899c92df484d08aca5163ccd49e9f7/voices/YdUviBmqjF2nOCyoiXKm/331daf8d-771e-4016-bee0-18d74739ebdd.mp3"
+    },
+    {
+      "id": "elevenlabs_N2lVS1w4EtoT3dr4eOWO",
+      "name": "Callum - Husky Trickster",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3"
+    },
+    {
+      "id": "elevenlabs_iP95p4xoKVk53GoZ742B",
+      "name": "Chris - Charming, Down-to-Earth",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/3f4bde72-cc48-40dd-829f-57fbf906f4d7.mp3"
+    },
+    {
+      "id": "elevenlabs_cjVigY5qzO86Huf0OWal",
+      "name": "Eric - Smooth, Trustworthy",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/d098fda0-6456-4030-b3d8-63aa048c9070.mp3"
+    },
+    {
+      "id": "elevenlabs_SOYHLrjzK2X1ezoPC6cr",
+      "name": "Harry - Fierce Warrior",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SOYHLrjzK2X1ezoPC6cr/86d178f6-f4b6-4e0e-85be-3de19f490794.mp3"
+    },
+    {
+      "id": "elevenlabs_cgSgspJ2msm6clMCkdW9",
+      "name": "Jessica - Playful, Bright, Warm",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/56a97bf8-b69b-448f-846c-c3a11683d45a.mp3"
+    },
+    {
+      "id": "elevenlabs_TX3LPaxmHKxFdv7VOQHJ",
+      "name": "Liam - Energetic, Social Media Creator",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3"
+    },
+    {
+      "id": "elevenlabs_APcIGupW7fKp15mllbQt",
+      "name": "Loong Pancoast - Calm",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/b8e6e28ecdc549afbba399cec014dde8/voices/APcIGupW7fKp15mllbQt/08b19f7a-1a6d-4f8f-b67f-fd161be00e70.mp3"
+    },
+    {
+      "id": "elevenlabs_XrExE9yKIg1WjnnlVkGX",
+      "name": "Matilda - Knowledgable, Professional",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/b930e18d-6b4d-466e-bab2-0ae97c6d8535.mp3"
+    },
+    {
+      "id": "elevenlabs_B9VuHWRTj36519FJw8J0",
+      "name": "Odom - Client Customer Support Agent",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/2acbe644dc9144dc84ceaaba7734b4b2/voices/B9VuHWRTj36519FJw8J0/lqNocAw1e4AOIV7yVEXb.mp3"
+    },
+    {
+      "id": "elevenlabs_DLtA8Q1hnOvB5FUKBFY9",
+      "name": "Oliver - Inquisitive, Warm, Calm",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/8b225fa596e9460db2410ea064008e9b/voices/DLtA8Q1hnOvB5FUKBFY9/o8KZvyzPFPuaroJ97MAu.mp3"
+    },
+    {
+      "id": "elevenlabs_rNHB8cNdVKwF7GMyt5wL",
+      "name": "Pedro - Warm, Engaging",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/003c03e4f1874a23a8c30b7adb628994/voices/rNHB8cNdVKwF7GMyt5wL/cad680c2-54f5-46c4-bd12-43be5c0a6802.mp3"
+    },
+    {
+      "id": "elevenlabs_SAz9YHcvj6GT2YYXdXww",
+      "name": "River - Relaxed, Neutral, Informative",
+      "locale": "en-US",
+      "gender": "",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/e6c95f0b-2227-491a-b3d7-2249240decb7.mp3"
+    },
+    {
+      "id": "elevenlabs_CwhRBWXzGAHq8TQ4Fs17",
+      "name": "Roger - Laid-Back, Casual, Resonant",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/58ee3ff5-f6f2-4628-93b8-e38eb31806b0.mp3"
+    },
+    {
+      "id": "elevenlabs_EXAVITQu4vr4xnSDxMaL",
+      "name": "Sarah - Mature, Reassuring, Confident",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2216a32186.mp3"
+    },
+    {
+      "id": "elevenlabs_7kTHQRfmpeNlB1V4xfvV",
+      "name": "Valerie - Sultry, Seductive, Romantic",
+      "locale": "en-US",
+      "gender": "female",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/d904655b4b394bd3bbfbeac61123ea0f/voices/7kTHQRfmpeNlB1V4xfvV/bdf2dade-c1e3-4400-8b50-08c6d4fc3145.mp3"
+    },
+    {
+      "id": "elevenlabs_bIHbv24MWmeRgasZH58o",
+      "name": "Will - Relaxed Optimist",
+      "locale": "en-US",
+      "gender": "male",
+      "provider": "elevenlabs",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8caf8f3d-ad29-4980-af41-53f20c72d7a4.mp3"
+    }
+  ]
+}

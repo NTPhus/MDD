@@ -100,7 +100,7 @@ async function run() {
   try {
     await page.goto(base + '/#chat');
     await page.waitForFunction(() => window.MDDChat?.state.config?.speech_ready);
-    await page.locator('[data-topic=travel]').click();
+    await page.locator('[data-topic=travel]').click(); await page.locator('#topic-setup-start').click();
     await page.waitForFunction(() => !window.MDDChat.state.starting);
     await page.locator('#chat-settings>summary').click();
     await page.locator('#chat-auto-read').uncheck();
@@ -210,7 +210,7 @@ async function run() {
     await page.keyboard.press('Escape');
     await practiseFirst(); await page.locator('#chat-topics').click();
     assert.equal(await page.evaluate(() => window.MDDChat.state.repeatTarget), null);
-    await page.locator('[data-topic=travel]').click();
+    await page.locator('[data-topic=travel]').click(); await page.locator('#topic-setup-start').click();
     await page.waitForFunction(() => !window.MDDChat.state.starting);
     assert.equal(await page.evaluate(() => window.MDDChat.state.repeatTarget), null);
     await practiseFirst(); await page.locator('#chat-settings>summary').click(); await page.locator('#chat-new').click();

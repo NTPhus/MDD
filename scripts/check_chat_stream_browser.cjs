@@ -1,6 +1,6 @@
 'use strict';
 // Deterministic browser checks: fake incremental jobs and speech boundaries, real UI/audio decoding.
-const { chromium } = require('../.tools/ui-qa/node_modules/playwright');
+const { chromium } = require(process.env.MDD_PLAYWRIGHT_MODULE || '../.tools/ui-qa/node_modules/playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');

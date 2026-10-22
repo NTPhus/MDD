@@ -57,7 +57,7 @@ async function run() {
   try {
     await page.goto(base + '/#chat');
     await page.waitForFunction(() => window.MDDChat?.state.config?.speech_ready);
-    await page.locator('.chat-topic-card').first().click();
+    await page.locator('.chat-topic-card').first().click(); await page.locator('#topic-setup-start').click();
     await page.waitForFunction(() => window.__utterances.length === 1 && !window.MDDChat.state.starting);
     assert.equal(await page.locator('.sidebar').isVisible(), true);
     assert.equal(await page.locator('#chat-scenario').isVisible(), true);

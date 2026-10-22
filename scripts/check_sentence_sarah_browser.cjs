@@ -1,6 +1,6 @@
 'use strict';
 // Real UI, mocked jobs/audio only: no model inference or paid TTS requests.
-const { chromium } = require('../.tools/ui-qa/node_modules/playwright');
+const { chromium } = require(process.env.MDD_PLAYWRIGHT_MODULE || '../.tools/ui-qa/node_modules/playwright');
 const { mockVoice } = require('./check_chat_stream_browser.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -9,7 +9,7 @@ const path = require('node:path');
 async function run() {
   const base = process.env.MDD_QA_URL || 'http://127.0.0.1:8765';
   const out = path.resolve('data/generated/sentence-sarah-qa'); fs.mkdirSync(out, { recursive: true });
-  const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const browser = await chromium.launch({ executablePath: process.env.MDD_CHROME_PATH || undefined, args: ['--no-sandbox'], headless: true });
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const errors = [], checks = [], calls = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -25,7 +25,7 @@ async function run() {
     };
   });
   const config = await (await page.request.get(base + '/api/chat/config')).json();
-  assert.equal(config.default_voice_provider, 'ai33'); assert.match(config.english_voice_name, /^Sarah/);
+  assert.equal(config.default_voice_provider, 'ai33'); assert.ok(config.english_voices?.length);
   const reference = 'Currently, I am a software engineer.';
   const fixture = { id: 'c'.repeat(32), status: 'ready', text: 'What do you enjoy about your work?',
     metadata: { reference_revision: 0 }, voice: { status: 'ready', url: '/api/chat/audio/' + 'a'.repeat(32) },
@@ -36,7 +36,7 @@ async function run() {
     if (url === '/api/chat/config') return route.fulfill({ json: config });
     if (url === '/api/chat/voice') {
       const payload = route.request().postDataJSON(); calls.push(payload);
-      assert.deepEqual(payload, { job_id: fixture.id, locale: 'en-US', target: 'sentence' });
+      assert.deepEqual(payload, { job_id: fixture.id, locale: 'en-US', target: 'sentence', voice_id: config.default_voice_id, speed: 1 });
       fixture.sentence_voice = fail
         ? { status: 'error', retryable: true, message: 'Bấm Thử lại giọng đọc để tải tiếp.' }
         : { status: 'generating' };
@@ -67,7 +67,7 @@ async function run() {
     assert.equal(await sentence.textContent(), reference);
     await button.click();
     await page.waitForFunction(() => document.querySelector('.chat-sentence-listen')?.disabled);
-    assert.match(await button.textContent(), /Đang tạo giọng Sarah/);
+    assert.match(await button.textContent(), /Đang tạo giọng đọc/);
     await page.waitForFunction(() => window.__audio.length === 1 && window.MDDChat.state.speaking === 'sentence-reply-fixture');
     assert.equal(await page.evaluate(() => window.__speech.length), 0);
     assert.equal(await page.evaluate(() => window.__audio[0].src), '/api/chat/audio/' + 'b'.repeat(32));
@@ -75,7 +75,7 @@ async function run() {
     await page.evaluate(() => window.__audio[0].seek(5));
     assert.ok(await sentence.locator('.is-read').count() > 0);
     assert.equal(await page.locator('.assistant .is-speaking').count(), 0);
-    checks.push('Nghe cả câu explicitly requests the server reference in English through Sarah; reply audio/text are independent.');
+    checks.push('Nghe cả câu explicitly requests the server reference in English through the selected ai33 voice; reply audio/text are independent.');
     await page.screenshot({ path: path.join(out, 'sentence-sarah.png'), fullPage: true });
     await button.click();
     assert.equal(await sentence.locator('.is-read').count(), 0);
@@ -83,7 +83,7 @@ async function run() {
     assert.equal(await sentence.locator('.is-read').count(), 0);
     checks.push('Sentence highlighting follows its audio and stops without highlighting the bot reply or accepting stale events.');
     fail = true; await button.click();
-    await page.getByRole('button', { name: 'Thử lại giọng Sarah', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Thử lại giọng đọc', exact: true }).waitFor();
     await button.click();
     await page.waitForFunction(() => window.__audio.length === 2 && window.MDDChat.state.speaking);
     assert.equal(await page.locator('#chat-error').textContent(), '');

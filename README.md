@@ -149,9 +149,9 @@ Tunnel đi qua Nginx ingress chỉ nghe localhost, chấp nhận đúng tên mi�
 
 [TTS từ văn bản đến âm thanh](papers/tts/README.md) giải thích kiến trúc, input/output và các tác vụ, kèm 7 PDF nền tảng. `.gitignore` bỏ qua dataset gốc, parsed annotations, weights tải về, môi trường và kết quả train local; PDF bài báo, code, config, protocol và metadata vẫn được giữ.
 
-Sarah là giọng bot mặc định khi ai33 khả dụng và `.env` có `AI33_VOICE_EN_NAME=Sarah - Mature, Reassuring, Confident`; có thể đổi về Browser trong Settings. **Nghe cả câu** trong **Sound details** cũng dùng giọng đã chọn: Sarah qua ai33 mặc định, đọc `reference_text` (hoặc transcript khi chưa có câu đối chiếu). Audio câu mẫu và audio trả lời bot có trạng thái/cache riêng; frontend chỉ gửi job ID và `target=sentence`, không gửi tùy ý nội dung cần đọc. Nút hiện tiến độ, cho dừng/phát lại hoặc resume tác vụ đã có khi tải lỗi. Khi sửa câu đối chiếu, audio cũ không được gắn vào câu mới. Các nút nghe từ/IPA và câu mẫu ở khu vực khác vẫn dùng browser. Tên giọng công khai trả về qua `/api/chat/config`, API key vẫn ở backend. ai33 chưa trả word timestamps nên highlight theo playhead là ước lượng. Giọng mới áp dụng cho lượt mới; audio cache cũ không bị đổi tên thành Sarah.
+Giọng bot mặc định lấy từ `AI33_VOICE_EN`; có thể chọn giọng và tốc độ khác trước khi bắt đầu topic, hoặc đổi về Browser trong Settings. **Nghe cả câu** trong **Sound details** cũng dùng giọng đã chọn: qua ai33, đọc `reference_text` (hoặc transcript khi chưa có câu đối chiếu). Audio câu mẫu và audio trả lời bot có trạng thái/cache riêng; frontend gửi job ID, `target=sentence`, voice ID và tốc độ, không gửi tùy ý nội dung cần đọc. Nút hiện tiến độ, cho dừng/phát lại hoặc resume tác vụ đã có khi tải lỗi. Khi sửa câu đối chiếu, audio cũ không được gắn vào câu mới. Các nút nghe từ/IPA và câu mẫu ở khu vực khác vẫn dùng browser. Tên giọng công khai trả về qua `/api/chat/config`, API key vẫn ở backend. ai33 chưa trả word timestamps nên highlight theo playhead là ước lượng. Giọng mới áp dụng cho lượt mới; audio cache cũ giữ giọng và tốc độ ban đầu.
 
-Kiểm tra riêng luồng câu mẫu Sarah: `node scripts/check_sentence_sarah_browser.cjs`. Script dùng job/audio giả lập, không gọi API trả phí; kết quả và screenshot lưu tại `data/generated/sentence-sarah-qa/`.
+Kiểm tra riêng luồng đọc cả câu: `node scripts/check_sentence_sarah_browser.cjs`. Script dùng job/audio giả lập, không gọi API trả phí; kết quả và screenshot lưu tại `data/generated/sentence-sarah-qa/`.
 
 Đã kiểm tra theme ở 1440/768/390/360 px bằng job/voice giả lập: `node scripts/check_purple_sarah_browser.cjs` (mặc định preview 8767; đặt `MDD_QA_URL=http://127.0.0.1:8765` khi kiểm tra web đang chạy). Screenshot, kết quả và đoạn nghe thử Sarah tại `data/generated/purple-sarah-qa/`. Đã xem riêng cửa sổ Brave của S English do người dùng chỉ định để đối chiếu sidebar, header, thẻ kịch bản và khung hội thoại; giữ theme tím–trắng. Không đọc/copy cookie hay dữ liệu đăng nhập của Brave.
 
@@ -324,7 +324,7 @@ Project dùng **ai33 API** cho câu mẫu tiếng Anh và lời giải thích ti
    python3 scripts/ai33_tts.py --list-voices --provider edge --search en-US
    ```
 
-   Lấy voice ID từ kết quả, điền vào `AI33_VOICE_EN`. Có thể đổi `--provider` sang `elevenlabs` hoặc `minimax` để tìm giọng khác; `--page 2` lấy trang tiếp theo. Cấu hình local hiện chọn **Sarah - Mature, Reassuring, Confident**, ID `elevenlabs_EXAVITQu4vr4xnSDxMaL`, cùng `edge_vi-VN-HoaiMyNeural`. Sarah đã được xác nhận qua danh sách giọng của tài khoản và tạo audio thật. Máy/tài khoản khác cần tra lại giọng; accent thực tế phụ thuộc voice ID.
+   Lấy voice ID từ kết quả, điền vào `AI33_VOICE_EN`. Có thể đổi `--provider` sang `elevenlabs` hoặc `minimax` để tìm giọng khác; `--page 2` lấy trang tiếp theo. Một giọng đã kiểm tra là **Sarah - Mature, Reassuring, Confident**, ID `elevenlabs_EXAVITQu4vr4xnSDxMaL`, cùng `edge_vi-VN-HoaiMyNeural`. Sarah đã được xác nhận qua danh sách giọng của tài khoản và tạo audio thật. Máy/tài khoản khác cần tra lại giọng; accent thực tế phụ thuộc voice ID.
 
 4. Tạo audio:
 
@@ -334,6 +334,18 @@ Project dùng **ai33 API** cho câu mẫu tiếng Anh và lời giải thích ti
    ```
 
    Lệnh in đường dẫn file audio để mở nghe hoặc đưa vào UI. Có thể dùng `--voice-id ID` để chọn giọng cho một lần gọi. `--locale` chọn cấu hình giọng và cache; accent thực tế phụ thuộc voice ID, không có bước tự chuyển accent trong API request.
+
+Trong **Đối thoại AI**, chọn topic để mở popup bối cảnh, giọng đọc và tốc độ trước khi bắt đầu. Danh sách hiện có 44 giọng tiếng Anh Mỹ/Anh từ Edge và ElevenLabs, gồm Sarah, Andrew, Ava, Emma, Libby, Ryan và Sonia. Có thể tìm theo tên, lọc US/UK, nghe thử mẫu có sẵn và chọn tốc độ 0.85×/1×/1.15×. Lựa chọn được giữ trong phiên trình duyệt; Settings cho phép đổi giọng cho lượt đọc tiếp theo. Audio đã tạo giữ giọng/tốc độ ban đầu khi phát lại hoặc tải tiếp tác vụ lỗi.
+
+Đồng bộ lại danh sách và tải mẫu nghe thử từ tài khoản đang cấu hình:
+
+```bash
+python3 scripts/sync_ai33_voices.py --previews
+```
+
+Lệnh chỉ đọc danh sách và tải mẫu có sẵn, không tạo TTS. Metadata công khai nằm trong `configs/ai33_voices.json`; mẫu nghe thử ở `data/generated/tts/ai33/chat/previews/` và được phục vụ qua backend local. Máy khác chưa tải mẫu sẽ tải khi nhấn nghe thử. Giọng đọc nội dung hội thoại mới vẫn dùng credit ai33. Cache phân biệt cả voice ID và tốc độ, kể cả khi tải tiếp tác vụ.
+
+Kiểm tra popup bằng `node scripts/check_topic_voice_browser.cjs` khi demo đang chạy. Script dùng Playwright ở `.tools/ui-qa`; có thể đặt `MDD_PLAYWRIGHT_MODULE`, `MDD_CHROME_PATH` và `MDD_QA_URL` cho môi trường khác. Danh sách/mẫu nghe thử là dữ liệu thật; model availability, trả lời topic và TTS được giả lập để không chạy inference hoặc tạo tác vụ trả phí.
 
 Luồng API là `POST /v3/text-to-speech` → nhận `task_id` → polling `GET /v1/task/{task_id}` → tải audio. Xác thực bằng header `xi-api-key`. Đây là luồng một giọng cho mỗi đoạn, phù hợp `tts_segments` hiện có; chưa cần endpoint nhiều người nói `/dialogue`. [Tài liệu API](https://openspeaker.ai/developers)
 

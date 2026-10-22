@@ -10,6 +10,7 @@ import binascii
 import io
 import importlib
 import json
+import math
 import logging
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ import wave
 
 from .speech_practice import PRACTICE_PROMPTS
 from .speech_topics import TOPICS, public_topics, guidance
+from .chat_voices import load_voices, preview_stem
 
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SYSTEM = ("You are a helpful conversational assistant. Answer the user's actual question clearly and concisely. "
@@ -59,6 +61,8 @@ class ChatJob:
     voice_locale: str | None = None
     sentence_voice: dict = field(default_factory=lambda: {"status": "not_requested"})
     sentence_voice_text: str | None = None
+    voice_options: dict = field(default_factory=dict)
+    sentence_voice_options: dict = field(default_factory=dict)
     speech: dict | None = None
     speech_context: dict | None = None
     generation_revision: int = 0
@@ -105,14 +109,19 @@ class ChatService:
 
     def config(self):
         capabilities = self.capability_loader()
+        english_voices = self.english_voices()
         voice_name = os.environ.get("AI33_VOICE_EN_NAME", "").strip()[:120] if capabilities.get("english_voice_configured") else ""
         models = [{key: item[key] for key in ("id", "label", "ready", "description")} for item in self._models().values()]
         return {"models": models, "default_model_id": "qwen-base", "device": "cpu", "threads": 2,
                 "max_message_chars": 2000, "max_new_tokens": 384,
                 "ai33_available": bool(capabilities.get("tts_configured")),
                 "english_voice_name": voice_name,
-                "default_voice_provider": "ai33" if capabilities.get("tts_configured") and voice_name else "browser",
-                "voice_locales": [locale for locale, key in (("vi-VN", "vietnamese_voice_configured"), ("en-US", "english_voice_configured")) if capabilities.get(key)],
+                "english_voices": english_voices,
+                "default_voice_id": os.environ.get('AI33_VOICE_EN', '').strip() or (english_voices[0]['id'] if english_voices else ''),
+                "voice_speeds": [0.85, 1.0, 1.15],
+                "default_voice_provider": "ai33" if capabilities.get("tts_configured") and (voice_name or english_voices) else "browser",
+                "voice_locales": [locale for locale, key in (("vi-VN", "vietnamese_voice_configured"), ("en-US", "english_voice_configured"))
+                                  if capabilities.get(key) or (locale == 'en-US' and english_voices and capabilities.get('tts_configured'))],
                 "speech_ready": (self.root / "models/pretrained/wav2vec2-base-960h/model.safetensors").is_file()
                     and (self.root / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/model.safetensors").is_file(),
                 "practice_prompts": [{"id": key, "text": value} for key, value in PRACTICE_PROMPTS.items()],
@@ -126,6 +135,32 @@ class ChatService:
                 "reference_regenerates_only_on_change": True,
                 "pronunciation_review": "immediate_provisional",
                 "notice": "Audio is processed locally on CPU. Speech replies and pronunciation practice use English."}
+
+    def english_voices(self):
+        voices = load_voices(self.root)
+        default = os.environ.get('AI33_VOICE_EN', '').strip()
+        if default and re.fullmatch(r'[\w-]{1,160}', default) and not any(v['id'] == default for v in voices):
+            voices.insert(0, {'id': default, 'name': os.environ.get('AI33_VOICE_EN_NAME', 'English voice')[:120],
+                             'locale': 'en-US', 'gender': '', 'provider': 'ai33', 'preview_url': ''})
+        return [{key: value for key, value in voice.items() if key != 'preview_url'} |
+                {'preview_url': '/api/chat/voice-preview/' + voice['id'] if voice['preview_url'] else None}
+                for voice in voices]
+
+    def voice_preview(self, identifier):
+        voice = next((v for v in load_voices(self.root) if v['id'] == identifier), None)
+        if voice is None or not voice['preview_url']:
+            raise ChatError(404, 'chat_voice_not_found', 'Chưa có bản nghe thử cho giọng này.')
+        stem = preview_stem(self.cache_dir, identifier)
+        path = next((stem.with_suffix(ext) for ext in ('.mp3', '.wav', '.ogg') if stem.with_suffix(ext).is_file()), None)
+        if path is None:
+            try:
+                self.capability_loader()  # Load local provider configuration before a read-only download.
+                client = self._module('ai33_tts').AI33TTS(cache_dir=self.cache_dir)
+                stem.parent.mkdir(parents=True, exist_ok=True)
+                path, _ = client.download(voice['preview_url'], stem)
+            except Exception:
+                raise ChatError(503, 'chat_preview_unavailable', 'Chưa tải được bản nghe thử. Hãy thử lại.') from None
+        return self._read_voice(path)
 
     def _validate(self, payload):
         if not isinstance(payload, dict) or set(payload) - {"model_id", "messages", "language", "request_id"}:
@@ -309,6 +344,7 @@ class ChatService:
                 if job.sentence_voice_text != sentence:
                     job.sentence_voice = {'status': 'not_requested'}
                     job.sentence_voice_text = None
+                    job.sentence_voice_options = {}
                 job.metadata['pronunciation_reference_source'] = 'user_confirmed'
                 response = self.poll(job.identifier)
                 response['reference_update'] = {'changed': False, 'regenerated_reply': False}
@@ -335,6 +371,8 @@ class ChatService:
             job.voice_locale = None
             job.sentence_voice = {'status': 'not_requested'}
             job.sentence_voice_text = None
+            job.voice_options = {}
+            job.sentence_voice_options = {}
             self._voices = {key: value for key, value in self._voices.items() if value[0] != job.identifier}
             context = deepcopy(job.speech_context or {'history': [], 'topic_id': job.metadata.get('topic_id'),
                                                       'model_id': job.model_id, 'rewrite_enabled': True})
@@ -469,12 +507,23 @@ class ChatService:
             return self.poll(job.identifier)
 
     def voice(self, payload):
-        if (not isinstance(payload, dict) or set(payload) - {"job_id", "locale", "target"}
+        if (not isinstance(payload, dict) or set(payload) - {"job_id", "locale", "target", "voice_id", "speed"}
                 or not {"job_id", "locale"} <= set(payload) or payload.get("locale") not in ("vi-VN", "en-US")
                 or payload.get("target", "reply") not in ("reply", "sentence")):
             raise ChatError(400, "invalid_chat_voice", "Yêu cầu giọng đọc không hợp lệ.")
         target = payload.get("target", "reply")
         field = "sentence_voice" if target == "sentence" else "voice"
+        option_field = 'sentence_voice_options' if target == 'sentence' else 'voice_options'
+        options = {}
+        if 'voice_id' in payload:
+            if payload['locale'] != 'en-US' or not any(v['id'] == payload['voice_id'] for v in self.english_voices()):
+                raise ChatError(400, 'invalid_chat_voice', 'Chọn một giọng tiếng Anh trong danh sách.')
+            options['voice_id'] = payload['voice_id']
+        if 'speed' in payload:
+            speed = payload['speed']
+            if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not .5 <= speed <= 1.5:
+                raise ChatError(400, 'invalid_chat_voice', 'Tốc độ đọc phải trong khoảng 0.5–1.5.')
+            options['speed'] = speed
         with self._lock:
             job = self._job(payload["job_id"])
             if (target == "sentence" or job.speech is not None or job.metadata.get('input') == 'topic') and payload["locale"] != "en-US":
@@ -494,11 +543,13 @@ class ChatService:
             resuming = voice["status"] == "error" and voice.get("retryable") is True
             if target == "reply" and job.voice_locale is not None and job.voice_locale != payload["locale"]:
                 raise ChatError(409, "chat_voice_locale", "Lượt này đã chọn ngôn ngữ giọng đọc khác.")
+            if voice['status'] != 'not_requested' and getattr(job, option_field) != options:
+                raise ChatError(409, 'chat_voice_selection', 'Bản đọc này đã dùng giọng và tốc độ khác. Lựa chọn mới áp dụng cho lượt tiếp theo.')
             if voice["status"] != "not_requested" and not resuming:
                 return self.poll(job.identifier)
             caps = self.capability_loader()
             key = "vietnamese_voice_configured" if payload["locale"] == "vi-VN" else "english_voice_configured"
-            if not caps.get("tts_configured") or not caps.get(key):
+            if not caps.get("tts_configured") or not (caps.get(key) or options.get('voice_id')):
                 raise ChatError(503, "chat_voice_unavailable", "Giọng ai33 cho ngôn ngữ này chưa được cấu hình.")
             if not self._voice_slot.acquire(blocking=False):
                 raise ChatError(409, "chat_voice_busy", "Đang tạo một giọng đọc khác; hãy thử lại sau.")
@@ -506,12 +557,14 @@ class ChatService:
             if target == "reply":
                 job.voice_locale = locale
             revision = job.generation_revision
-            setattr(job, field, {"status": "generating", 'reference_revision': revision})
-        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming, target), daemon=True, name="chat-ai33-voice").start()
+            setattr(job, option_field, options)
+            setattr(job, field, {"status": "generating", 'reference_revision': revision, **options})
+        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming, target, options), daemon=True, name="chat-ai33-voice").start()
         return self.poll(job.identifier)
 
-    def _synthesize(self, job, revision, spoken, locale, resuming=False, target="reply"):
+    def _synthesize(self, job, revision, spoken, locale, resuming=False, target="reply", voice_options=None):
         client = None
+        voice_options = voice_options or {}
         field = "sentence_voice" if target == "sentence" else "voice"
         def current():
             return (revision == job.generation_revision
@@ -519,14 +572,14 @@ class ChatService:
         try:
             client = self.tts_factory() if self.tts_factory else self._module("ai33_tts").AI33TTS(cache_dir=self.cache_dir)
             action = client.resume if resuming else client.synthesize
-            path = Path(action(spoken[:5000], locale=locale)).resolve()
+            path = Path(action(spoken[:5000], locale=locale, **voice_options)).resolve()
             self._read_voice(path)
             with self._lock:
                 if not current():
                     return
                 identifier = secrets.token_hex(16)
                 self._voices[identifier] = (job.identifier, path)
-                setattr(job, field, {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision})
+                setattr(job, field, {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision, **voice_options})
         except Exception as error:
             code = getattr(error, "code", "voice_local_error")
             if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,60}", code):
@@ -534,14 +587,14 @@ class ChatService:
             retryable = (code != "ai33_task_failed" and client is not None
                          and callable(getattr(client, "can_resume", None))
                          and callable(getattr(client, "resume", None))
-                         and client.can_resume(spoken[:5000], locale=locale) is True)
+                         and client.can_resume(spoken[:5000], locale=locale, **voice_options) is True)
             # Only typed error identifiers are logged, never raw provider errors,
             # credentials, signed CDN URLs or learner/conversation text.
             logging.getLogger(__name__).warning("Chat voice failed: job=%s code=%s exception=%s cached_resume=%s",
                 job.identifier, code, type(error).__name__, retryable)
             with self._lock:
                 if current():
-                    setattr(job, field, {"status": "error", "code": code, "retryable": retryable,
+                    setattr(job, field, {"status": "error", "code": code, "retryable": retryable, **voice_options,
                                  "message": "Chưa tải được giọng đọc. Bấm Thử lại giọng đọc để tải tiếp tác vụ đã có."
                                     if retryable else "Chưa tạo được giọng đọc. Bạn có thể chọn giọng trình duyệt trong Settings."})
         finally:

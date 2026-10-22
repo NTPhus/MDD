@@ -652,12 +652,12 @@ function drawWaveform(samples, live = false) {
   const center = height / 2;
   ctx.clearRect(0, 0, width, height);
   if (!samples || !samples.length) {
-    ctx.strokeStyle = '#e7ddf8'; ctx.setLineDash([2, 5]); ctx.lineWidth = 1;
+    ctx.strokeStyle = '#d4d4d4'; ctx.setLineDash([2, 5]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(5, center); ctx.lineTo(width - 5, center); ctx.stroke();
     return;
   }
   const count = Math.max(1, Math.floor(width / 5));
-  ctx.fillStyle = live ? '#a77862' : '#a78bda';
+  ctx.fillStyle = live ? '#171717' : '#a3a3a3';
   for (let bar = 0; bar < count; bar += 1) {
     const start = Math.floor(bar * samples.length / count);
     const end = Math.max(start + 1, Math.floor((bar + 1) * samples.length / count));
@@ -1297,7 +1297,7 @@ function drawLossChart(canvas, history) {
   const maxStep = Number(history[history.length - 1].step);
   const x = (point) => padding.left + (maxStep === minStep ? width / 2 : (Number(point.step) - minStep) / (maxStep - minStep) * width);
   const y = (point) => padding.top + height - (Number(point.loss) - low) / (high - low) * height;
-  ctx.font = '11px Segoe UI, sans-serif'; ctx.fillStyle = '#766387'; ctx.strokeStyle = '#f2edf9'; ctx.lineWidth = 1;
+  ctx.font = '11px Segoe UI, sans-serif'; ctx.fillStyle = '#737373'; ctx.strokeStyle = '#ededed'; ctx.lineWidth = 1;
   for (let line = 0; line <= 2; line += 1) {
     const yPos = padding.top + height * line / 2;
     ctx.beginPath(); ctx.moveTo(padding.left, yPos); ctx.lineTo(bounds.width - padding.right, yPos); ctx.stroke();
@@ -1307,8 +1307,8 @@ function drawLossChart(canvas, history) {
   if (maxStep !== minStep) ctx.fillText(displayNumber(maxStep, 0), bounds.width - padding.right - 20, bounds.height - 4);
   ctx.beginPath();
   history.forEach((point, index) => { if (!index) ctx.moveTo(x(point), y(point)); else ctx.lineTo(x(point), y(point)); });
-  ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 1.7; ctx.stroke();
-  if (history.length === 1) { ctx.beginPath(); ctx.arc(x(history[0]), y(history[0]), 3, 0, Math.PI * 2); ctx.fillStyle = '#8b5cf6'; ctx.fill(); }
+  ctx.strokeStyle = '#171717'; ctx.lineWidth = 1.7; ctx.stroke();
+  if (history.length === 1) { ctx.beginPath(); ctx.arc(x(history[0]), y(history[0]), 3, 0, Math.PI * 2); ctx.fillStyle = '#171717'; ctx.fill(); }
 }
 
 function saveResult() {

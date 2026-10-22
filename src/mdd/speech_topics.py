@@ -75,5 +75,5 @@ def guidance(topic_id, turns=0, question=None):
 
 
 def public_topics():
-    return [{'id': key, **{name: topic[name] for name in ('title', 'description', 'icon', 'level', 'opening')},
+    return [{'id': key, **{name: topic[name] for name in ('title', 'description', 'icon', 'level', 'opening', 'role')},
              'guidance': guidance(key)} for key, topic in TOPICS.items()]

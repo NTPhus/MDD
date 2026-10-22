@@ -105,7 +105,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     voiceTasks: new Set(), urls: new Set(), lastAudio: null, destroyed: false,
     liveReply: null, liveTurnId: null, voiceStopped: false, topic: null, inRoom: false, starting: false, hintKey: '', repeatTarget: null,
     stopRequested: false, recordingAudio: null, referenceRequests: new Map(), referenceOperation: null,
-    scrollHeld: false, lastScrollTop: 0 };
+    scrollHeld: false, lastScrollTop: 0, voiceId: '', voiceSpeed: 1, voicePreference: null,
+    pendingTopic: null, setupVoiceId: '', setupSpeed: 1, voiceFilter: '', previewAudio: null };
   const sessionKey = () => state.model + (state.topic ? ':' + state.topic : '');
   const conversations = () => state.conversations[sessionKey()] ||= [];
   const turnRevision = turn => Math.max(Number.isSafeInteger(turn.referenceRevision) ? turn.referenceRevision : 0,
@@ -154,7 +155,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   function save() {
     try {
       sessionStorage.setItem('am-voice-chat-v2', JSON.stringify(state.conversations, (key, value) => ['audioUrl', 'voice'].includes(key) ? undefined : value));
-      sessionStorage.setItem('am-chat-selection-v1', JSON.stringify({ model: state.model, topic: state.topic, inRoom: state.inRoom, mode: node('chat-mode').value }));
+      sessionStorage.setItem('am-chat-selection-v1', JSON.stringify({ model: state.model, topic: state.topic, inRoom: state.inRoom, mode: node('chat-mode').value,
+        voiceId: state.voiceId, voiceSpeed: state.voiceSpeed, voiceProvider: node('chat-voice-provider').value, autoRead: node('chat-auto-read').checked }));
     } catch {}
   }
   function restore() {
@@ -169,6 +171,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       if (typeof selection.topic === 'string' && /^[a-z-]+$/.test(selection.topic)) state.topic = selection.topic;
       state.inRoom = selection.inRoom === true;
       if (['conversation', 'reading'].includes(selection.mode)) node('chat-mode').value = selection.mode;
+      if (typeof selection.voiceId === 'string') state.voiceId = selection.voiceId;
+      if ([.85, 1, 1.15].includes(selection.voiceSpeed)) state.voiceSpeed = selection.voiceSpeed;
+      if (['ai33', 'browser'].includes(selection.voiceProvider)) state.voicePreference = selection.voiceProvider;
+      if (typeof selection.autoRead === 'boolean') node('chat-auto-read').checked = selection.autoRead;
     } catch {}
   }
   function controls() {
@@ -196,9 +202,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       const voice = turn.sentenceVoice;
       const waiting = state.voiceTasks.has(`sentence-${turn.id}:${turnRevision(turn)}`);
       button.disabled = audioLocked || turn.status !== 'ready' || waiting;
-      button.lastChild.textContent = waiting ? 'Đang tạo giọng Sarah…'
+      button.lastChild.textContent = waiting ? 'Đang tạo giọng đọc…'
         : state.speaking === 'sentence-' + turn.id ? 'Dừng đọc câu'
-          : voice?.status === 'error' && voice.retryable ? 'Thử lại giọng Sarah' : 'Nghe cả câu';
+          : voice?.status === 'error' && voice.retryable ? 'Thử lại giọng đọc' : 'Nghe cả câu';
     }
     for (const button of document.querySelectorAll('.chat-correction-practise')) button.disabled = locked || state.recording || !button.dataset.jobId;
     if (node('chat-repeat-clear')) node('chat-repeat-clear').disabled = locked || state.recording;
@@ -212,7 +218,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     node('chat-scenario-title').textContent = scenario?.title || '';
     node('chat-scenario-description').textContent = scenario?.description || '';
     node('chat-settings-label').textContent = state.visible && state.inRoom
-      ? node('chat-voice-provider').value === 'ai33' ? (state.config?.english_voice_name?.split(' - ')[0] || 'ai33 · English') : 'Giọng đọc' : 'Settings';
+      ? node('chat-voice-provider').value === 'ai33' ? (selectedVoice()?.name.split(' - ')[0] || 'ai33 · English') : 'Giọng đọc' : 'Settings';
+    node('chat-english-voice').disabled = node('chat-voice-provider').value !== 'ai33';
     node('chat-settings').querySelector('summary').setAttribute('aria-label', 'Giọng đọc và cài đặt hội thoại');
     node('chat-model-description').textContent = state.model === 'qwen-trained' ? 'Fine-tuned Qwen for pronunciation practice tips.' : 'Original Qwen for comparison; it may not follow the coaching format.';
     node('chat-model-note').hidden = false;
@@ -720,8 +727,70 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       const head = make('div', 'chat-topic-card-top'); head.append(make('span', 'chat-topic-icon', icons[topic.icon] || '✦'), make('span', 'chat-topic-level', topic.level));
       button.append(head, make('h3', '', topic.title), make('p', '', topic.description));
       const keywords = make('div', 'chat-topic-preview'); topic.guidance.keywords.slice(0, 3).forEach(word => keywords.append(make('span', '', word)));
-      button.append(keywords, make('span', 'chat-topic-cta', 'Let’s talk ↗')); button.addEventListener('click', () => startTopic(topic.id)); node('chat-topic-grid').append(button);
+      button.append(keywords, make('span', 'chat-topic-cta', 'Chọn giọng & bắt đầu ↗')); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
     }
+  }
+  function selectedVoice() { return state.config?.english_voices?.find(v => v.id === state.voiceId); }
+  function stopVoicePreview() {
+    if (state.previewAudio) { state.previewAudio.pause(); state.previewAudio.removeAttribute('src'); state.previewAudio.load(); state.previewAudio = null; }
+  }
+  function setupSelection() {
+    const voice = state.config?.english_voices?.find(v => v.id === state.setupVoiceId);
+    node('topic-setup-selection').textContent = `${voice ? voice.name.split(' - ')[0] + ' · ' + voice.locale : 'Giọng trình duyệt'} · ${state.setupSpeed}×`;
+  }
+  function renderSetupVoices() {
+    const container = node('topic-voice-options'); container.replaceChildren();
+    const query = node('topic-voice-search').value.trim().toLocaleLowerCase();
+    const voices = (state.config?.english_voices || []).filter(v => (!state.voiceFilter || v.locale === state.voiceFilter)
+      && `${v.name} ${v.provider} ${v.locale}`.toLocaleLowerCase().includes(query));
+    node('topic-voice-count').textContent = `${voices.length} giọng ai33`;
+    for (const voice of voices) {
+      const row = make('div', 'topic-voice-row'), label = make('label', 'topic-voice-choice');
+      const radio = make('input'); radio.type = 'radio'; radio.name = 'topic-voice'; radio.value = voice.id;
+      radio.checked = state.setupVoiceId === voice.id;
+      radio.disabled = !state.config.ai33_available;
+      const accent = voice.locale === 'en-GB' ? 'UK' : 'US';
+      label.append(radio, make('span', 'topic-voice-accent', accent));
+      const copy = make('span', 'topic-voice-copy'); copy.append(make('strong', '', voice.name.split(' - ')[0]));
+      copy.append(make('small', '', `${voice.gender === 'female' ? 'Nữ' : voice.gender === 'male' ? 'Nam' : 'English'} · ${voice.provider === 'edge' ? 'Edge' : 'ElevenLabs'}`));
+      label.append(copy);
+      if (voice.id === state.config.default_voice_id) label.append(make('span', 'topic-voice-badge', 'Mặc định'));
+      radio.addEventListener('change', () => { state.setupVoiceId = voice.id; setupSelection(); });
+      const preview = make('button', 'topic-voice-preview'); preview.type = 'button'; preview.append(icon('i-play'));
+      preview.setAttribute('aria-label', `Nghe thử ${voice.name}`); preview.title = 'Nghe thử'; preview.disabled = !voice.preview_url;
+      preview.addEventListener('click', async () => {
+        stopVoicePreview();
+        if (!/^\/api\/chat\/voice-preview\/[\w-]+$/.test(voice.preview_url || '')) return;
+        const audio = new Audio(voice.preview_url); state.previewAudio = audio; audio.playbackRate = state.setupSpeed;
+        node('topic-setup-status').textContent = `Đang nghe thử ${voice.name.split(' - ')[0]}…`;
+        audio.onended = () => { if (state.previewAudio === audio) { state.previewAudio = null; node('topic-setup-status').textContent = ''; } };
+        try { await audio.play(); }
+        catch { if (state.previewAudio === audio) node('topic-setup-status').textContent = 'Chưa phát được bản nghe thử. Bạn có thể chọn giọng khác hoặc thử lại.'; }
+      });
+      row.append(label, preview); container.append(row);
+    }
+    if (!voices.length) container.append(make('p', 'topic-no-voices', query ? 'Không tìm thấy giọng phù hợp.' : 'Chưa có giọng ai33 cho bộ lọc này.'));
+    const fallback = make('label', 'topic-browser-choice'), radio = make('input');
+    radio.type = 'radio'; radio.name = 'topic-voice'; radio.value = 'browser'; radio.checked = state.setupVoiceId === 'browser';
+    radio.addEventListener('change', () => { state.setupVoiceId = 'browser'; setupSelection(); });
+    fallback.append(radio, make('span', '', 'Dùng giọng tiếng Anh của trình duyệt')); container.append(fallback);
+    setupSelection();
+  }
+  function openTopicSetup(topicId) {
+    if (state.busy || state.recording || state.starting || !state.config) return;
+    const topic = state.config.topics?.find(t => t.id === topicId); if (!topic) return;
+    stopSpeech(); stopVoicePreview(); state.pendingTopic = topicId; state.voiceFilter = '';
+    state.setupVoiceId = node('chat-voice-provider').value === 'ai33' && selectedVoice() ? state.voiceId : 'browser';
+    state.setupSpeed = state.voiceSpeed;
+    node('topic-setup-title').textContent = topic.title; node('topic-setup-level').textContent = topic.level;
+    node('topic-setup-description').textContent = topic.description;
+    node('topic-setup-role').textContent = topic.role || 'Your English conversation partner';
+    node('topic-setup-auto-read').checked = node('chat-auto-read').checked;
+    node('topic-voice-search').value = '';
+    node('topic-setup-status').textContent = state.config.ai33_available ? 'Nghe thử mẫu có sẵn. Giọng ai33 khi trò chuyện sử dụng credit của tài khoản.' : 'ai33 chưa được cấu hình. Bạn vẫn có thể dùng giọng trình duyệt.';
+    for (const button of document.querySelectorAll('[data-voice-locale]')) button.setAttribute('aria-pressed', String(!button.dataset.voiceLocale));
+    for (const radio of document.querySelectorAll('[name=topic-speed]')) radio.checked = Number(radio.value) === state.setupSpeed;
+    renderSetupVoices(); node('chat-topic-setup').showModal();
   }
   function resetRows() { node('chat-messages').replaceChildren(); state.rows.clear(); state.hintKey = ''; }
   async function startTopic(topicId, reset = false) {
@@ -773,6 +842,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     state.speechTrackers.clear(); window.speechSynthesis?.cancel();
   }
   function browserVoice(text, callbacks, rate = .98) {
+    rate *= state.voiceSpeed;
     const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'en-US'; utterance.rate = rate;
     const voices = window.speechSynthesis.getVoices();
     utterance.voice = voices.find(v => /^en[-_]/i.test(v.lang) && v.localService) || voices.find(v => /^en[-_]/i.test(v.lang)) || null;
@@ -1006,7 +1076,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     stopSpeech(); state.voiceTasks.add(taskKey); const model = state.model, epoch = state.speechEpoch;
     const current = () => epoch === state.speechEpoch && revision === turnRevision(turn) && !state.destroyed;
     try {
-      let job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US', ...(sentence ? { target: 'sentence' } : {}) });
+      const selectionField = sentence ? 'sentenceVoiceSelection' : 'voiceSelection';
+      turn[selectionField] ||= { ...(state.voiceId ? { voice_id: state.voiceId } : {}), speed: state.voiceSpeed };
+      let job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US', ...turn[selectionField], ...(sentence ? { target: 'sentence' } : {}) });
       if (!current() || (job.metadata?.reference_revision || 0) !== revision) return;
       turn[turnField] = job[voiceField]; render();
       while (job[voiceField]?.status === 'generating') {
@@ -1084,7 +1156,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       node('chat-practice').replaceChildren(...state.config.practice_prompts.map(prompt => { const option = make('option', '', prompt.text); option.value = prompt.id; return option; }));
       const voice = node('chat-voice-provider').querySelector('option[value="ai33"]'); voice.disabled = !state.config.ai33_available || !state.config.voice_locales.includes('en-US');
       voice.textContent = voice.disabled ? 'ai33 · Unavailable' : state.config.english_voice_name || 'ai33 · Full reply';
-      if (!voice.disabled && state.config.default_voice_provider === 'ai33') node('chat-voice-provider').value = 'ai33';
+      if (!voice.disabled && (state.voicePreference || state.config.default_voice_provider) === 'ai33') node('chat-voice-provider').value = 'ai33';
+      if (!state.config.english_voices?.some(v => v.id === state.voiceId)) state.voiceId = state.config.default_voice_id || state.config.english_voices?.[0]?.id || '';
+      node('chat-english-voice').replaceChildren(...(state.config.english_voices || []).map(v => { const option = make('option', '', `${v.name} · ${v.locale}`); option.value = v.id; return option; }));
+      node('chat-english-voice').value = state.voiceId; node('chat-voice-speed').value = state.voiceSpeed;
       if (!state.config.speech_ready) showError('Local speech recognition is not ready on the server.');
       if (!window.isSecureContext) node('chat-mic-status').textContent = 'Microphone access needs HTTPS. Audio uploads are available here.';
       renderTopics(); render();
@@ -1120,7 +1195,29 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   node('chat-practice').addEventListener('change', () => { stopSpeech(); state.repeatTarget = null; render(); });
   node('chat-read-prompt').addEventListener('click', () => speakText(node('chat-practice-text').textContent, 'prompt'));
   node('chat-reading-listen').addEventListener('click', () => speakText(node('chat-reading-text').textContent, 'prompt'));
-  node('chat-voice-provider').addEventListener('change', stopSpeech);
+  node('chat-voice-provider').addEventListener('change', () => { stopSpeech(); controls(); save(); });
+  node('chat-english-voice').addEventListener('change', () => { stopSpeech(); state.voiceId = node('chat-english-voice').value; controls(); save(); });
+  node('chat-voice-speed').addEventListener('change', () => { stopSpeech(); state.voiceSpeed = Number(node('chat-voice-speed').value); save(); });
+  node('topic-voice-search').addEventListener('input', renderSetupVoices);
+  for (const button of document.querySelectorAll('[data-voice-locale]')) button.addEventListener('click', () => {
+    state.voiceFilter = button.dataset.voiceLocale;
+    for (const other of document.querySelectorAll('[data-voice-locale]')) other.setAttribute('aria-pressed', String(other === button));
+    renderSetupVoices();
+  });
+  for (const radio of document.querySelectorAll('[name=topic-speed]')) radio.addEventListener('change', () => {
+    state.setupSpeed = Number(radio.value); if (state.previewAudio) state.previewAudio.playbackRate = state.setupSpeed; setupSelection();
+  });
+  node('topic-setup-close').addEventListener('click', () => node('chat-topic-setup').close());
+  node('chat-topic-setup').addEventListener('click', event => { if (event.target === node('chat-topic-setup')) node('chat-topic-setup').close(); });
+  node('chat-topic-setup').addEventListener('close', () => { stopVoicePreview(); state.pendingTopic = null; });
+  node('topic-setup-start').addEventListener('click', () => {
+    const topic = state.pendingTopic; if (!topic) return;
+    node('chat-voice-provider').value = state.setupVoiceId === 'browser' ? 'browser' : 'ai33';
+    if (state.setupVoiceId !== 'browser') state.voiceId = state.setupVoiceId;
+    state.voiceSpeed = state.setupSpeed; node('chat-english-voice').value = state.voiceId; node('chat-voice-speed').value = state.voiceSpeed;
+    node('chat-auto-read').checked = node('topic-setup-auto-read').checked;
+    stopVoicePreview(); node('chat-topic-setup').close(); save(); startTopic(topic);
+  });
   node('chat-auto-read').addEventListener('change', () => { if (!node('chat-auto-read').checked) stopSpeech(); });
   function newConversation() {
     if (state.busy || state.recording || state.pending || state.decoding || state.stopping || state.starting) return;
@@ -1150,6 +1247,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   window.MDDChat = { state, upload, sendAudio, stopMic, getTurns: conversations, onViewChange(name, micAllowed) {
     state.visible = name === 'chat'; state.micAllowed = micAllowed;
     if (!state.visible) {
+      if (node('chat-topic-setup').open) node('chat-topic-setup').close(); stopVoicePreview();
       state.epoch++; state.repeatTarget = null; releaseMic(); state.chunks = []; stopSpeech(); clearReply();
     }
     render();

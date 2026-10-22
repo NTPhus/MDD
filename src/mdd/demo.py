@@ -534,6 +534,9 @@ class DemoHandler(BaseHTTPRequestHandler):
                     self._send_json(200, app.prompts())
                 elif path == "/api/chat/config":
                     self._send_json(200, app.chat_service.config())
+                elif path.startswith('/api/chat/voice-preview/'):
+                    audio, content_type = app.chat_service.voice_preview(unquote(path[len('/api/chat/voice-preview/'):]))
+                    self._send(200, audio, content_type)
                 elif path.startswith("/api/chat/jobs/"):
                     self._send_json(200, app.chat_service.poll(unquote(path[len("/api/chat/jobs/"):])))
                 elif path.startswith("/api/chat/audio/"):

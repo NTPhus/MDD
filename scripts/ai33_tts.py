@@ -199,14 +199,16 @@ class AI33TTS:
             suffix = ".flac"
         elif data[4:8] == b"ftyp":
             suffix = ".m4a"
+        # Some provider sample buckets label real MP3 data as text/plain.
+        # Require an audio signature above even when accepting that MIME type.
         if suffix is None or (not content_type.startswith("audio/")
-                              and content_type not in {"application/octet-stream", "video/mp4"}):
+                              and content_type not in {"application/octet-stream", "video/mp4", "text/plain"}):
             raise AI33Error("Download is not a supported audio file; check the task response schema.")
         path = stem.with_suffix(suffix)
         path.write_bytes(data)
         return path, hashlib.sha256(data).hexdigest()
 
-    def _cache_request(self, text, locale, voice_id=None):
+    def _cache_request(self, text, locale, voice_id=None, speed=None):
         """Return a cached local audio Path; reruns resume a previously submitted task."""
         if locale not in {"en-US", "en-GB", "vi-VN"}:
             raise AI33Error("Supported locales: en-US, en-GB, vi-VN.")
@@ -216,28 +218,31 @@ class AI33TTS:
         voice_id = voice_id or os.environ.get(setting, "").strip()
         if not voice_id:
             raise AI33Error(f"Set {setting} to a voice ID from your account for {locale}.")
-        payload = {"text": text, "voice_id": voice_id, "speed": self.speed}
+        speed = self.speed if speed is None else speed
+        if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not 0.5 <= speed <= 1.5:
+            raise AI33Error("Voice speed must be between 0.5 and 1.5.")
+        payload = {"text": text, "voice_id": voice_id, "speed": speed}
         cache_input = {"base_url": self.base_url, "locale": locale, "payload": payload}
         digest = hashlib.sha256(json.dumps(cache_input, sort_keys=True).encode()).hexdigest()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         receipt_path = self.cache_dir / (digest + ".json")
         return payload, receipt_path, digest, voice_id
 
-    def can_resume(self, text, locale="en-US"):
+    def can_resume(self, text, locale="en-US", *, voice_id=None, speed=None):
         try:
-            _, path, _, _ = self._cache_request(text, locale)
+            _, path, _, _ = self._cache_request(text, locale, voice_id, speed)
             task = json.loads(path.read_text(encoding="utf-8")).get("task_id")
             return isinstance(task, str) and bool(task.strip())
         except (OSError, ValueError, AI33Error):
             return False
 
-    def resume(self, text, locale="en-US"):
+    def resume(self, text, locale="en-US", *, voice_id=None, speed=None):
         """User-initiated cache recovery. This path can never submit a new POST."""
-        return self.synthesize(text, locale=locale, resume_only=True)
+        return self.synthesize(text, locale=locale, voice_id=voice_id, speed=speed, resume_only=True)
 
-    def synthesize(self, text, locale="en-US", voice_id=None, *, resume_only=False):
+    def synthesize(self, text, locale="en-US", voice_id=None, *, speed=None, resume_only=False):
         """Return cached audio; retain the accepted task before polling/download."""
-        payload, receipt_path, digest, voice_id = self._cache_request(text, locale, voice_id)
+        payload, receipt_path, digest, voice_id = self._cache_request(text, locale, voice_id, speed)
         if receipt_path.exists():
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             if receipt.get("audio_file"):
@@ -255,7 +260,7 @@ class AI33TTS:
                                 "before submitting again; the response schema may differ.")
             receipt = {
                 "provider": "ai33", "base_url": self.base_url, "task_id": task_id,
-                "locale": locale, "voice_id": voice_id, "speed": self.speed,
+                "locale": locale, "voice_id": voice_id, "speed": payload['speed'],
                 "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
             }
             self.save_receipt(receipt_path, receipt)

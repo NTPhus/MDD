@@ -30,7 +30,7 @@ const acoustic = JSON.parse(fs.readFileSync('data/generated/voice-chat-qa/browse
     assert.equal(await page.locator('.chat-topic-card').count(), 8); assert.equal(await page.evaluate(() => window.__speech.length), 0);
     assert.equal(await page.locator('#chat-view textarea').count(), 0);
     await page.screenshot({ path: path.join(out, 'topics-desktop.png'), fullPage: true, animations: 'disabled' });
-    await page.locator('[data-topic=travel]').click();
+    await page.locator('[data-topic=travel]').click(); await page.locator('#topic-setup-start').click();
     await page.waitForFunction(() => !window.MDDChat.state.starting && window.MDDChat.getTurns().at(-1)?.opening);
     await page.waitForFunction(() => !window.MDDChat.state.speaking);
     assert.equal(await page.evaluate(() => window.MDDChat.getTurns().length), 1);
@@ -69,10 +69,10 @@ const acoustic = JSON.parse(fs.readFileSync('data/generated/voice-chat-qa/browse
     assert.equal(payloads[1].history[0].content, acoustic.transcript); assert.equal(payloads[1].history[1].content, firstReply);
     assert.equal(await page.locator('.chat-turn-review:visible').count(), 2);
     checks.push('Each audio turn has a separate assessment and history excludes the authored opener.');
-    await page.locator('#chat-topics').click(); await page.locator('[data-topic=food]').click();
+    await page.locator('#chat-topics').click(); await page.locator('[data-topic=food]').click(); await page.locator('#topic-setup-start').click();
     await page.waitForFunction(() => !window.MDDChat.state.starting && window.MDDChat.getTurns()[0]?.metadata?.topic_id === 'food');
     assert.equal(await page.evaluate(() => window.MDDChat.getTurns().length), 1);
-    await page.locator('#chat-topics').click(); await page.locator('[data-topic=travel]').click();
+    await page.locator('#chat-topics').click(); await page.locator('[data-topic=travel]').click(); await page.locator('#topic-setup-start').click();
     assert.equal(await page.evaluate(() => window.MDDChat.getTurns().length), 5);
     await page.locator('#chat-settings>summary').click(); await page.locator('#chat-model').selectOption('qwen-base'); await page.keyboard.press('Escape');
     await page.waitForFunction(() => !window.MDDChat.state.starting && window.MDDChat.getTurns().length === 1);
@@ -89,7 +89,7 @@ const acoustic = JSON.parse(fs.readFileSync('data/generated/voice-chat-qa/browse
       await page.locator('#chat-topics').click();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Topic overflow at ${width}`);
       if (width === 390) await page.screenshot({ path: path.join(out, 'topics-mobile.png'), fullPage: true, animations: 'disabled' });
-      await page.locator('[data-topic=travel]').click();
+      await page.locator('[data-topic=travel]').click(); await page.locator('#topic-setup-start').click();
     }
     checks.push('Topic cards, chat and inline vocabulary fit 1440/768/390/360 px.');
     await page.reload(); await page.waitForFunction(() => window.MDDChat?.state.config?.topics?.length === 8);
