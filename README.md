@@ -57,7 +57,7 @@ Hình PNG, bảng CSV, JSON và log được lưu theo phiên trong `data/genera
 
 ## Đối thoại Qwen local
 
-Mở **http://127.0.0.1:8765/#chat** hoặc chọn **Đối thoại AI**. Chọn một trong 8 chủ đề (đời sống, du lịch, ăn uống, công việc, sở thích, công nghệ, học tập, thành phố), hoặc chọn **Free conversation** / **Read a sentence**. Bot mở lời trước theo chủ đề. Phòng hội thoại giữ bảng màu xanh/kem của ứng dụng: câu của bạn bên phải trên nền xanh nhạt, câu của Qwen bên trái trên nền sáng. Bảng **Thử dùng các từ sau** có từ khóa bấm nghe và mẫu mở đầu câu, nằm phía trên nút mic tròn ở giữa. Lịch sử được giữ riêng theo chủ đề và coach; mũi tên quay lại mở danh sách chủ đề. **Kết thúc** dừng mic/giọng đọc, gửi yêu cầu hủy lượt đang xử lý và quay lại danh sách; lịch sử vẫn được giữ.
+Mở **http://127.0.0.1:8765/#chat** hoặc chọn **Đối thoại AI**. Chọn một trong 8 chủ đề (đời sống, du lịch, ăn uống, công việc, sở thích, công nghệ, học tập, thành phố), hoặc chọn **Free conversation** / **Read a sentence**. Bot mở lời trước theo chủ đề. Giao diện dùng tím–trắng: sidebar và thẻ chủ đề nền trắng, nút chính màu tím; câu của bạn bên phải trên nền tím, câu của Qwen bên trái trên nền lavender nhạt. Câu trả lời hiện đầy đủ trước khi đọc, rồi highlight từng từ đang phát. Bảng **Thử dùng các từ sau** có từ khóa bấm nghe và mẫu mở đầu câu, nằm phía trên nút mic tròn ở giữa. Lịch sử được giữ riêng theo chủ đề và coach; mũi tên quay lại mở danh sách chủ đề. **Kết thúc** dừng mic/giọng đọc, gửi yêu cầu hủy lượt đang xử lý và quay lại danh sách; lịch sử vẫn được giữ.
 
 Nhấn mic **Nhấn để nói**, nhấn lần nữa để gửi hoặc chọn **Tải audio**, không có ô nhập tin nhắn. Bản thu tối đa 30 giây; file WAV/MP3/M4A/OGG/FLAC/WebM được trình duyệt giải mã và đổi thành WAV mono 16 kHz. Dưới mỗi lượt nói có thanh **Xem lỗi phát âm**, luôn đóng khi có kết quả mới. Bấm mở mới thấy các từ model đánh dấu cần luyện, âm kỳ vọng/nhận được và hướng dẫn; mở panel không tự đọc chúng. Tùy chọn mode, coach, voice, cuộc trò chuyện mới và xuất JSON nằm trong nút **Giọng đọc** trên header (ngoài phòng là **Settings**). Có thể dừng AI/voice độc lập và nghe lại bản thu bằng **Nghe bản thu**.
 
@@ -148,6 +148,10 @@ Lệnh thứ hai in URL HTTPS để mở trên máy Linux hoặc thiết bị kh
 Tunnel đi qua Nginx ingress chỉ nghe localhost, chấp nhận đúng tên miền HTTPS được ngrok cấp rồi chuyển tới backend. HTTPS cho phép trình duyệt yêu cầu quyền microphone. Không dùng wildcard Host/Origin hoặc thay toàn bộ Origin trước khi kiểm tra; ngrok inspection bị tắt và API điều khiển chỉ nghe localhost. Token được nạp từ môi trường/`.env`, không đưa vào lệnh hoặc file config tunnel. State/config nằm tại `data/generated/demo/ngrok/`. Xem [cấu hình ingress](deploy/nginx/README.md).
 
 [TTS từ văn bản đến âm thanh](papers/tts/README.md) giải thích kiến trúc, input/output và các tác vụ, kèm 7 PDF nền tảng. `.gitignore` bỏ qua dataset gốc, parsed annotations, weights tải về, môi trường và kết quả train local; PDF bài báo, code, config, protocol và metadata vẫn được giữ.
+
+Sarah là giọng bot mặc định khi ai33 khả dụng và `.env` có `AI33_VOICE_EN_NAME=Sarah - Mature, Reassuring, Confident`; có thể đổi về Browser trong Settings. Tên giọng công khai trả về qua `/api/chat/config`, API key vẫn ở backend. Các nút nghe từ/IPA/câu mẫu thủ công vẫn dùng browser như trước. ai33 chưa trả word timestamps nên highlight theo playhead là ước lượng. Giọng mới áp dụng cho lượt mới; audio cache cũ không bị đổi tên thành Sarah.
+
+Đã kiểm tra theme ở 1440/768/390/360 px bằng job/voice giả lập: `node scripts/check_purple_sarah_browser.cjs` (mặc định preview 8767; đặt `MDD_QA_URL=http://127.0.0.1:8765` khi kiểm tra web đang chạy). Screenshot, kết quả và đoạn nghe thử Sarah tại `data/generated/purple-sarah-qa/`. Trang tham chiếu `senglish.net/app` yêu cầu đăng nhập; bố cục dựa trên luồng chọn chủ đề/hội thoại và ảnh mẫu người dùng đã cung cấp.
 
 ## Hướng dẫn phát âm và giọng đọc trong demo
 
@@ -314,7 +318,7 @@ Project dùng **ai33 API** cho câu mẫu tiếng Anh và lời giải thích ti
    python3 scripts/ai33_tts.py --list-voices --provider edge --search en-US
    ```
 
-   Lấy voice ID từ kết quả, điền vào `AI33_VOICE_EN`. Có thể đổi `--provider` sang `elevenlabs` hoặc `minimax` để tìm giọng khác; `--page 2` lấy trang tiếp theo. Cấu hình local đã tra tài khoản và chọn `edge_en-US-AvaNeural` cùng `edge_vi-VN-HoaiMyNeural`. Máy/tài khoản khác cần tra lại giọng; accent thực tế phụ thuộc voice ID.
+   Lấy voice ID từ kết quả, điền vào `AI33_VOICE_EN`. Có thể đổi `--provider` sang `elevenlabs` hoặc `minimax` để tìm giọng khác; `--page 2` lấy trang tiếp theo. Cấu hình local hiện chọn **Sarah - Mature, Reassuring, Confident**, ID `elevenlabs_EXAVITQu4vr4xnSDxMaL`, cùng `edge_vi-VN-HoaiMyNeural`. Sarah đã được xác nhận qua danh sách giọng của tài khoản và tạo audio thật. Máy/tài khoản khác cần tra lại giọng; accent thực tế phụ thuộc voice ID.
 
 4. Tạo audio:
 

@@ -36,6 +36,11 @@ async function run() {
   const exceptions = [], checks = []; let job, serial = 0, voiceRequests = 0;
   page.on('pageerror', error => exceptions.push(error.message));
   await page.addInitScript(mockVoice);
+  // This suite exercises browser speech; production may default to Sarah/ai33.
+  await page.route('**/api/chat/config', async route => {
+    const response = await route.fetch();
+    return route.fulfill({ json: { ...await response.json(), default_voice_provider: 'browser' } });
+  });
   const fresh = (text = 'I am learning to speak ') => {
     const speech = structuredClone(fixture.speech); speech.coaching = { status: 'pending' }; delete speech.spoken_response;
     return job = { id: String(++serial).padStart(32, '0'), model_id: 'qwen-trained', status: 'generating', text, speech, metadata: {}, error: null };
@@ -71,17 +76,19 @@ async function run() {
     await page.waitForFunction(() => document.body.classList.contains('chat-room-open'));
     await page.screenshot({ path: path.join(output, 'desktop-empty.png'), fullPage: true, animations: 'disabled' });
     fresh(); await upload();
-    assert.ok((await text.textContent()).length < job.text.length, 'The first burst must not appear all at once.');
-    await page.waitForFunction(() => document.querySelector('.assistant .chat-message-text').textContent.trim() === 'I am learning to speak');
+    assert.equal(await text.textContent(), '', 'An unfinished reply should stay behind the generating status.');
     assert.equal(await page.evaluate(() => window.__speech.length), 0);
-    checks.push('Words appear gradually; unfinished words are held.');
+    checks.push('Generation stays behind the status; no text animation or early voice.');
     job.text = 'I am learning to speak English. It ';
+    await page.waitForFunction(value => window.MDDChat.state.activeTurn?.content === value, job.text);
+    assert.equal(await text.textContent(), ''); assert.equal(await page.evaluate(() => window.__speech.length), 0);
+    job.text = reply; job.status = 'coaching';
     await page.waitForFunction(() => window.__speech.length === 1);
-    assert.equal(await page.evaluate(() => window.__speech[0].status), 'generating');
+    assert.equal(await text.textContent(), reply, 'All sentences must be visible before speech completes.');
+    assert.equal(await page.evaluate(() => window.__speech[0].status), 'coaching');
     await page.waitForFunction(() => document.querySelector('.chat-reply-word.is-speaking'));
     await page.screenshot({ path: path.join(output, 'desktop-speaking.png'), fullPage: true, animations: 'disabled' });
-    checks.push('The first sentence is spoken and highlighted before generation/coaching finishes.');
-    job.text = reply; job.status = 'coaching';
+    checks.push('The completed reply is shown in full before voice, then only the spoken word is highlighted.');
     await page.waitForFunction(() => window.__speech.length === 2);
     await page.waitForFunction(() => !window.MDDChat.state.speaking);
     assert.equal(await feedback.getAttribute('open'), null);
@@ -89,7 +96,7 @@ async function run() {
     assert.deepEqual(await page.evaluate(() => window.__speech.map(s => s.text)), ['I am learning to speak English.', 'It gets easier with practice.']);
     checks.push('Late pronunciation tips are never read automatically; only the bot reply is spoken.');
     assert.equal(await feedback.getAttribute('open'), null);
-    assert.equal(await feedback.locator('.chat-feedback-label').textContent(), 'Cần xác nhận câu');
+    assert.equal(await feedback.locator('.chat-feedback-label').textContent(), 'Chưa đủ bằng chứng');
     assert.equal(await soundDetails.isVisible(), false);
     await feedback.locator(':scope > summary').click();
     assert.ok(await soundDetails.isVisible());
@@ -112,6 +119,7 @@ async function run() {
     checks.push('Readable compact type and no horizontal overflow at 1440/768/390/360, including Settings.');
     await page.setViewportSize({ width: 1440, height: 1080 });
     await newConversation(); fresh('First sentence.'); await upload();
+    job.status = 'coaching';
     await page.waitForFunction(() => window.MDDChat.state.speaking);
     const beforeStop = await page.evaluate(() => window.__speech.length);
     await page.locator('#chat-stop-voice').click();
@@ -120,6 +128,7 @@ async function run() {
     assert.equal(await page.evaluate(() => window.__speech.length), beforeStop); assert.equal(await text.textContent(), reply);
     checks.push('Stop voice cancels queued and late audio while the remaining text still appears.');
     await newConversation(); fresh('A short reply.'); await upload();
+    job.status = 'coaching';
     await page.waitForFunction(() => window.MDDChat.state.speaking);
     const beforeLeave = await page.evaluate(() => window.__speech.length);
     // The full-screen room hides the workspace sidebar; exercise its view hook.
@@ -129,6 +138,7 @@ async function run() {
     assert.equal(await page.evaluate(() => window.__speech.length), beforeLeave);
     checks.push('Leaving the chat prevents late voice playback, including after returning.');
     await newConversation(); fresh('Another reply.'); await upload();
+    job.status = 'coaching';
     await page.waitForFunction(() => window.MDDChat.state.speaking);
     const beforeCancel = await page.evaluate(() => window.__speech.length);
     await page.locator('#chat-stop').click(); await page.waitForFunction(() => !window.MDDChat.state.busy);
@@ -143,7 +153,7 @@ async function run() {
     await page.locator('.chat-message-actions button').last().click();
     assert.equal(await page.evaluate(() => window.__speech.length), beforeSilent + 1);
     assert.equal(await page.evaluate(() => window.__speech.at(-1).text), reply);
-    checks.push('Read aloud off keeps text streaming; manual replay reads only the reply, without legacy tips.');
+    checks.push('Read aloud off shows the full completed reply; manual replay reads only the reply, without legacy tips.');
     await page.locator('#chat-settings>summary').click(); await page.locator('#chat-mode').selectOption('reading'); await page.keyboard.press('Escape');
     assert.ok(await page.locator('#chat-reading-card').isVisible());
     assert.ok((await page.locator('#chat-reading-text').textContent()).length > 10);

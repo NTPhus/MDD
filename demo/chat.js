@@ -1,20 +1,19 @@
 'use strict';
 
-// Keep presentation and the speech queue independent of server polling. Only actual
-// model output is revealed; completed clauses can be spoken before coaching ends.
+// Show the completed reply before autoplay. Speech boundaries only move the
+// highlight; they never hide the words which have not been read yet.
 class LiveReply {
   constructor({ onUpdate = () => {}, onVoice = () => {}, onError = () => {}, speak = null,
-    cancelSpeech = () => {}, voice = true, delay = 75,
-    schedule = (fn, ms) => setTimeout(fn, ms), unschedule = id => clearTimeout(id) } = {}) {
-    Object.assign(this, { onUpdate, onVoice, onError, speak, cancelSpeech, delay, schedule, unschedule });
+    cancelSpeech = () => {}, voice = true } = {}) {
+    Object.assign(this, { onUpdate, onVoice, onError, speak, cancelSpeech });
     this.text = ''; this.visible = 0; this.queuedUntil = 0; this.queue = []; this.active = null;
-    this.timer = null; this.final = false; this.muted = !voice || !speak; this.closed = false;
+    this.final = false; this.muted = !voice || !speak; this.closed = false;
     this.epoch = 0; this.range = null; this.rangeMode = null;
   }
   get visibleText() { return this.text.slice(0, this.visible); }
   revealAll() {
     if (this.closed) return;
-    this.unschedule(this.timer); this.timer = null; this.visible = this.text.length;
+    this.visible = this.text.length;
     this.onUpdate(this.visibleText, this.range, this.rangeMode);
   }
   update(text, { final = false } = {}) {
@@ -22,28 +21,16 @@ class LiveReply {
     if (!text.startsWith(this.text)) {
       // A revised response must not leave obsolete speech in the device queue.
       this.mute(); this.visible = 0; this.queuedUntil = 0;
+      this.final = false;
     }
     this.text = text; this.final ||= final;
-    this._animate();
-    if (!this.muted) {
+    this.visible = this.final ? this.text.length : 0;
+    // Paint all text synchronously before onVoice/speak can start playback.
+    this.onUpdate(this.visibleText, this.range, this.rangeMode);
+    if (this.final && !this.muted) {
       this._queueClauses();
       this._play();
     }
-  }
-  _nextWord() {
-    if (this.active && this.hasBoundary && this.range && this.visible >= this.range.end) return this.visible;
-    const tail = this.text.slice(this.visible), match = /^\s*\S+\s*/.exec(tail);
-    if (!match) return this.final && tail ? this.text.length : this.visible;
-    const end = this.visible + match[0].length;
-    return !this.final && end === this.text.length && !/\s$/.test(match[0]) ? this.visible : end;
-  }
-  _animate() {
-    if (this.closed || this.timer !== null || this._nextWord() === this.visible) return;
-    this.timer = this.schedule(() => {
-      this.timer = null;
-      if (this.closed) return;
-      this.visible = this._nextWord(); this.onUpdate(this.visibleText, this.range, this.rangeMode); this._animate();
-    }, this.delay);
   }
   _queueClauses() {
     while (this.queuedUntil < this.text.length) {
@@ -63,33 +50,31 @@ class LiveReply {
   _play() {
     if (this.closed || this.muted || this.active || !this.queue.length) return;
     const part = this.queue.shift(), epoch = this.epoch;
-    this.active = part; this.hasBoundary = false; this.onVoice(true);
+    this.active = part; this.onVoice(true);
     const valid = () => !this.closed && !this.muted && epoch === this.epoch && this.active === part;
-    const boundary = (index = 0, fromDevice = false, mode = 'boundary') => {
+    const boundary = (index = 0, mode = 'boundary') => {
       if (!valid() || part.offset === null || !Number.isInteger(index) || index < 0 || index >= part.text.length) return;
-      this.hasBoundary ||= fromDevice;
       const rest = part.text.slice(index), word = /^\s*\S+/.exec(rest);
       if (!word) return;
       const start = part.offset + index + (word[0].length - word[0].trimStart().length);
       this.range = { start, end: part.offset + index + word[0].length };
       this.rangeMode = mode;
-      this.visible = Math.max(this.visible, this.range.end);
-      this.onUpdate(this.visibleText, this.range, this.rangeMode); this._animate();
+      this.onUpdate(this.visibleText, this.range, this.rangeMode);
     };
     try {
       part.utterance = this.speak(part.text, {
-        start: () => boundary(0, false, 'estimated'), boundary: (index, mode = 'boundary') => boundary(index, true, mode),
-        end: () => { if (!valid()) return; this.active = null; this.range = null; this.rangeMode = null; this.onUpdate(this.visibleText, null); this.onVoice(false); this._play(); this._animate(); },
+        start: () => boundary(0, 'estimated'), boundary: (index, mode = 'boundary') => boundary(index, mode),
+        end: () => { if (!valid()) return; this.active = null; this.range = null; this.rangeMode = null; this.onUpdate(this.visibleText, null); this.onVoice(false); this._play(); },
         error: error => { if (!valid()) return; this.mute(); this.onError(error); },
       });
     } catch (error) { if (valid()) { this.mute(); this.onError(error); } }
   }
   mute() {
     this.muted = true; this.epoch++; this.queue = []; this.active = null; this.range = null; this.rangeMode = null;
-    this.cancelSpeech(); this.onVoice(false); this.onUpdate(this.visibleText, null); this._animate();
+    this.cancelSpeech(); this.onVoice(false); this.onUpdate(this.visibleText, null);
   }
   dispose() {
-    this.closed = true; this.unschedule(this.timer); this.timer = null; this.mute();
+    this.closed = true; this.mute();
   }
 }
 if (typeof module === 'object' && module.exports) module.exports = { LiveReply };
@@ -212,7 +197,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     node('chat-current-model').textContent = state.repeatTarget ? 'Practise your sentence' : node('chat-mode').value === 'reading' ? 'Read & practise' : state.config?.topics?.find(t => t.id === state.topic)?.title || 'English conversation';
     node('chat-topic-level').textContent = state.config?.topics?.find(t => t.id === state.topic)?.level || 'EN';
     node('chat-settings-label').textContent = state.visible && state.inRoom
-      ? node('chat-voice-provider').value === 'ai33' ? 'ai33 · English' : 'Giọng đọc' : 'Settings';
+      ? node('chat-voice-provider').value === 'ai33' ? (state.config?.english_voice_name?.split(' - ')[0] || 'ai33 · English') : 'Giọng đọc' : 'Settings';
     node('chat-settings').querySelector('summary').setAttribute('aria-label', 'Giọng đọc và cài đặt hội thoại');
     node('chat-model-description').textContent = state.model === 'qwen-trained' ? 'Fine-tuned Qwen for pronunciation practice tips.' : 'Original Qwen for comparison; it may not follow the coaching format.';
     node('chat-model-note').hidden = false;
@@ -1057,7 +1042,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       node('chat-model').value = state.model;
       node('chat-practice').replaceChildren(...state.config.practice_prompts.map(prompt => { const option = make('option', '', prompt.text); option.value = prompt.id; return option; }));
       const voice = node('chat-voice-provider').querySelector('option[value="ai33"]'); voice.disabled = !state.config.ai33_available || !state.config.voice_locales.includes('en-US');
-      voice.textContent = voice.disabled ? 'ai33 · Unavailable' : 'ai33 · Full reply';
+      voice.textContent = voice.disabled ? 'ai33 · Unavailable' : state.config.english_voice_name || 'ai33 · Full reply';
+      if (!voice.disabled && state.config.default_voice_provider === 'ai33') node('chat-voice-provider').value = 'ai33';
       if (!state.config.speech_ready) showError('Local speech recognition is not ready on the server.');
       if (!window.isSecureContext) node('chat-mic-status').textContent = 'Microphone access needs HTTPS. Audio uploads are available here.';
       renderTopics(); render();

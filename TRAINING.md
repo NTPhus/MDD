@@ -173,6 +173,8 @@ Sau khi bấm **Đối chiếu audio này**, chỉ khi các từ thay đổi th�
 
 Khi mở collapse hoặc cuộn lên đọc lịch sử, polling/stream/highlight không tự kéo xuống cuối. Việc theo dõi câu mới chỉ tiếp tục khi người dùng ở cuối và không mở phần đọc chi tiết.
 
+Giao diện đợi bot sinh xong rồi hiện toàn bộ câu trả lời trước khi tự phát voice; không còn hiệu ứng hiện chữ theo nhịp đọc. Trong khi đọc, chỉ highlight từ đang phát và giữ nguyên các từ còn lại để người dùng đọc trước. Phát lại cũng giữ toàn bộ câu, dừng/kết thúc voice thì bỏ highlight. Giọng browser ưu tiên word-boundary thực; ai33 chưa có timestamp từng từ nên highlight theo playhead vẫn là ước lượng. Các thay đổi này chỉ ở frontend, không khởi động lại hoặc tác động tiến trình train.
+
 [Notebook kiểm thử](notebooks/mdd_chat_error_checks.ipynb) có từng cell cho kết quả web, Qwen thật và browser. Báo cáo contract mới tại [live-pipeline.json](data/generated/optional-reference-qa/live-pipeline.json) và [browser-summary.json](data/generated/optional-reference-qa/browser-summary.json); replay các posterior audio đã lưu tại [diagnostics.json](data/generated/optional-reference-qa/diagnostics.json). Báo cáo Qwen lịch sử [real-qwen.json](data/generated/reference-regeneration-qa/real-qwen.json) giữ trường hợp lặp câu sau cả hai lần sinh; pipeline chặn câu lặp và báo chưa có phản hồi. Việc truyền đúng text và chặn lặp nguyên câu không bảo đảm Qwen3-0.6B luôn đối thoại tự nhiên hoặc phát hiện mọi cách diễn đạt lại cùng ý.
 
 ```powershell

@@ -90,13 +90,19 @@ async function run() {
     await page.waitForFunction(() => window.MDDChat?.state.config?.speech_ready && window.MDDSpeechHighlight);
     await page.locator('#chat-free-talk').click();
     fresh(); await upload();
-    await page.waitForFunction(() => window.__utterances.length === 1 && window.MDDChat.state.busy);
+    await page.waitForFunction(() => window.MDDChat.state.activeTurn?.status === 'generating');
+    assert.equal(await text.textContent(), '');
+    assert.equal(await page.evaluate(() => window.__utterances.length), 0);
+    job.status = 'ready';
+    await page.waitForFunction(() => window.__utterances.length === 1 && !window.MDDChat.state.busy);
+    assert.equal(await text.textContent(), reply, 'The whole reply must be visible before the audio start event.');
     await trigger('start'); await trigger('boundary', 2);
     assert.deepEqual(await speakingWord(), ['can']); assert.equal(await timing.isVisible(), false);
+    assert.equal(await text.textContent(), reply, 'Upcoming words must stay visible while speaking.');
     await page.waitForTimeout(420); // Includes a job poll and render with no next boundary.
     assert.deepEqual(await speakingWord(), ['can']);
     await trigger('boundary', 6); assert.deepEqual(await speakingWord(), ['help']);
-    checks.push('Autoplay follows native word boundaries and remains stable across job polling/render.');
+    checks.push('Generation is held; the entire reply is visible before autoplay and stays visible as native highlights advance.');
     await trigger('end'); job.status = 'ready';
     await page.waitForFunction(() => !window.MDDChat.state.busy && window.MDDChat.state.liveReply.visibleText === window.MDDChat.state.liveReply.text);
     assert.equal(await text.textContent(), reply); assert.equal(await highlight.count(), 0);

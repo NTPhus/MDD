@@ -10,6 +10,7 @@ import binascii
 import io
 import importlib
 import json
+import os
 from pathlib import Path
 import re
 import secrets
@@ -101,10 +102,13 @@ class ChatService:
 
     def config(self):
         capabilities = self.capability_loader()
+        voice_name = os.environ.get("AI33_VOICE_EN_NAME", "").strip()[:120] if capabilities.get("english_voice_configured") else ""
         models = [{key: item[key] for key in ("id", "label", "ready", "description")} for item in self._models().values()]
         return {"models": models, "default_model_id": "qwen-base", "device": "cpu", "threads": 2,
                 "max_message_chars": 2000, "max_new_tokens": 384,
                 "ai33_available": bool(capabilities.get("tts_configured")),
+                "english_voice_name": voice_name,
+                "default_voice_provider": "ai33" if capabilities.get("tts_configured") and voice_name else "browser",
                 "voice_locales": [locale for locale, key in (("vi-VN", "vietnamese_voice_configured"), ("en-US", "english_voice_configured")) if capabilities.get(key)],
                 "speech_ready": (self.root / "models/pretrained/wav2vec2-base-960h/model.safetensors").is_file()
                     and (self.root / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/model.safetensors").is_file(),
