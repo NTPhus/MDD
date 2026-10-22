@@ -1,0 +1,22 @@
+{
+  "dataset_kind": "published_grammar_fluency",
+  "task": "published_english_grammar_and_fluency",
+  "model_path": "models/pretrained/Qwen3-0.6B",
+  "dataset_dir": "data/processed/grammar-wi-jfleg-v1",
+  "output_dir": "runs/grammar-qwen3-06b-wi-jfleg-v1",
+  "max_length": 768,
+  "epochs": 2,
+  "eval_steps": 250,
+  "learning_rate": 0.0001,
+  "gradient_accumulation_steps": 16,
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "target_modules": ["q_proj", "v_proj"],
+  "loss_projection_chunk_size": 64,
+  "logging_steps": 10,
+  "min_train_examples": 100,
+  "min_validation_examples": 20,
+  "seed": 42,
+  "purpose": "separate_grammar_fluency_adapter_noncommercial_research"
+}

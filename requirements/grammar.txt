@@ -1,0 +1,4 @@
+# Preserve the existing CUDA PyTorch installation. No CPU torch replacement.
+-r feedback.txt
+-r feedback-evaluation.txt
+nltk==3.10.3

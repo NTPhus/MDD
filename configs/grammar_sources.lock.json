@@ -1,0 +1,65 @@
+{
+  "wi_archive": {
+    "path": "wi+locness_v2.1.bea19.tar.gz",
+    "url": "https://www.cl.cam.ac.uk/research/nl/bea2019st/data/wi+locness_v2.1.bea19.tar.gz",
+    "sha256": "d5cbf68cda3da0c3af69dd672614d07287bfe996b87da0c75051d5349d76c666"
+  },
+  "jfleg_revision": "ee06ff806a208aba815ac45313f4e750a48330a5",
+  "jfleg_files": [
+    {
+      "path": "jfleg/README.md",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/README.md",
+      "sha256": "f1413ad6167f35a3c0f8d5d78be2f36e248358ddff11bdeb9c78e4bb274be853"
+    },
+    {
+      "path": "jfleg/dev/dev.src",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/dev/dev.src",
+      "sha256": "4a0e8b86d18a1058460ff0a592dac1ba68986d135256efbd27e997ac43f295f8"
+    },
+    {
+      "path": "jfleg/dev/dev.ref0",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/dev/dev.ref0",
+      "sha256": "adea6287c6e2240b7777e63cd56f8e228e742bbfb42c5152bc0bd2bc91f4e53e"
+    },
+    {
+      "path": "jfleg/dev/dev.ref1",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/dev/dev.ref1",
+      "sha256": "d40d56ec7468ddab03fdcca97065ab3f9d391d749dbc7097b7c777a19ce4242e"
+    },
+    {
+      "path": "jfleg/dev/dev.ref2",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/dev/dev.ref2",
+      "sha256": "b070691d633e0c4143d96ba21299ae71cb126086517d2970df47420842067793"
+    },
+    {
+      "path": "jfleg/dev/dev.ref3",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/dev/dev.ref3",
+      "sha256": "9187fd834693fa77d07957991282d32d61ff84a207c25cbfab318c871bacdbc4"
+    },
+    {
+      "path": "jfleg/test/test.src",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/test/test.src",
+      "sha256": "893db119162487aa7f956b65978453576919e6797cd6c1955f93b7a8b9f4bbd8"
+    },
+    {
+      "path": "jfleg/test/test.ref0",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/test/test.ref0",
+      "sha256": "875953280a3ea1dea2827337b1778c0105f0c0aa79f2517a6e0e42db5e5e170c"
+    },
+    {
+      "path": "jfleg/test/test.ref1",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/test/test.ref1",
+      "sha256": "190d3398f2765f54a39b5489d1e96c483412a656086c731f8712ad0591087d80"
+    },
+    {
+      "path": "jfleg/test/test.ref2",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/test/test.ref2",
+      "sha256": "0e3c6abe934ccd16c9dffb2fd889d6f55afc3ad13a63c1e148c720bb4e99046b"
+    },
+    {
+      "path": "jfleg/test/test.ref3",
+      "url": "https://raw.githubusercontent.com/keisks/jfleg/ee06ff806a208aba815ac45313f4e750a48330a5/test/test.ref3",
+      "sha256": "19f49de6eff813b26505ecf756c20dc301aeb80696696b01ca950298f6e58441"
+    }
+  ]
+}

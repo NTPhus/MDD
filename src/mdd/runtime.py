@@ -679,6 +679,11 @@ def run_evaluate(args: argparse.Namespace) -> Path:
     fold = next(item for item in splits["folds"] if item["fold"] == fold_number)
     if args.split == "source_validation":
         ids = splits["source_validation_ids"]
+    elif args.split in {"cascade_test", "source_test"}:
+        key = args.split + "_ids"
+        if key not in splits:
+            raise ValueError("This protocol has no " + key)
+        ids = splits[key]
     elif args.split == "test":
         ids = fold["test_ids"]
     else:
@@ -725,7 +730,7 @@ def train_parser() -> argparse.ArgumentParser:
 def eval_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Explicit phone-CTC evaluation, including held-out test only when requested")
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--split", choices=("validation", "test", "source_validation"), required=True)
+    parser.add_argument("--split", choices=("validation", "test", "source_validation", "cascade_test", "source_test"), required=True)
     parser.add_argument("--fold", type=int, choices=(1, 2, 3, 4))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--device", choices=("cpu", "cuda"))

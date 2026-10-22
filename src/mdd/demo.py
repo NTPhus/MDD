@@ -18,13 +18,20 @@ import unicodedata
 from urllib.parse import quote, unquote, urlsplit
 
 from .demo_feedback import FeedbackNotFound, FeedbackService, OPAQUE_ID, VoiceNotFound
+from .demo_chat import ChatError, ChatService
+from .demo_realtime import practice_reference, prefix_comparison, preview_assessment
+from .demo_reference import dictionary_reference
 
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
 MAX_AUDIO_BYTES = 12 * 1024 * 1024
 MAX_FEEDBACK_BODY_BYTES = 4096
 STATIC_FILES = {"/": "index.html", "/index.html": "index.html",
-                "/app.js": "app.js", "/styles.css": "styles.css"}
+                "/app.js": "app.js", "/styles.css": "styles.css",
+                "/chat.js": "chat.js", "/chat.css": "chat.css",
+                "/pronunciation.js": "pronunciation.js",
+                "/speech_highlight.js": "speech_highlight.js",
+                "/recorder-worklet.js": "recorder-worklet.js"}
 RFC1918_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
@@ -131,7 +138,7 @@ def _normalize_text(text: str) -> str:
 
 
 class DemoApplication:
-    def __init__(self, root: Path, engine: Any = None, threads: int = 2, *, feedback_service=None):
+    def __init__(self, root: Path, engine: Any = None, threads: int = 2, *, feedback_service=None, chat_service=None):
         if isinstance(threads, bool) or not isinstance(threads, int) or not 1 <= threads <= 4:
             raise ValueError("Inference threads must be between 1 and 4")
         self.root = Path(root).resolve()
@@ -139,6 +146,7 @@ class DemoApplication:
         self.threads = threads
         self.inference_lock = threading.Lock()
         self.feedback_service = feedback_service if feedback_service is not None else FeedbackService(self.root)
+        self.chat_service = chat_service if chat_service is not None else ChatService(self.root, capability_loader=self.feedback_service.capabilities)
         self.samples = self._catalog()
 
     def _catalog(self) -> dict[str, dict]:
@@ -183,7 +191,14 @@ class DemoApplication:
         return selected
 
     def prompts(self) -> dict:
+        def available(row):
+            try:
+                practice_reference(row, row["prompt_text"], "sentence")
+                return True
+            except ValueError:
+                return False
         return {"prompts": [{"id": row["utterance_id"], "text": row["prompt_text"],
+                             "live_available": available(row),
                              "speaker": row.get("speaker_id"), "duration_sec": row["duration_sec"],
                              "audio_url": "/api/samples/" + quote(row["utterance_id"], safe="")}
                             for row in self.samples.values()]}
@@ -288,7 +303,8 @@ class DemoApplication:
             gpu = probe.get("torch", {}).get("gpu", {}) if isinstance(probe.get("torch"), dict) else {}
             gpu_name = gpu.get("name") if isinstance(gpu, dict) else None
         return {"models": public, "default_model_id": default, "inference_device": "cpu", "training": training,
-                "capabilities": self.feedback_service.capabilities(),
+                "capabilities": {**self.feedback_service.capabilities(), "realtime": True,
+                                 "practice_modes": ["sentence", "word"], "live_interval_ms": 1200},
                 "system": {"platform": platform.system(), "python": platform.python_version(),
                            "offline": True, "inference_threads": self.threads, "sample_count": len(self.samples),
                            "gpu_name": gpu_name}}
@@ -308,10 +324,40 @@ class DemoApplication:
         except OSError:
             raise DemoError(503, "sample_unavailable", "Audio mẫu tạm thời không đọc được.") from None
 
-    def analyze(self, body: Any) -> dict:
+    def reference_info(self, body: Any) -> dict:
+        if not isinstance(body, dict) or set(body) != {"reference_text"}:
+            raise DemoError(400, "invalid_reference", "Chỉ gửi câu tham chiếu.")
+        text = body["reference_text"]
+        if (not isinstance(text, str) or not text.strip() or len(text) > 1000 or len(text.split()) > 100
+                or any(ord(c) < 32 and c not in "\t\r\n" for c in text)):
+            raise DemoError(400, "invalid_reference", "Câu tham chiếu cần 1–1.000 ký tự, tối đa 100 từ.")
+        row, missing = self._reference(text)
+        available = False
+        if row:
+            try:
+                practice_reference(row, text, "sentence")
+                available = True
+            except ValueError:
+                pass
+        return {"reference_text": text, "available": available, "missing_words": missing,
+                "source": row.get("reference_source", "dataset") if row else None}
+
+    def _reference(self, text: str) -> tuple[dict | None, list[str]]:
+        row = next((row for row in self.samples.values()
+                    if _normalize_text(text) == _normalize_text(row["prompt_text"])), None)
+        return (row, []) if row is not None else dictionary_reference(self.root, text)
+
+    def analyze(self, body: Any, *, live=False) -> dict:
         if not isinstance(body, dict):
             raise DemoError(400, "invalid_request", "Body phải là JSON object.")
         model_id, text = body.get("model_id"), body.get("reference_text")
+        mode, final, word_index = "sentence", True, 0
+        if live:
+            if set(body) - {"model_id", "reference_text", "audio_base64", "mode", "final", "word_index"}:
+                raise DemoError(400, "invalid_live_request", "Yêu cầu realtime có trường không được hỗ trợ.")
+            mode, final, word_index = body.get("mode", "sentence"), body.get("final", False), body.get("word_index", 0)
+            if not isinstance(mode, str) or mode not in {"sentence", "word"} or type(final) is not bool or type(word_index) is not int:
+                raise DemoError(400, "invalid_live_request", "Chế độ, vị trí từ hoặc trạng thái chốt không hợp lệ.")
         if not isinstance(model_id, str) or len(model_id) > 300:
             raise DemoError(400, "invalid_model", "Hãy chọn một model local.")
         if not isinstance(text, str) or not text.strip() or len(text) > 1000:
@@ -339,14 +385,23 @@ class DemoApplication:
                 raise DemoError(400, "invalid_audio", "Audio trống hoặc quá lớn.")
         # A browser recording/upload gets the same canonical prompt lookup as a
         # corpus sample. No perceived labels or gold error events enter inference.
-        row = next((row for row in self.samples.values()
-                    if _normalize_text(text) == _normalize_text(row["prompt_text"])), None)
+        row, missing = self._reference(text)
         if row is not None:
             reference = {key: row[key] for key in ("prompt_text", "canonical_phones", "canonical_word_indices", "word_intervals") if key in row}
+        parent_text = text.strip()
+        if live:
+            if row is None:
+                raise DemoError(409, "reference_unavailable", "Chưa có âm chuẩn cho mọi từ. Hãy chọn câu mẫu hoặc sửa từ chưa có trong từ điển.")
+            try:
+                text, reference = practice_reference(row, text, mode, word_index)
+            except ValueError as error:
+                raise DemoError(400, "invalid_word_reference", str(error)) from None
         models = self._models(self._run_dirs())
         model = models.get(model_id)
         if model is None:
             raise DemoError(409, "model_unavailable", "Model đang được cập nhật hoặc không còn sẵn; tải lại danh sách và thử lại.")
+        if live and (model["kind"] != "phoneme" or model["experimental"]):
+            raise DemoError(409, "live_model_unavailable", "Realtime cần checkpoint A/B/C đã huấn luyện; BASE chỉ trích xuất đặc trưng.")
         if not self.inference_lock.acquire(blocking=False):
             raise DemoError(409, "busy", "Model đang xử lý audio khác; thử lại sau.")
         try:
@@ -366,6 +421,20 @@ class DemoApplication:
                 result = {**result, "comparison": None}
             result = {**result, "model": result_model}
             result = {**result, "model_id": model_id, "reference_text": text.strip()}
+            result["reference_source"] = row.get("reference_source", "dataset") if row else None
+            if result["reference_source"] == "cmudict":
+                result["notice"] = result.get("notice", "") + " Âm chuẩn từ CMUdict tiếng Anh Mỹ, dùng cách đọc đầu tiên; biến thể phát âm có thể khác."
+            if live:
+                result["live"] = {"mode": mode, "is_final": final, "word_index": word_index if mode == "word" else None,
+                                  "parent_reference_text": parent_text, "tentative": not final}
+                if not final:
+                    result["comparison"] = prefix_comparison(text.strip(), reference, [phone["phone"] for phone in result.get("phonemes", [])])
+                    result["assessment"] = preview_assessment(result)
+                    result.update(analysis_kind="phoneme_comparison", feedback_available=False, analysis_id=None,
+                                  notice="Kết quả tạm thời theo phần đã đọc; có thể thay đổi khi nhận thêm âm thanh. Phần chưa đọc đang chờ.")
+                    if result["reference_source"] == "cmudict":
+                        result["notice"] += " Âm chuẩn CMUdict tiếng Anh Mỹ, cách đọc đầu tiên."
+                    return result
             return {**result, **self.feedback_service.register(result)}
         except DemoError:
             raise
@@ -414,6 +483,10 @@ class DemoServer(ThreadingHTTPServer):
         self.allowed_hostnames = frozenset({"127.0.0.1", "localhost", *trusted_lan_hosts})
         super().__init__(address, DemoHandler)
 
+    def server_close(self):
+        self.application.chat_service.close()
+        super().server_close()
+
 
 class DemoHandler(BaseHTTPRequestHandler):
     server_version = "MDDLocal/1.0"
@@ -459,6 +532,13 @@ class DemoHandler(BaseHTTPRequestHandler):
                     self._send_json(200, app.status())
                 elif path == "/api/prompts":
                     self._send_json(200, app.prompts())
+                elif path == "/api/chat/config":
+                    self._send_json(200, app.chat_service.config())
+                elif path.startswith("/api/chat/jobs/"):
+                    self._send_json(200, app.chat_service.poll(unquote(path[len("/api/chat/jobs/"):])))
+                elif path.startswith("/api/chat/audio/"):
+                    audio, content_type = app.chat_service.audio(unquote(path[len("/api/chat/audio/"):]))
+                    self._send(200, audio, content_type)
                 elif path.startswith("/api/samples/"):
                     self._send(200, app.sample_audio(unquote(path[len("/api/samples/"):])), "audio/wav")
                 elif path.startswith("/api/voice/"):
@@ -472,7 +552,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                     self._send(200, file.read_bytes(), types[file.suffix] + "; charset=utf-8")
                 else:
                     raise DemoError(404, "not_found", "Không tìm thấy tài nguyên.")
-            elif method == "POST" and path in {"/api/analyze", "/api/feedback"}:
+            elif method == "POST" and path in {"/api/analyze", "/api/analyze-live", "/api/feedback", "/api/reference", "/api/chat/send", "/api/chat/speech", "/api/chat/topic", "/api/chat/cancel", "/api/chat/voice", "/api/chat/reference"}:
                 if self.headers.get("Transfer-Encoding") is not None:
                     raise DemoError(400, "invalid_body", "Không hỗ trợ transfer encoding.")
                 if self.headers.get_content_type() != "application/json":
@@ -481,7 +561,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                 if len(lengths) != 1 or not lengths[0].isdigit():
                     raise DemoError(400, "invalid_body", "Content-Length không hợp lệ.")
                 length = int(lengths[0])
-                maximum = MAX_FEEDBACK_BODY_BYTES if path == "/api/feedback" else MAX_BODY_BYTES
+                maximum = 2 * 1024 * 1024 if path == "/api/chat/speech" else 65536 if path.startswith("/api/chat/") else MAX_FEEDBACK_BODY_BYTES if path in {"/api/feedback", "/api/reference"} else MAX_BODY_BYTES
                 if not 0 < length <= maximum:
                     raise DemoError(413, "body_too_large", "Nội dung yêu cầu vượt quá giới hạn của API.")
                 self.connection.settimeout(20)
@@ -492,10 +572,15 @@ class DemoHandler(BaseHTTPRequestHandler):
                     body = json.loads(raw)
                 except (OSError, UnicodeError, ValueError):
                     raise DemoError(400, "invalid_json", "JSON không hợp lệ hoặc chưa tải đủ.") from None
-                self._send_json(200, app.feedback(body) if path == "/api/feedback" else app.analyze(body))
+                if path.startswith("/api/chat/"):
+                    handler = {"/api/chat/send": app.chat_service.submit, "/api/chat/speech": app.chat_service.submit_speech, "/api/chat/topic": app.chat_service.start_topic, "/api/chat/cancel": app.chat_service.cancel, "/api/chat/voice": app.chat_service.voice, "/api/chat/reference": app.chat_service.reference}[path]
+                    result = handler(body)
+                else:
+                    result = app.feedback(body) if path == "/api/feedback" else app.reference_info(body) if path == "/api/reference" else app.analyze(body, live=path == "/api/analyze-live")
+                self._send_json(200, result)
             else:
                 raise DemoError(404, "not_found", "Không tìm thấy API.")
-        except DemoError as error:
+        except (DemoError, ChatError) as error:
             self._send_json(error.status, {"error": error.code, "message": error.message})
         except (BrokenPipeError, ConnectionResetError):
             pass

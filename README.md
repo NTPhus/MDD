@@ -2,6 +2,40 @@
 
 Quy trình chuẩn bị dữ liệu, fine-tune và đánh giá nằm trong [TRAINING.md](TRAINING.md). Protocol dữ liệu đã khóa ở [data/protocol/l2arctic-v1](data/protocol/l2arctic-v1/); giấy tờ tham khảo ở [papers](papers/README.md).
 
+Bạn chủ động bắt đầu train bằng lệnh terminal hoặc bật cờ trong cell tương ứng. Hai notebook cascade/Projector mặc định đặt `RUN_TRAIN=False` / `RUN_PROJECTOR_TRAIN=False`, nên Run All không khởi chạy train. Qwen cascade và Projector alignment đã hoàn tất; chưa có checkpoint Projector feedback. Pipeline kiểm thử riêng được thực hiện theo yêu cầu, giữ nguyên cache và checkpoint đã train.
+
+Workflow mới **wav2vec2 + Qwen3-0.6B trên L2-Arctic-plus** nằm trong [notebook train và so sánh cascade](notebooks/mdd_cascade_training_comparison.ipynb). Cả hai model dùng protocol mới [l2arctic-plus-cascade-v1](data/protocol/l2arctic-plus-cascade-v1/): 2.249 train / 450 validation / 900 test, không trùng speaker/utterance giữa các vai trò. wav2vec2 A dùng 1.949 source train, B thích ứng bằng 300 mẫu Việt Nam với source replay 50%; Qwen học lời hướng dẫn tiếng Anh gốc từ nhãn công bố. Checkpoint A/B cũ không được dùng cho thí nghiệm này vì source train cũ chứa 750 mẫu trong test Plus.
+
+Chạy từ project root (Windows dùng `.venv/Scripts/python.exe`, Linux dùng `.venv/bin/python`):
+
+```powershell
+.venv/Scripts/python.exe -X utf8 scripts/run_cascade_training.py --phase prepare
+.venv/Scripts/python.exe -X utf8 scripts/run_cascade_training.py --phase all
+.venv/Scripts/python.exe -X utf8 scripts/run_cascade_training.py --phase status
+.venv/Scripts/python.exe -X utf8 scripts/report_cascade.py
+```
+
+Launcher chạy tuần tự A → B → Qwen → audio test → Qwen oracle → bốn cấu hình A/Q0, A/Q1, B/Q0, B/Q1 → report, có log/checkpoint và resume. `--phase train` chỉ train, `--phase evaluate` chỉ đo các model đã train. Cấu hình ở [cascade_l2arctic_plus.json](configs/cascade_l2arctic_plus.json); giữ A 2.000 updates, B 400 updates và Qwen 3 epochs. Config C source-only cùng budget B được cung cấp riêng để làm đối chứng thích ứng khi cần. Các file cấu hình/code quan trọng được hash khi bắt đầu; thay đổi recipe cần run/report root mới.
+
+Qwen chỉ nhận câu tham chiếu và các nhãn âm vị, không nhận audio. Oracle dùng nhãn công bố; cascade dùng âm wav2vec2 dự đoán và đối chiếu canonical, không đọc perceived/gold để tạo đầu vào. Trường hợp không gán được âm vào từ sẽ abstain và vẫn tính trong mẫu số. JSON sai không được thay template để nâng tỷ lệ thành công. Qwen train bằng NF4 QLoRA, đánh giá cả Q0/Q1 cùng BF16/FP16 và greedy; loss projection theo chunk giảm bộ nhớ mà giữ objective. Đã kiểm tra loss/gradient và một update thật trên các mẫu train dài nhất, LoRA đổi trọng số, peak allocated khoảng 1,82 GiB; đây là smoke kỹ thuật, không phải kết quả chất lượng sau train.
+
+Notebook có audio mẫu và biểu đồ dữ liệu; report tại `data/generated/cascade-l2arctic-plus-seed42/report/` có learning curves, CSV, JSON, PNG/SVG và `report.html` tự chứa. Audio báo PER/F1/FRR; feedback báo word-key coverage, BLEU-2, ROUGE-L, NLL/perplexity và latency. Delta ROUGE-L bootstrap ghép cặp theo speaker; không đánh đồng lexical similarity với tính đúng ngữ âm hay tiến bộ của người học. Khi train/test chưa xong, report ghi đang chờ, không có điểm sau train giả định. Nhánh duyệt template trước đây vẫn được giữ cho dữ liệu tự tạo; workflow công bố mới không yêu cầu duyệt lại các mẫu đó.
+
+## Nhánh Projector multimodal và đối chứng cascade
+
+[Notebook Projector](notebooks/mdd_projector_training_comparison.ipynb) thêm nhánh **audio → wav2vec2 B đóng băng → Linear/GELU/Linear → Qwen3-0.6B**. Vector audio 768 được chiếu sang embedding 1024 rồi ghép với text; không đưa nhãn lỗi gold vào đầu vào. Giữ cascade hiện tại và cùng split 2.249/450/900. Cấu hình riêng ở [projector_l2arctic_plus.json](configs/projector_l2arctic_plus.json).
+
+```powershell
+.venv/Scripts/python.exe -X utf8 scripts/run_projector_training.py --phase prepare
+.venv/Scripts/python.exe -X utf8 scripts/run_projector_training.py --phase all
+.venv/Scripts/python.exe -X utf8 scripts/run_projector_training.py --phase status
+.venv/Scripts/python.exe -X utf8 scripts/report_projector.py
+```
+
+Runner chờ B mới hoàn tất, cache đặc trưng trên CPU rồi chờ GPU lock của cascade. Giai đoạn 1 train Projector bằng audio/transcript train trong 1 epoch (prompt không chứa transcript); giai đoạn 2 train Projector + LoRA q/v của Qwen trong 3 epochs bằng feedback tiếng Anh. Mỗi giai đoạn có stress test một update thật trước khi chạy đầy đủ, checkpoint/resume và chọn best bằng validation. Khả năng chứa mô hình đầy đủ trên 4 GB chỉ được xác nhận khi stress test GPU hoàn tất; kiểm thử CPU không thay thế phép đo đó.
+
+P0 là Projector đã alignment + Qwen gốc, P1 là sau task tuning. Report so sánh P0/P1 và cascade B_Q1 trên cùng 900 test, giữ JSON lỗi trong mẫu số, lưu loss curves, CSV/JSON, PNG/SVG, ví dụ cố định và bootstrap theo speaker tại `data/generated/projector-l2arctic-plus-seed42/report/`. Đây là thử nghiệm nhỏ: alignment chỉ dùng 2.249 audio/transcript, khác 200k CommonVoice và backbone lớn trong [bài báo gốc](https://aclanthology.org/2026.findings-eacl.190/); không gán điểm công bố cho Qwen3-0.6B. So sánh hai nhánh không cùng compute vì có thêm giai đoạn alignment. Chưa benchmark xong thì report hiển thị đang chờ.
+
 ## Notebook local: demo, visualization và kiểm thử so sánh
 
 [mdd_local_demo_comparison.ipynb](notebooks/mdd_local_demo_comparison.ipynb) chia từng bước thành cell riêng, có hướng dẫn tiếng Việt: kiểm tra môi trường/model, audit split, phân bố dữ liệu, nghe audio, waveform/spectrogram, annotation, suy luận BASE/phoneme, unit tests, contract, smoke, train/resume A/B/C, learning curves, đánh giá test và biểu đồ so sánh có kiểm chứng.
@@ -20,6 +54,40 @@ Trong notebook, chọn **MDD (.venv)** rồi chạy **Shift+Enter** từng cell 
 Chuỗi train thật chạy tuần tự A (2.000 updates) → B (400) → C (400), dùng cùng best checkpoint A. Lệnh khởi chạy trong terminal là `pwsh -File scripts/run_training_sequence.ps1 -Experiment windows-notebook-seed42 -Seed 42 -Fold 1`; nếu chuỗi đã chạy thì theo dõi log, không khởi chạy thêm. State và log nằm tại `data/generated/training/windows-notebook-seed42-fold1/`, checkpoint tại `runs/windows-notebook-seed42-*/`. Khi chuỗi đã dừng giữa chừng và có checkpoint, dùng cùng lệnh với `-ResumeExisting` để tiếp tục.
 
 Hình PNG, bảng CSV, JSON và log được lưu theo phiên trong `data/generated/notebook/`. **Ctrl+S** lưu biểu đồ và output trực tiếp trong `.ipynb`. Notebook dùng audio demo từ source train. Kết quả smoke được ghi rõ là kiểm tra kỹ thuật; bảng/biểu đồ A/B/C chỉ tạo khi có đủ test khoa học và qua verifier, không tạo điểm minh họa thay cho kết quả còn thiếu. Notebook Colab hiện có vẫn nằm ở [train_mdd_colab.ipynb](notebooks/train_mdd_colab.ipynb).
+
+## Đối thoại Qwen local
+
+Mở **http://127.0.0.1:8765/#chat** hoặc chọn **Đối thoại AI**. Chọn một trong 8 chủ đề (đời sống, du lịch, ăn uống, công việc, sở thích, công nghệ, học tập, thành phố), hoặc chọn **Free conversation** / **Read a sentence**. Bot mở lời trước theo chủ đề. Phòng hội thoại giữ bảng màu xanh/kem của ứng dụng: câu của bạn bên phải trên nền xanh nhạt, câu của Qwen bên trái trên nền sáng. Bảng **Thử dùng các từ sau** có từ khóa bấm nghe và mẫu mở đầu câu, nằm phía trên nút mic tròn ở giữa. Lịch sử được giữ riêng theo chủ đề và coach; mũi tên quay lại mở danh sách chủ đề. **Kết thúc** dừng mic/giọng đọc, gửi yêu cầu hủy lượt đang xử lý và quay lại danh sách; lịch sử vẫn được giữ.
+
+Nhấn mic **Nhấn để nói**, nhấn lần nữa để gửi hoặc chọn **Tải audio**, không có ô nhập tin nhắn. Bản thu tối đa 30 giây; file WAV/MP3/M4A/OGG/FLAC/WebM được trình duyệt giải mã và đổi thành WAV mono 16 kHz. Dưới mỗi lượt nói có thanh **Xem lỗi phát âm**, luôn đóng khi có kết quả mới. Bấm mở mới thấy các từ model đánh dấu cần luyện, âm kỳ vọng/nhận được và hướng dẫn; mở panel không tự đọc chúng. Tùy chọn mode, coach, voice, cuộc trò chuyện mới và xuất JSON nằm trong nút **Giọng đọc** trên header (ngoài phòng là **Settings**). Có thể dừng AI/voice độc lập và nghe lại bản thu bằng **Nghe bản thu**.
+
+Trong panel phát âm, **Câu dùng để đối chiếu** cho biết chính xác câu đang dùng làm mục tiêu. Nếu ASR trả từ ngoài CMUdict như `fravorit`, hệ thống hiện một trạng thái chờ xác nhận thay vì nhiều thông báo thiếu reference. Có thể có bản nháp chính tả (`favorite` hoặc `flavorist` đều là ứng viên), nhưng chưa dùng để chấm. Người dùng sửa/xác nhận câu mình đã nói rồi bấm **Đối chiếu audio này**; `/api/chat/reference` dùng lại phoneme đã dự đoán của bản thu, không cần ghi lại, chạy lại ASR/wav2vec2/Qwen hoặc tạo lượt chat mới. Transcript và lịch sử gốc giữ nguyên; lời khuyên cũ được xóa khi câu đích thay đổi. Đây là tham chiếu do người dùng xác nhận, không phải câu gold độc lập của bài test. Từ chưa có âm chuẩn sẽ không bị tự gán âm hoặc âm của từ đó sang từ bên cạnh.
+
+Trong panel, mỗi từ được đánh dấu có một dòng **từ · phiên âm IPA · Nghe**; bấm vào từ để mở chi tiết sai khác âm. **Nghe cả câu** nằm cuối phần **Sound details**, đọc đúng câu đang dùng làm mục tiêu, không đọc câu trả lời bot hoặc câu hoàn thiện thay cho nó. Các nút này dùng giọng tiếng Anh của trình duyệt và chỉ phát khi bấm. Phiên âm rộng theo CMUdict Mỹ, giữ trọng âm trong metadata `pronunciation_phones` riêng; chuỗi `phones` dùng so sánh âm giữ nguyên. Bản ghi cũ thiếu metadata trọng âm chỉ hiện các âm có sẵn, không tự đoán trọng âm.
+
+Bot được yêu cầu phản hồi trực tiếp ý người học, không nhắc lại hoặc đọc lại câu của người học. Phần hoàn thiện ý vẫn giữ riêng trong mục con **Hoàn thiện câu (tùy chọn)**, đóng mặc định bên trong panel phát âm và chỉ hiện khi có bổ sung. Không lặp lại khối **You said**. **Listen** chỉ đọc mẫu khi người dùng bấm. Ví dụ, sau câu hỏi đi đâu, `Japan` có thể thành `I would love to travel to Japan.`; `Yesterday I go to the park with my friend` giữ nguyên từ `go`. Parser chặn thay từ, đổi thì, xóa/đảo từ và chèn từ vào giữa câu đã nói. Chỉ thêm khung đầu câu đã nhận diện từ câu hỏi trước hoặc kết thúc câu bằng nội dung chính người học đã nói. Thiếu ngữ cảnh thì giữ nguyên; output vi phạm bị withheld/unavailable và hội thoại vẫn tiếp tục. Kết quả mang `mode=completion_only`; thẻ sửa ngữ pháp của phiên cũ được ẩn để tránh nhầm.
+
+**Practise this sentence** chọn câu đã hoàn thiện làm mục tiêu cho bản thu tiếp theo. Browser gửi `correction_job_id`; server lấy câu từ một lượt completion-only đã hoàn tất cùng topic/coach, không nhận câu mục tiêu do client tự gán hoặc gợi ý sửa ngữ pháp cũ. Khi đọc lại, giữ tên trường tương thích `reference_source=corrected_sentence`, so âm trên audio mới và bỏ qua bước hoàn thiện câu. **Back to conversation**, đổi topic/model hoặc rời màn hình xóa lựa chọn luyện lại. Câu đã lưu sau reload vẫn xem/nghe được; luyện lại cần lượt có ID còn hiệu lực trong phiên. Audio gốc luôn đối chiếu transcript ASR gốc, không dùng câu đã hoàn thiện để chấm lại audio cũ.
+
+Chủ đề, lời mở đầu và ngân hàng từ/mẫu câu là nội dung biên soạn sẵn tại [speech_topics.py](src/mdd/speech_topics.py), không phải kết quả dự đoán. Qwen nhận lời mở đầu, lịch sử lời nói gốc và câu trả lời bot; câu hoàn thiện không ghi đè lịch sử. Bot được yêu cầu trả lời tự nhiên, không bắt buộc hỏi ở mỗi lượt, cho phép câu hỏi yes/no, hỏi rõ khi nghe không hiểu và đi theo khi người học đổi chủ đề. Code không nối câu hỏi mẫu sau câu trả lời hợp lệ của Qwen. Context dài được rút theo từng cặp lượt, giữ nguyên câu hiện tại. Từ gợi ý chỉ hiện khi khớp câu hỏi thực tế của bot; câu trả lời thông thường hoặc đổi chủ đề sẽ ẩn gợi ý cũ. Chức năng này không train thêm model; Qwen3-0.6B vẫn có thể hiểu nhầm hoặc phản hồi chưa tự nhiên.
+
+Chữ trả lời hiện dần theo từ từ output thật của Qwen. Mặc định **Browser · Live voice** chỉ đọc câu trả lời của bot theo từng câu/đoạn ngay khi đủ chữ. Trình duyệt hỗ trợ word boundaries sẽ tô sáng từ đang đọc; trình duyệt khác vẫn hiện chữ dần và đọc theo đoạn. Lỗi/hướng dẫn phát âm đến sau không được đọc thêm; browser live, **Phát lại** và ai33 đều chỉ đọc câu trả lời. **Stop voice**, đổi tab hoặc tắt **Read aloud** chặn audio đang đọc và phần đến muộn. Nếu trình duyệt chặn tự phát, nhấn **Phát lại** khi có kết quả. **ai33 · Full reply** chờ lượt xử lý hoàn tất rồi tạo audio, có thể dùng API credits. Nghe từ mẫu hoặc câu đã hoàn thiện cần bấm nút riêng trong panel.
+
+Bộ lọc stream chặn câu lặp hoàn chỉnh trước khi hiện chữ/phát voice, kể cả câu ngắn, câu lặp sau lời dẫn và dạng chuyển ngôi `I like pizza` → `You like pizza`. Câu có thông tin mới như `Japan sounds exciting` và câu hỏi làm rõ ngắn vẫn được giữ. Câu chào/câu hỏi dài của bot trong lịch sử cũng được kiểm tra để chặn phát lại lời mở đầu. Raw output giữ tại `metadata.raw_reply_text`, phần bị bỏ tại `omitted_echoes` (cùng alias tương thích `omitted_leading_echoes`). Nếu output chỉ có câu lặp, Qwen thử sinh lại đúng một lần trên cùng lịch sử/câu nói, tối đa 96 token/35 giây, trước khi dùng lời xin làm rõ cuối cùng. `reply_attempts`, `reply_generation_attempts` và `reply_source=qwen_retry` ghi rõ lượt thử lại; không tạo lượt chat hay đổi câu gốc. Đây là lọc mẫu câu xác định, không đảm bảo nhận biết mọi cách diễn đạt lại cùng ý.
+
+Riêng hội thoại chọn `generation_profile=conversation`: sampling `temperature=0.7`, `top_p=0.8`, `top_k=20`, `min_p=0` theo [hướng dẫn Qwen3-0.6B cho non-thinking](https://huggingface.co/Qwen/Qwen3-0.6B#best-practices). Hoàn thiện ý và coaching có cấu trúc giữ cấu hình sinh trước đó; thiết lập này không đổi trọng số, quá trình train hay benchmark nghiên cứu.
+
+Với chủ đề café, một lựa chọn rõ như `I would like to order one coffee and one milk tea please` mở frame gọi món có bằng chứng từ chính lời người học. Đã chọn đồ uống thì Qwen được yêu cầu hỏi một chi tiết chưa có: nóng/lạnh, kích cỡ, rồi dùng tại chỗ/mang đi. Trạng thái và lời đã trả lời được dựng từ lịch sử thật; câu hỏi mở đầu biên soạn sẵn không được chèn lại vào prompt của frame này. Lời chào café ban đầu cũng chỉ hỏi gọi món, không hỏi thêm lý do món yêu thích. Câu trả lời ngắn được nối với câu hỏi trước, còn câu không nhận diện chắc hoặc chuyển sang chuyện khác sẽ rời frame để tiếp tục hội thoại tự do. Đây là bộ quy tắc café có giới hạn, không phải bộ hiểu ý tổng quát cho mọi chủ đề.
+
+Trong frame café, mỗi câu Qwen sinh được kiểm tra trước khi chuyển tới UI/voice: chặn Welcome lại, hỏi lựa chọn đã biết, hỏi lại nhiệt độ/kích cỡ đã có hoặc nói nhầm vai khách hàng. Khi bước tiếp theo cần một câu hỏi, lời xác nhận chỉ được công bố cùng câu hỏi hợp lệ; chỉ có lời xác nhận thì thử Qwen lại một lần. `conversation_state`, `blocked_questions` và `reply_attempts` ghi rõ bằng chứng, nguyên nhân chặn và output gốc. Không thay bằng câu hỏi soạn sẵn dưới tên Qwen. Nếu cả hai lượt không tạo được câu hợp lệ, trạng thái `conversation_unavailable` nói rõ không tiếp lời được, không bảo người dùng rằng audio/câu gọi món chưa rõ. Kiểm thử text-fixture với Qwen thật: `python scripts/check_order_conversation_live.py`; ASR/phát âm/completion trong phép thử này là fixture được ghi rõ, không phải kết quả đánh giá audio.
+
+Pipeline CPU local: **wav2vec2-base-960h ASR → wav2vec2 B dự đoán âm → đối chiếu CMUdict → Qwen trả lời và gợi ý tiếng Anh**. Qwen gốc sinh câu đối thoại; lựa chọn Original/Fine-tuned điều khiển model tạo gợi ý phát âm bằng nhãn âm ước lượng (không dùng Projector). Các bản thu, transcript, sai khác âm và gợi ý đều thuộc lượt chat riêng. ASR và B chạy trước, nên có thể xem transcript/âm ước lượng trong lúc Qwen còn xử lý; gợi ý không hợp lệ được đánh dấu unavailable, không dựng kết quả model giả. Có thể hover/tap từ được đánh dấu để xem âm kỳ vọng, âm nhận được, chuỗi ARPAbet và nghe từ mẫu.
+
+**Conversation** đối chiếu âm với transcript ASR suy ra, nên có thể sai do ASR nghe nhầm hoặc sửa từ. **Read a sentence** dùng câu mẫu độc lập với audio; câu chuẩn và nút nghe mẫu vẫn hiện trên khung chat khi đóng Settings. Hai chế độ đều chỉ trả lời/đọc bằng tiếng Anh; model vẫn có thể đánh dấu sai, không diễn giải thành điểm chính xác hay kết luận của giáo viên. Chức năng mic dùng Web Audio/AudioWorklet, cần HTTPS hoặc localhost và quyền microphone; không dùng SpeechRecognition hoặc gửi audio tới dịch vụ nhận dạng của trình duyệt. Upload dùng được khi mic không khả dụng.
+
+Worker riêng dùng CPU 2 threads, giữ GPU cho tác vụ người dùng tự chạy. Qwen gốc/LoRA dùng chung backbone trong RAM; model nạp khi xử lý audio. Không gọi LLM API và không khởi động train. SessionStorage giữ lịch sử của tab; server giữ tối đa 32 lượt trong bộ nhớ và không lưu audio upload ra đĩa. Giọng mặc định dùng SpeechSynthesis tiếng Anh; chọn ai33 sẽ gửi text trả lời của bot để tạo voice tiếng Anh và có thể tính phí. Không cần API key cho ASR, MDD, Qwen và giọng trình duyệt.
+
+Source của mục mới: [demo/chat.js](demo/chat.js), [demo/chat.css](demo/chat.css), [src/mdd/demo_chat.py](src/mdd/demo_chat.py); các endpoint `/api/chat/*` tách khỏi `/api/analyze*` và `/api/feedback`. Khởi chạy web bằng launcher bên dưới.
 
 ## UI demo local
 
@@ -171,7 +239,7 @@ Tải checkpoint công khai (~1,5 GB), khóa revision và kiểm SHA-256 với H
 
 Linux dùng `.venv/bin/python` thay cho `.venv/Scripts/python.exe`. File [feedback_local.env.example](configs/feedback_local.env.example) dùng CPU inference để giữ VRAM cho train; giới hạn context 4.096 token, tắt thinking. Có thể chọn `LLM_LOCAL_DEVICE=cuda` sau khi đo bộ nhớ thực. Lượt thử trên assessment minh họa chỉ kiểm tra tích hợp, không chứng minh chất lượng hướng dẫn. Bản gốc đã cho lời giải thích sai/chung chung ở âm TH dù JSON hợp lệ; **chưa kích hoạt backend này thay gateway trên demo**. Không bật cho người học chỉ vì schema hợp lệ.
 
-Fine-tune phần hướng dẫn dùng dữ liệu **assessment → feedback đã được người có chuyên môn duyệt**. L2-ARCTIC hiện có audio/nhãn âm vị, chưa có nhãn lời hướng dẫn. [review.example.jsonl](data/feedback/review.example.jsonl) là mẫu tổng hợp **chưa duyệt**, không phải dữ liệu train. Có thể nhập JSON tải từ demo thành hàng đợi duyệt:
+Pipeline Qwen hiện nhận dữ liệu **assessment → feedback đã được người có chuyên môn duyệt**. L2-ARCTIC gốc có audio/nhãn âm vị; bản mở rộng **L2-Arctic-plus** có thêm nhãn lời hướng dẫn công bố (xem bên dưới), có thể dùng để xây nhánh train từ dữ liệu công khai. [review.example.jsonl](data/feedback/review.example.jsonl) là mẫu tổng hợp **chưa duyệt**, không phải dữ liệu train. Có thể nhập JSON tải từ demo thành hàng đợi duyệt:
 
 ```powershell
 .venv/Scripts/python.exe scripts/prepare_feedback_data.py draft path/to/downloaded-result.json --output data/feedback/drafts.jsonl
@@ -187,6 +255,12 @@ Người duyệt sửa nội dung hướng dẫn, xác nhận âm mong đợi/â
 ```
 
 Recipe [QLoRA cho RTX 3050](configs/feedback_qlora_rtx3050.json) dùng NF4 4-bit, LoRA rank 8 ở `q_proj`/`v_proj`, batch 1, tích lũy gradient 8, context tối đa 3.072 token và gradient checkpointing. Chỉ token câu trả lời assistant đóng góp loss; prompt được mask `-100`. Model nền giữ nguyên; train các adapter LoRA. Chọn checkpoint bằng validation loss, không dùng test để train. Chạy riêng với tiến trình train MDD; khả năng vừa VRAM và tốc độ trên RTX 3050 cần xác nhận bằng lượt train thật. Hiện chưa có dữ liệu đã duyệt hoặc lượt QLoRA khoa học hoàn tất.
+
+Setup Windows ngày 21/10/2026 đã cài `peft`, `accelerate`, `bitsandbytes`, tải và xác minh Qwen3-0.6B. Kiểm tra kỹ thuật bằng Trainer đã hoàn thành 1 optimizer update, accumulation 8, validation và lưu checkpoint trên RTX 3050 4 GB; tensor thử dài 3.072 token (2.308 token thật, còn lại padding), peak allocated khoảng 2,12 GiB. Collator dùng `logits_to_keep` và nhãn đã shift để bỏ projection ở vị trí không đóng góp loss, vẫn giữ toàn bộ prompt; test so sánh loss và gradient với cách tính đầy đủ đã đạt. Xem [API Qwen3](https://huggingface.co/docs/transformers/v4.57.1/en/model_doc/qwen3) và report tại `runs/local-checks/feedback-qlora-20261021-trainer/report.json`. Đây là kiểm tra kỹ thuật dùng mẫu chưa duyệt, chưa phải train hay đánh giá chất lượng adapter chính.
+
+[Notebook duyệt dữ liệu và train LLM](notebooks/feedback_review_and_training.ipynb) đã có output, audio và công cụ sửa assessment/feedback, nhập người duyệt rồi bấm lưu. Có 300 bản nháp template offline tại `data/feedback/drafts-20261021-cef406b.jsonl`, tất cả còn `approved=false`; nguồn là kết quả validation đã lưu của A/B, không dùng test. Nếu mọi mẫu được duyệt, split dự kiến là 242/29/29 train/validation/test. Hướng dẫn template cần được sửa và kiểm tra chuyên môn. Dữ liệu được duyệt lưu riêng ở `data/feedback/reviewed.jsonl`; các cell prepare/train mặc định tắt và giữ yêu cầu tối thiểu 100 train, 20 validation. Tạo lại bộ nháp mới bằng `python -X utf8 scripts/create_feedback_review_drafts.py --output data/feedback/ten-moi.jsonl`.
+
+Để dùng nhãn hướng dẫn đã công bố, [notebook L2-Arctic-plus](notebooks/l2arctic_plus_dataset_audit.ipynb) kiểm tra release chính thức ghim commit `e8c7684c545d94f2419fc4621e745236c192a353`, đã tải vào `data/external/l2arctic-plus/`. File thực tế có **2.699 train / 900 test**, khác số train 1.699 ghi trong README của repo tác giả. [Bài báo Findings of EACL 2026](https://aclanthology.org/2026.findings-eacl.190.pdf), mục 3.2, mô tả GPT-4o tạo lời hướng dẫn và ba người kiểm tra bộ đánh giá; mục 6.1 nói rõ lời hướng dẫn train được GPT-4o tạo **không qua kiểm tra thủ công**. Không cần người dùng duyệt lại toàn bộ nhãn công bố như các template tự tạo, nhưng phải giữ đúng provenance. Split chính thức không trùng utterance/người nói; có 300 câu tham chiếu chuẩn hóa chung, nên không phải đánh giá trên câu hoàn toàn mới. Nhãn gốc bằng tiếng Anh, chưa chuyển sang contract/tiếng Việt của demo và chưa train bằng Plus. Script `python -X utf8 scripts/audit_l2arctic_plus.py` kiểm tra checksum, cấu trúc và split; report ở `data/generated/setup/l2arctic_plus_audit.json`.
 
 Đánh giá model gốc và adapter trên cùng validation; sau khi khóa recipe mới dùng test. Hai báo cáo lưu cả phản hồi để giáo viên so sánh tính đúng, cụ thể và dễ thực hành:
 
@@ -287,6 +361,47 @@ audio_files = [
 
 Demo local đã tích hợp hai adapter theo luồng trên. Cần điền key và voice ID thật vào `.env` để kiểm tra với tài khoản đang dùng; khi chưa có key, bộ kiểm thử dùng provider giả lập. Với feedback tiếng Anh Anh, chọn voice Anh Anh cho `AI33_VOICE_EN` hoặc truyền `voice_id` phù hợp. Giữ nguyên câu mẫu khi gửi TTS; ký hiệu IPA riêng lẻ cần audio mẫu đã kiểm tra.
 
+## Kiểm thử độc lập trên SpeechOcean762
+
+[Notebook kiểm thử ngoài L2-ARCTIC](notebooks/mdd_external_validation.ipynb) lưu kết quả thật, biểu đồ và ví dụ audio theo từng cell. Dataset [SpeechOcean762, Interspeech 2021](https://www.isca-archive.org/interspeech_2021/zhang21x_interspeech.pdf) có nhãn từ 5 chuyên gia; giấy phép gốc [OpenSLR 101: CC BY 4.0](https://www.openslr.org/101/). Mã nguồn chính thức được ghim tại commit `613968e3b0b789fc33936fb5eba1973176ba7d11`.
+
+Protocol được chốt trước suy luận trong [configs/external_speechocean762.json](configs/external_speechocean762.json): B chạy toàn bộ 2.500 câu test; A/C và B được so sánh riêng trên cùng 179 câu mà cả 5 chuyên gia chấm mọi âm đúng, không ghi nhận âm thừa. Không train lại, chỉnh ngưỡng hoặc gọi LLM/ai33. Nhãn accent nặng nhưng đúng được chấp nhận; lỗi theo vị trí âm chuẩn cần ít nhất 3/5 chuyên gia chấm sai/thiếu. Chỉ số này khác rubric của L2-ARCTIC; không tính PER khi thiếu phiên âm thực tế đầy đủ. Bộ này gồm người nói tiếng Trung học tiếng Anh, có cả trẻ em, nên chưa xác lập chất lượng trên TTS hoặc giọng bản ngữ.
+
+```powershell
+.venv\Scripts\python.exe -X utf8 scripts/prepare_external_speechocean.py --download
+.venv\Scripts\python.exe -m unittest discover -s tests -p test_external_speechocean.py -v
+.venv\Scripts\python.exe -X utf8 scripts/evaluate_external_speechocean.py --checkpoint windows-notebook-seed42-B-fold1 --selection full-test --threads 2 --output data/generated/external/new-run/B-full
+.venv\Scripts\python.exe -X utf8 scripts/evaluate_external_speechocean.py --checkpoint windows-notebook-seed42-A --selection perfect-control --threads 2 --output data/generated/external/new-run/A-control
+.venv\Scripts\python.exe -X utf8 scripts/evaluate_external_speechocean.py --checkpoint windows-notebook-seed42-C-fold1 --selection perfect-control --threads 2 --output data/generated/external/new-run/C-control
+.venv\Scripts\python.exe scripts/report_external_speechocean.py --results data/generated/external/new-run
+```
+
+Dùng thư mục kết quả mới cho mỗi lượt chạy. Thêm `--resume` vào lệnh đánh giá để tiếp tục lượt cũ với cùng checkpoint, code, protocol và dữ liệu. ZIP/WAV nằm trong `data/external/`, không được đưa vào Git. Script chỉ giải nén WAV thuộc test chính thức; kiểm tra hash metadata, WAV, manifest và checkpoint; ghi rõ lỗi và độ phủ thay vì loại mẫu âm thầm. Kết quả gồm `predictions.jsonl`, `metrics.json`, manifest và CSV theo âm/người nói/nhóm tuổi/giới tính. Notebook mặc định đọc cache; các biến chạy tải/suy luận mặc định tắt.
+
+## Kiểm thử checkpoint Projector hiện có
+
+[Notebook pipeline và kiểm thử](notebooks/mdd_projector_validation.ipynb) lưu riêng dữ liệu, loss, kết quả A/B, Projector, cascade Qwen và raw output theo từng cell. Run All chỉ đọc kết quả; các cell chạy suy luận/đánh giá có cờ mặc định `False`. Báo cáo có biểu đồ, CSV và ví dụ ở `data/generated/projector-validation-v1/report/report.html`.
+
+Pipeline mới trong `scripts/projector_inference.py`: WAV → resample 16 kHz → encoder B đóng băng → MLP Projector → embedding Qwen3-0.6B → text. `--stage auto` chỉ chọn checkpoint đã train hoàn tất và qua kiểm tra hash. Nếu chỉ có alignment, output ghi rõ chưa được học task feedback; không coi JSON đúng cấu trúc là chẩn đoán phát âm đúng. Nhánh cascade và web hiện tại được giữ riêng.
+
+```powershell
+# Chỉ kiểm thử; không có lệnh train. Đọc lại cache hợp lệ hoặc chạy tiếp khi chưa xong.
+.venv\Scripts\python.exe -X utf8 -u scripts/run_projector_validation.py --phase all
+.venv\Scripts\python.exe -X utf8 scripts/run_projector_validation.py --phase status
+Get-Content data\generated\projector-validation-v1\checkpoint_benchmark.log -Tail 25 -Wait
+
+# Tự thử một WAV; đổi đường dẫn file và câu chuẩn.
+.venv\Scripts\python.exe -X utf8 scripts/projector_inference.py --audio "D:\path\recording.wav" --task alignment --max-new-tokens 128
+.venv\Scripts\python.exe -X utf8 scripts/projector_inference.py --audio "D:\path\recording.wav" --task feedback --reference "The sentence you read." --output data/generated/my_projector_result.json
+.venv\Scripts\python.exe -X utf8 scripts/projector_composed_inference.py --audio "D:\path\recording.wav" --reference "The sentence you read." --output data/generated/my_composed_result.json
+```
+
+Protocol tại `configs/projector_validation.json`: A/B cùng 900 test; NLL transcript đủ 900 với Projector ngẫu nhiên, sau alignment và tắt latent audio; sinh transcript pilot 30 mẫu và feedback pilot 12 mẫu (cân bằng 6 speaker, chọn bằng hash trước khi suy luận). Các trường hợp feedback gồm Projector P0, cascade B+Qwen gốc/B+LoRA và oracle Qwen nhận gold phones để chẩn đoán riêng. Cùng pilot dùng greedy decoding, giới hạn 512 token; output sai JSON/schema hoặc chưa có EOS vẫn nằm trong mẫu số. Kiểm tra 6 WAV thật phải cho latent trùng cache. Không train lại, sửa output bằng template, gọi API ngoài hoặc dùng test để chọn checkpoint.
+
+Có thử thêm tổ hợp **Projector alignment + LoRA Qwen cascade** bằng nguyên trọng số đã có, lưu riêng tại `feedback_projector_cascade_adapter_transfer`. Adapter này học từ nhãn âm dạng text; chưa học nhận embedding audio, nên tổ hợp thử nghiệm không được gọi là P1. CLI `projector_composed_inference.py` cho phép thử WAV riêng theo đúng tổ hợp này.
+
+Baseline Projector ngẫu nhiên là khởi tạo theo seed cố định, không phải checkpoint step 0 đã lưu. NLL là teacher forcing, WER pilot là lỗi sinh transcript, word-key F1/ROUGE là khớp feedback; ba nhóm chỉ số có ý nghĩa khác nhau. WER giữ từ Unicode thay vì bỏ qua output ngôn ngữ khác. Chưa có checkpoint feedback P1 thì chưa có bằng chứng trước/sau task tuning. Để mở rộng generation lên 900 mẫu, tạo config/output mới và đặt hai `*_per_speaker` thành 150; chi phí lớn hơn pilot, vẫn giữ budget đã khai báo riêng với benchmark P0/P1 gốc 1.536 token.
+
 ## Kiểm tra local
 
 ```bash
@@ -297,9 +412,21 @@ Demo local đã tích hợp hai adapter theo luồng trên. Cần điền key v�
 Kiểm thử thứ tự cập nhật giao diện bằng Node (chỉ dùng cho tests, không cần cho server demo):
 
 ```powershell
-node --test tests/demo_frontend.test.cjs
+node --test tests/demo_frontend.test.cjs tests/chat_stream.test.cjs
 ```
 
 Bộ kiểm thử giữ phản hồi LLM/ai33 ở trạng thái chờ để xác nhận bảng lỗi và hướng dẫn xuất hiện đúng thứ tự, kiểm tra đổi model trong lúc chờ và xử lý dịch vụ lỗi. Provider được giả lập trong unit tests.
+
+`tests/chat_stream.test.cjs` kiểm tra hiện chữ, xếp hàng câu đọc, nhịp word boundaries, gợi ý đến muộn, dừng và bỏ callback cũ. Khi đã có Playwright tại `.tools/ui-qa`, chạy `node scripts/check_chat_stream_browser.cjs` để kiểm tra UI bằng job/voice giả lập; `node scripts/check_chat_stream_live.cjs` chạy một WAV qua model local thật. Cả hai dùng mặc định `http://127.0.0.1:8765`, không gọi ai33 trả phí; file/screenshot lưu ở `data/generated/chat-stream-qa/`. Voice trong kiểm thử headless được giả lập, cần mở trình duyệt có loa để nghe thực tế.
+
+`tests/test_speech_topics.py` kiểm tra catalog, nguồn lời mở đầu, context chủ đề, câu hỏi mở/fallback và route `/api/chat/topic`. `node scripts/check_topic_chat_browser.cjs` kiểm tra chọn/chuyển chủ đề, từ khóa, đánh giá từng lượt, lịch sử theo topic/coach và layout điện thoại. Để thử model thật theo một chủ đề bằng PowerShell: `$env:MDD_QA_TOPIC='travel'` rồi `node scripts/check_chat_stream_live.cjs`; các kết quả này nằm riêng trong `data/generated/topic-chat-qa/`. Lấy cảm hứng từ luồng [luyện nói theo chủ đề của S English](https://senglish.net/luyen-noi-tieng-anh); dùng giao diện/nội dung riêng của project.
+
+`tests/test_sentence_correction.py` kiểm tra parser hoàn thiện câu, giữ nguyên ngữ pháp/từ gốc, thứ tự xử lý, hủy tác vụ và target đọc lại. `node scripts/check_sentence_correction_browser.cjs` dùng phản hồi giả lập để kiểm tra UI; `node scripts/check_sentence_correction_live.cjs` dùng WAV tổng hợp bằng giọng Windows local để chạy ASR/B/Qwen thật và kiểm tra đọc lại. Tạo WAV bằng `powershell.exe -NoProfile -File data/generated/sentence-correction-qa/create_synthetic.ps1`; kết quả ở `data/generated/sentence-correction-qa/`. Đây là kiểm thử tích hợp, không phải benchmark độ chính xác phát âm; voice đầu ra trong Chrome headless được giả lập và không gọi ai33 trả phí.
+
+`python scripts/check_conversation_context_live.py` thử Qwen gốc thật trên transcript cố định và hội thoại hai lượt, lưu raw output tại `data/generated/conversation-continuity-qa/live-summary.json`. Lượt thử dùng CPU, không train hay gọi API; đây là kiểm thử định tính nhỏ, không đo ASR/voice hoặc điểm chất lượng hội thoại. `tests/test_chat_context.py` kiểm tra rút lịch sử không tách rời câu trả lời của bot khỏi câu người dùng.
+
+Thêm `--natural-only --output data/generated/natural-conversation-qa/live-summary.json` để thử ba tình huống bằng Qwen thật: đổi chủ đề, transcript chưa rõ và câu cảm ơn. `tests/test_chat_reference.py` / `tests/test_chat_reference_api.py` kiểm tra bản nháp chính tả, phoneme gốc và route xác nhận. `node scripts/check_chat_reference_browser.cjs` kiểm tra xác nhận câu trên UI bằng dữ liệu giả; ảnh/báo cáo tại `data/generated/reference-ui-qa/`.
+
+`node scripts/check_dark_chat_browser.cjs` kiểm tra bố cục phòng hội thoại, vị trí tin nhắn/thanh đánh giá, hoàn thiện câu và luyện đọc lại, menu, quay lại/kết thúc và responsive 360–1440 px. Job và voice được giả lập; screenshot và kết quả lưu tại `data/generated/light-chat-qa/`.
 
 Test LLM/TTS dùng HTTP giả lập; parser/scorer/runtime và các launcher kiểm tra những trường hợp quan trọng. Unit tests không gọi API và không cập nhật weights pretrained. Kết quả train/test A/B/C thật trên Windows CUDA được lưu riêng trong notebook; GPU Colab vẫn cần xác nhận bằng lượt chạy thật nếu sử dụng.

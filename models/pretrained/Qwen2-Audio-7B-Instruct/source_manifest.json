@@ -1,0 +1,50 @@
+{
+  "model_id": "Qwen/Qwen2-Audio-7B-Instruct",
+  "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
+  "files": {
+    "config.json": {
+      "sha256": "ab122e112e2450f10cec59216185bd519ccd7529c79d4c1c00255d43b97a037d",
+      "bytes": 853
+    },
+    "preprocessor_config.json": {
+      "sha256": "4cd7c6c061fe79244c57b0c320b2873f3ee5acce2277f7cc3aced042725680f2",
+      "bytes": 342
+    },
+    "tokenizer_config.json": {
+      "sha256": "c738158e70eeecf25736a6c4d8e5f34cfce683079980757edfb0665a7b2457ed",
+      "bytes": 638335
+    },
+    "model.safetensors.index.json": {
+      "sha256": "b6cc05302d1bd25fbab6915e3a033603c524416b984f661d213f9a1f8e3b3895",
+      "bytes": 78989
+    }
+  },
+  "weights": [
+    {
+      "filename": "model-00001-of-00005.safetensors",
+      "sha256": "383de5b5b06f7e7f276850a065d9164641c93009f79a377352a7c949d17c1d7a",
+      "bytes": 3911340848
+    },
+    {
+      "filename": "model-00002-of-00005.safetensors",
+      "sha256": "610e59a23cdf1f78d7e3b42e69f2e1a08578f29726391a1772aecac95db3c59c",
+      "bytes": 3980786080
+    },
+    {
+      "filename": "model-00003-of-00005.safetensors",
+      "sha256": "b9ea76e97226524a12b6acc5e896bebf01a01018fbcad20a72eb13c7950f6916",
+      "bytes": 3980819456
+    },
+    {
+      "filename": "model-00004-of-00005.safetensors",
+      "sha256": "d68dee591619e26e3d0af23a07e181c70134fbc3aa33e24d872224607aae2c62",
+      "bytes": 3643135696
+    },
+    {
+      "filename": "model-00005-of-00005.safetensors",
+      "sha256": "a447dab3e72f9debd37a0c4ae0b9179a1bad2b06357092a77c066a0405bbc7d2",
+      "bytes": 1278214288
+    }
+  ],
+  "weights_downloaded": false
+}

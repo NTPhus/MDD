@@ -1,0 +1,11 @@
+{
+  "projector_config": "configs/projector_l2arctic_plus.json",
+  "output_dir": "data/generated/projector-validation-v1",
+  "seed": 42,
+  "transcription_per_speaker": 5,
+  "feedback_per_speaker": 2,
+  "transcription_max_new_tokens": 128,
+  "feedback_max_new_tokens": 512,
+  "selection": "sha256(seed,task,utterance_id), lowest per speaker, restored to frozen test order",
+  "scope": "Full 900-row phone test and transcript teacher-forced NLL; balanced pilot generation. No test-based checkpoint selection."
+}

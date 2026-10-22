@@ -2,6 +2,7 @@
 
 import io
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -137,6 +138,110 @@ class DemoInferenceTests(unittest.TestCase):
                       return_value=(network, {"missing_keys": ["lm_head.weight"]})):
             with self.assertRaisesRegex(ValueError, "ngẫu nhiên"):
                 self.engine._load_bundle(self.root, "phoneme")
+
+    def posterior_fixture(self):
+        class TinyAudioOnlyModel:
+            def __init__(self):
+                self.logits = torch.tensor([[[1., 4., -1.], [0., -1., 5.], [6., 0., -2.]]])
+                self.calls = []
+
+            def __call__(self, **inputs):
+                self.calls.append({'keys': set(inputs), 'grad_enabled': torch.is_grad_enabled()})
+                return SimpleNamespace(logits=self.logits)
+
+        network = TinyAudioOnlyModel()
+        bundle = {'network': network, 'extractor': lambda waveform, **kw: {
+            'input_values': torch.as_tensor(waveform)[None],
+            'attention_mask': torch.ones((1, len(waveform)), dtype=torch.long)},
+            'vocabulary': {'[PAD]': 0, 'HH': 1, 'W': 2}, 'experimental': False}
+        model = {'id': 'B', 'label': 'B', 'path': self.root, 'kind': 'phoneme', 'experimental': False}
+        return model, bundle, network
+
+    def test_optional_capture_keeps_default_public_result_and_audio_only_inference_unchanged(self):
+        model, bundle, network = self.posterior_fixture()
+        reference = ForbiddenReference(prompt_text='hello world', canonical_phones=['HH', 'W'],
+            canonical_word_indices=[0, 1], perceived_phones=['GOLD'], gold_error_events=['GOLD'])
+        with patch.object(self.engine, '_get_bundle', return_value=bundle):
+            default = self.engine.analyze(model, audio_bytes(), 'hello world', reference)
+            captured = self.engine.analyze(model, audio_bytes(), 'hello world', reference, capture_evidence=True)
+        self.assertNotIn('_acoustic_evidence', default)
+        self.assertIn('_acoustic_evidence', captured)
+        for key in ('phonemes', 'comparison', 'audio', 'model', 'analysis_kind', 'reference_text', 'notice'):
+            self.assertEqual(default[key], captured[key])
+        json.dumps(default, allow_nan=False)
+        np.testing.assert_allclose(captured['_acoustic_evidence']['log_probs'],
+                                   network.logits[0].log_softmax(dim=-1).numpy(), rtol=1e-6)
+        np.testing.assert_allclose(np.exp(captured['_acoustic_evidence']['log_probs']).sum(axis=1), 1., rtol=1e-6)
+        self.assertTrue(all(call['keys'] == {'input_values', 'attention_mask'} for call in network.calls))
+        self.assertTrue(all(not call['grad_enabled'] for call in network.calls))
+
+    def test_posterior_export_is_reference_free_and_binds_weights_and_vocabulary_hashes(self):
+        model, bundle, network = self.posterior_fixture()
+        weights = b'known synthetic checkpoint identity; no model is loaded'
+        vocabulary = b'{"[PAD]":0,"HH":1,"W":2}'
+        (self.root / 'model.safetensors').write_bytes(weights)
+        (self.root / 'vocab.json').write_bytes(vocabulary)
+        with patch.object(self.engine, '_get_bundle', return_value=bundle), \
+                patch('src.mdd.demo_inference.canonical_comparison', return_value=None) as compare:
+            evidence = self.engine.posterior_evidence(model, audio_bytes())
+        self.assertEqual(evidence['checkpoint_sha256'], hashlib.sha256(weights).hexdigest())
+        self.assertEqual(evidence['vocabulary_sha256'], hashlib.sha256(vocabulary).hexdigest())
+        self.assertEqual(evidence['id_to_phone'], {0: '[PAD]', 1: 'HH', 2: 'W'})
+        self.assertEqual(evidence['blank_id'], 0)
+        self.assertEqual(evidence['duration_sec'], .4)
+        self.assertEqual([phone['phone'] for phone in evidence['phonemes']], ['HH', 'W'])
+        self.assertNotIn('reference_text', evidence)
+        self.assertNotIn('canonical_phones', evidence)
+        self.assertNotIn('perceived_phones', evidence)
+        compare.assert_called_once_with('', None, ['HH', 'W'])
+        self.assertEqual(network.calls, [{'keys': {'input_values', 'attention_mask'}, 'grad_enabled': False}])
+
+    def test_posterior_export_hashes_legacy_bin_when_safetensors_is_absent(self):
+        model, bundle, _ = self.posterior_fixture()
+        weights = b'legacy synthetic checkpoint identity'
+        (self.root / 'pytorch_model.bin').write_bytes(weights)
+        (self.root / 'vocab.json').write_text('{"[PAD]":0,"HH":1,"W":2}', encoding='utf-8')
+        with patch.object(self.engine, '_get_bundle', return_value=bundle):
+            evidence = self.engine.posterior_evidence(model, audio_bytes())
+        self.assertEqual(evidence['checkpoint_sha256'], hashlib.sha256(weights).hexdigest())
+
+    def test_posterior_export_rejects_backbone_before_audio_or_network_work(self):
+        with patch.object(self.engine, 'analyze') as analyze:
+            with self.assertRaisesRegex(ValueError, 'phoneme checkpoint'):
+                self.engine.posterior_evidence({'kind': 'backbone'}, b'not audio')
+        analyze.assert_not_called()
+
+    def test_capture_flag_does_not_invent_posteriors_for_feature_only_backbone(self):
+        class TinyBackbone:
+            def __call__(self, **inputs):
+                return SimpleNamespace(last_hidden_state=torch.ones((1, 3, 4)))
+        bundle = {'network': TinyBackbone(), 'extractor': lambda waveform, **kw: {
+            'input_values': torch.as_tensor(waveform)[None]}, 'vocabulary': None, 'experimental': False}
+        model = {'id': 'base', 'label': 'Base', 'path': self.root, 'kind': 'backbone', 'experimental': False}
+        with patch.object(self.engine, '_get_bundle', return_value=bundle):
+            result = self.engine.analyze(model, audio_bytes(), 'hello', capture_evidence=True)
+        self.assertNotIn('_acoustic_evidence', result)
+        self.assertIsNone(result['comparison'])
+        self.assertEqual(result['features']['dimensions'], 4)
+        json.dumps(result, allow_nan=False)
+
+    def test_posterior_export_rejects_checkpoint_replacement_during_inference(self):
+        model, _, _ = self.posterior_fixture()
+        checkpoint = self.root / 'model.safetensors'
+        checkpoint.write_bytes(b'checkpoint identity before inference')
+        (self.root / 'vocab.json').write_text('{"[PAD]":0,"HH":1,"W":2}', encoding='utf-8')
+        def replace_checkpoint(*args, **kwargs):
+            checkpoint.write_bytes(b'different checkpoint published while inference was running')
+            return {'model': {'experimental': False}, '_acoustic_evidence': {}}
+        with patch.object(self.engine, 'analyze', side_effect=replace_checkpoint):
+            with self.assertRaisesRegex(ValueError, 'changed during inference'):
+                self.engine.posterior_evidence(model, audio_bytes())
+
+    def test_posterior_export_rejects_paths_outside_workspace_before_inference(self):
+        with patch.object(self.engine, 'analyze') as analyze:
+            with self.assertRaisesRegex(ValueError, 'inside the workspace'):
+                self.engine.posterior_evidence({'kind': 'phoneme', 'path': self.root.parent}, b'not audio')
+        analyze.assert_not_called()
 
 
 if __name__ == "__main__":

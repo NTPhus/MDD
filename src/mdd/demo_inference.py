@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
+from functools import lru_cache
 import math
 from pathlib import Path
 import time
@@ -16,6 +18,12 @@ from .metrics import align_phones
 SAMPLE_RATE = 16000
 MAX_AUDIO_SECONDS = 30
 MIN_AUDIO_SECONDS = 0.25
+
+
+@lru_cache(maxsize=8)
+def _file_digest(path, modified, size):
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def normalize_text(text: str) -> str:
@@ -196,7 +204,7 @@ class LocalInference:
         return self._cached
 
     def analyze(self, model: dict[str, Any], audio_bytes: bytes, reference_text: str,
-                reference: dict | None = None) -> dict[str, Any]:
+                reference: dict | None = None, *, capture_evidence: bool = False) -> dict[str, Any]:
         started = time.monotonic()
         waveform, audio = self._audio(audio_bytes)
         bundle = self._get_bundle(model)
@@ -240,9 +248,55 @@ class LocalInference:
                     notice += " Chưa có chuỗi âm chuẩn khớp chính xác với câu đã nhập để so sánh."
             if not phonemes:
                 notice += " Model chỉ phát ra blank; chưa nhận diện được âm vị."
-        return {"model": {"id": model["id"], "label": model["label"], "kind": model["kind"],
+        result = {"model": {"id": model["id"], "label": model["label"], "kind": model["kind"],
                           "experimental": experimental, "warning": warning},
                 "audio": audio, "reference_text": str(reference_text), "asr_text": None,
                 "phonemes": phonemes, "features": features, "comparison": comparison,
                 "notice": notice, "inference_seconds": round(time.monotonic() - started, 3),
                 "analysis_kind": analysis_kind}
+        if capture_evidence and model['kind'] == 'phoneme':
+            result['_acoustic_evidence'] = {
+                'log_probs': logits.log_softmax(dim=-1).detach().cpu().numpy(),
+                'id_to_phone': {index: phone for phone, index in bundle['vocabulary'].items()},
+                'blank_id': 0, 'duration_sec': audio['duration_sec'],
+                'phonemes': phonemes, 'audio': audio,
+            }
+        return result
+
+    def posterior_evidence(self, model: dict[str, Any], audio_bytes: bytes) -> dict[str, Any]:
+        """Export audio-only CTC posteriors for an explicitly requested experiment.
+
+        No reference, perceived phones, alignments or human error labels enter
+        the network. The original analyze() contract stays unchanged by default.
+        """
+        if model.get('kind') != 'phoneme':
+            raise ValueError('Posterior evidence requires a phoneme checkpoint')
+        folder = Path(model['path'])
+        folder = (folder if folder.is_absolute() else self.root / folder).resolve()
+        if not folder.is_relative_to(self.root) or not folder.is_dir():
+            raise ValueError('Posterior checkpoint must be inside the workspace')
+        paths, identities, signatures = {}, {}, {}
+        for key, filename in (('checkpoint_sha256', 'model.safetensors'), ('vocabulary_sha256', 'vocab.json')):
+            path = folder / filename
+            if not path.is_file() and filename == 'model.safetensors':
+                path = folder / 'pytorch_model.bin'
+            if not path.resolve().is_relative_to(self.root):
+                raise ValueError('Posterior checkpoint file is outside the workspace')
+            info = path.stat()
+            paths[key] = path
+            signatures[key] = (info.st_mtime_ns, info.st_size)
+            identities[key] = _file_digest(str(path), info.st_mtime_ns, info.st_size)
+        for name in ('config.json', 'metadata.json'):
+            path = folder / name
+            if path.is_file():
+                paths[name] = path
+                signatures[name] = (path.stat().st_mtime_ns, path.stat().st_size)
+        result = self.analyze(model, audio_bytes, '', capture_evidence=True)
+        if result['model']['experimental']:
+            raise ValueError('Unverified experimental weights cannot provide calibrated evidence')
+        if any(not path.exists() or (path.stat().st_mtime_ns, path.stat().st_size) != signatures[key]
+               for key, path in paths.items()):
+            raise ValueError('Checkpoint changed during inference; retry with stable completed weights')
+        evidence = result['_acoustic_evidence']
+        evidence.update(identities)
+        return evidence

@@ -14,8 +14,13 @@ data/generated/
 /*.crdownload
 /data/processed/*/annotations.jsonl
 /data/processed/feedback-*/
+/data/processed/grammar-*/
 /data/feedback/*.jsonl
+/data/feedback/*.index.csv
+/data/feedback/*.manifest.json
+/data/feedback/*.jsonl.lock
 !/data/feedback/review.example.jsonl
+/data/external/
 
 # Downloaded model weights and partial downloads; keep model metadata.
 /models/pretrained/**/*.bin

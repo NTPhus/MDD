@@ -11,6 +11,11 @@ const state = {
   resultRevision: 0, guidanceRevision: 0, guidancePending: false,
   guidanceController: null, guidanceTimer: null, guidanceTimeout: null,
   wordTooltip: null, wordTooltipTimer: null, wordTooltipSuppressFocus: null,
+  practiceMode: 'sentence', wordIndex: 0, wordResults: {}, liveEnabled: true,
+  liveActive: false, liveGeneration: 0, livePromise: null, liveController: null,
+  liveLastSample: 0, liveTimeout: null, finalizing: false, stopping: false,
+  recordingLimit: 30, lastVoiceSample: 0, voicedSamples: 0, flushRecording: null,
+  referenceInfo: null, referenceRevision: 0, referenceTimer: null, referenceController: null,
 };
 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
 
@@ -33,7 +38,11 @@ async function request(path, options = {}) {
   let result;
   try { result = await response.json(); }
   catch { throw new Error('Máy chủ không trả về dữ liệu hợp lệ. Hãy kiểm tra cửa sổ chạy demo.'); }
-  if (!response.ok) throw new Error(result.message || result.error || `Không thể hoàn thành yêu cầu (${response.status}).`);
+  if (!response.ok) {
+    const error = new Error(result.message || result.error || `Không thể hoàn thành yêu cầu (${response.status}).`);
+    error.code = result.error; error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -50,11 +59,13 @@ function toast(message) {
 }
 
 function switchView(name) {
-  if (!['practice', 'training'].includes(name)) return;
+  if (!['practice', 'training', 'chat'].includes(name)) return;
   if (name !== 'practice') hideWordTooltip();
   $('practice-view').hidden = name !== 'practice';
   $('training-view').hidden = name !== 'training';
-  $('breadcrumb-current').textContent = name === 'practice' ? 'Luyện phát âm' : 'Huấn luyện';
+  $('chat-view').hidden = name !== 'chat';
+  $('breadcrumb-current').textContent = { practice: 'Luyện phát âm', training: 'Huấn luyện', chat: 'Đối thoại AI' }[name];
+  window.MDDChat?.onViewChange(name, () => !state.recording && !state.recordingPending);
   document.querySelectorAll('.nav-item').forEach((button) => {
     const active = button.dataset.view === name;
     button.classList.toggle('active', active);
@@ -64,7 +75,7 @@ function switchView(name) {
   if (name === 'training') {
     renderTraining();
     refreshStatus();
-  } else drawWaveform(state.audioSamples);
+  } else if (name === 'practice') drawWaveform(state.audioSamples);
 }
 
 function microphoneUnavailableReason() {
@@ -74,24 +85,166 @@ function microphoneUnavailableReason() {
   return '';
 }
 
+function practicePrompt() {
+  const key = (value) => String(value).normalize('NFKC').toLowerCase().trim().replace(/\s+/g, ' ');
+  return state.prompts.find((prompt) => key(prompt.text) === key($('reference-text').value));
+}
+
+function practiceAvailable() {
+  const model = state.models.find((item) => item.id === state.modelId);
+  const prompt = practicePrompt();
+  const custom = state.referenceInfo?.reference_text === $('reference-text').value.trim() && state.referenceInfo?.available;
+  return state.capabilities.realtime === true && model && model.ready !== false
+    && model.kind !== 'backbone' && !model.experimental && ((prompt && prompt.live_available !== false) || custom);
+}
+
+function resolveCustomReference() {
+  const revision = ++state.referenceRevision;
+  clearTimeout(state.referenceTimer);
+  if (state.referenceController) state.referenceController.abort();
+  state.referenceInfo = null;
+  const text = $('reference-text').value.trim();
+  if (practicePrompt() || !text || state.capabilities.realtime !== true) return;
+  state.referenceTimer = setTimeout(async () => {
+    const controller = new AbortController();
+    state.referenceController = controller;
+    try {
+      const info = await request('/api/reference', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference_text: text }), signal: controller.signal });
+      if (revision !== state.referenceRevision) return;
+      state.referenceInfo = info;
+    } catch (error) {
+      if (revision !== state.referenceRevision || error.name === 'AbortError') return;
+      state.referenceInfo = { reference_text: text, available: false, missing_words: [] };
+    } finally { if (revision === state.referenceRevision) updateControls(); }
+  }, 350);
+}
+
+function renderPractice() {
+  const blocked = state.busy || state.loadingAudio || state.recordingPending || state.recording || state.finalizing;
+  const available = practiceAvailable();
+  for (const mode of ['sentence', 'word']) {
+    const button = $(`mode-${mode}`);
+    button.disabled = blocked || (mode === 'word' && !available);
+    button.classList.toggle('selected', state.practiceMode === mode);
+    button.setAttribute('aria-pressed', String(state.practiceMode === mode));
+  }
+  $('live-enabled').disabled = blocked || !available;
+  $('word-practice').hidden = state.practiceMode !== 'word';
+  $('practice-mode-hint').textContent = !available
+    ? state.referenceInfo?.missing_words?.length
+      ? `Chưa có âm chuẩn cho: ${state.referenceInfo.missing_words.join(', ')}. Sửa từ hoặc chọn một câu mẫu để dùng realtime.`
+      : 'Realtime và từng từ cần model A/B/C cùng câu có âm chuẩn. Câu tự nhập sẽ được tra từ điển tiếng Anh Mỹ.'
+    : !state.liveEnabled ? 'Phân tích sau khi dừng thu. Bật cập nhật trực tiếp để xem kết quả trong lúc đọc.'
+      : 'Cập nhật khoảng mỗi giây cộng thời gian xử lý. Kết quả tạm thời có thể đổi; phần chưa đọc ở trạng thái chờ.';
+  const words = $('reference-text').value.trim().split(/\s+/).filter(Boolean);
+  state.wordIndex = Math.max(0, Math.min(state.wordIndex, words.length - 1));
+  const signature = JSON.stringify([words, state.wordIndex, state.wordResults, blocked]);
+  if ($('practice-words').dataset.signature !== signature) {
+    $('practice-words').replaceChildren();
+    words.forEach((word, index) => {
+      const button = element('button', `practice-word ${state.wordResults[index] || ''}${index === state.wordIndex ? ' selected' : ''}`, word);
+      button.type = 'button'; button.disabled = blocked;
+      button.setAttribute('aria-pressed', String(index === state.wordIndex));
+      button.setAttribute('aria-label', `Luyện từ ${index + 1}: ${word}`);
+      button.addEventListener('click', () => choosePracticeWord(index));
+      $('practice-words').append(button);
+    });
+    $('practice-words').dataset.signature = signature;
+  }
+  $('word-target-label').textContent = words.length ? `Từ ${state.wordIndex + 1}/${words.length}: ${words[state.wordIndex]}` : 'Chọn một câu để luyện';
+  $('word-next').disabled = blocked || state.wordIndex >= words.length - 1;
+}
+
+function choosePracticeWord(index) {
+  if (state.recording || state.busy || state.finalizing || state.recordingPending) return;
+  state.wordIndex = index;
+  clearAudio();
+}
+
+function setPracticeMode(mode) {
+  if (state.recording || state.busy || state.finalizing || state.recordingPending || !['sentence', 'word'].includes(mode)) return;
+  if (mode === 'word' && !practiceAvailable()) return;
+  state.practiceMode = mode; state.wordIndex = 0; state.wordResults = {};
+  clearAudio();
+}
+
+function cancelLive() {
+  state.liveGeneration += 1;
+  state.liveActive = false;
+  if (state.liveController) state.liveController.abort();
+  state.liveController = null;
+  clearTimeout(state.liveTimeout);
+  state.livePromise = null;
+  $('live-status').hidden = true;
+}
+
+function recordingSamples() {
+  const samples = new Float32Array(state.sampleCount);
+  let offset = 0;
+  for (const chunk of state.chunks) { samples.set(chunk, offset); offset += chunk.length; }
+  return samples;
+}
+
+function livePayload(audio, final) {
+  return { model_id: state.modelId, reference_text: $('reference-text').value.trim(),
+    mode: state.practiceMode, word_index: state.wordIndex, final, audio_base64: audio };
+}
+
+function pumpLive() {
+  if (!state.recording || state.stopping || !state.liveActive || state.livePromise) return;
+  const rate = state.context.sampleRate;
+  if (state.sampleCount < rate * 0.8 || (state.liveLastSample && state.sampleCount - state.liveLastSample < rate * 1.2)) return;
+  state.liveLastSample = state.sampleCount;
+  const generation = state.liveGeneration;
+  const controller = new AbortController();
+  state.liveController = controller;
+  state.liveTimeout = setTimeout(() => controller.abort(), 30000);
+  $('live-status').hidden = false;
+  $('live-status').textContent = 'Đang cập nhật phần vừa đọc…';
+  const payload = livePayload(base64Buffer(encodeWav(recordingSamples(), rate)), false);
+  state.livePromise = request('/api/analyze-live', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload), signal: controller.signal }).then((result) => {
+    if (generation !== state.liveGeneration || !state.recording || state.stopping) return;
+    state.result = result;
+    renderResult(result);
+    $('live-status').textContent = 'Đang đọc · Kết quả tạm thời; phần xám chưa được đọc.';
+  }).catch((error) => {
+    if (generation !== state.liveGeneration || !state.recording || state.stopping) return;
+    if (error.code === 'reference_unavailable' || error.code === 'live_model_unavailable' || error.code === 'invalid_word_reference') {
+      state.liveActive = false;
+      $('live-status').textContent = error.message;
+    } else $('live-status').textContent = error.code === 'busy'
+      ? 'Model đang bận · sẽ lấy đoạn mới nhất, không xếp hàng các đoạn cũ.'
+      : error.code === 'inference_failed' ? 'Đang chờ tiếng nói rõ hơn…'
+        : 'Chưa cập nhật được · vẫn đang thu, sẽ thử lại với đoạn mới nhất.';
+  }).finally(() => {
+    if (generation !== state.liveGeneration) return;
+    clearTimeout(state.liveTimeout);
+    state.liveController = null; state.livePromise = null;
+  });
+}
+
 function updateControls() {
   const model = state.models.find((item) => item.id === state.modelId);
-  const blocked = state.busy || state.loadingAudio || state.recordingPending;
+  const blocked = state.busy || state.loadingAudio || state.recordingPending || state.finalizing;
   const microphoneReason = microphoneUnavailableReason();
-  $('record-button').disabled = blocked || Boolean(microphoneReason);
+  $('record-button').disabled = blocked || Boolean(microphoneReason) || (state.practiceMode === 'word' && !practiceAvailable());
   if (microphoneReason) {
     $('record-hint').textContent = microphoneReason;
     $('record-label').textContent = window.isSecureContext === false ? 'Thu microphone cần HTTPS' : 'Microphone chưa khả dụng';
     $('record-button').title = microphoneReason;
   } else $('record-button').removeAttribute('title');
   $('upload-button').disabled = blocked || state.recording || !AudioContextClass;
-  $('sample-button').disabled = blocked || state.recording || !state.prompts.length;
+  $('sample-button').disabled = blocked || state.recording || !state.prompts.length || state.practiceMode === 'word';
   $('shuffle-prompt').disabled = blocked || state.recording || !state.prompts.length;
   $('prompt-select').disabled = blocked || state.recording;
   $('reference-text').disabled = blocked || state.recording;
   $('model-select').disabled = blocked || state.recording || !state.models.length;
-  $('analyze-button').disabled = blocked || state.recording || !model || model.ready === false || !(state.audioBase64 || state.sampleId);
+  $('analyze-button').disabled = blocked || state.recording || !model || model.ready === false || !(state.audioBase64 || state.sampleId)
+    || (state.practiceMode === 'word' && !practiceAvailable());
   $('analyze-button').querySelector('span').textContent = state.busy ? 'Đang phân tích…' : 'Phân tích bản thu';
+  renderPractice();
 }
 
 function modelPhase(model) {
@@ -167,7 +320,9 @@ async function refreshStatus() {
   state.statusPending = true;
   try {
     const result = await request('/api/status');
+    const previouslyLive = state.capabilities.realtime;
     state.capabilities = result.capabilities || {};
+    if (!previouslyLive && state.capabilities.realtime) resolveCustomReference();
     renderModels(result.models, result.default_model_id);
     state.training = Array.isArray(result.training) ? result.training : [];
     $('connection-error').hidden = true;
@@ -216,10 +371,13 @@ async function loadPrompts() {
 function choosePrompt(id) {
   const prompt = state.prompts.find((item) => item.id === id);
   state.promptId = prompt ? prompt.id : '';
+  state.wordIndex = 0; state.wordResults = {};
   $('prompt-select').value = state.promptId;
   if (prompt) $('reference-text').value = prompt.text;
+  resolveCustomReference();
   updateReferenceCount();
   if (state.sampleId && state.sampleId !== state.promptId) clearAudio();
+  if (state.practiceMode === 'word' && state.audioSamples) clearAudio();
 }
 
 function updateReferenceCount() {
@@ -227,6 +385,7 @@ function updateReferenceCount() {
 }
 
 function clearResult() {
+  cancelLive();
   hideWordTooltip();
   state.resultRevision += 1;
   clearGuidance();
@@ -316,7 +475,8 @@ async function decodeAudio(arrayBuffer) {
 }
 
 async function startRecording() {
-  if (state.busy || state.recordingPending || state.recording) return;
+  if (state.busy || state.recordingPending || state.recording || state.finalizing) return;
+  if (state.practiceMode === 'word' && !practiceAvailable()) { showAudioError('Chọn model A/B/C và câu có âm chuẩn để luyện từng từ.'); return; }
   const microphoneReason = microphoneUnavailableReason();
   if (microphoneReason) {
     showAudioError(microphoneReason);
@@ -332,35 +492,40 @@ async function startRecording() {
     await state.context.resume();
     clearAudio();
     state.source = state.context.createMediaStreamSource(state.stream);
-    state.processor = state.context.createScriptProcessor(4096, 1, 1);
     state.silentGain = state.context.createGain();
     state.silentGain.gain.value = 0;
     state.chunks = [];
     state.sampleCount = 0;
+    state.liveLastSample = 0; state.lastVoiceSample = 0; state.voicedSamples = 0;
+    state.recordingLimit = state.practiceMode === 'word' ? 10 : 30;
+    delete state.wordResults[state.wordIndex];
+    if (state.context.audioWorklet && window.AudioWorkletNode) {
+      await state.context.audioWorklet.addModule('/recorder-worklet.js');
+      state.processor = new window.AudioWorkletNode(state.context, 'mdd-recorder');
+      state.processor.port.onmessage = ({ data }) => {
+        if (data.samples) collectRecordingChunk(data.samples);
+        if (data.stopped && state.flushRecording) state.flushRecording();
+      };
+    } else {
+      state.processor = state.context.createScriptProcessor(4096, 1, 1);
+      state.processor.onaudioprocess = (event) => collectRecordingChunk(event.inputBuffer.getChannelData(0));
+    }
     state.recording = true;
+    state.liveActive = Boolean(state.liveEnabled && practiceAvailable());
     state.startedAt = performance.now();
-    state.processor.onaudioprocess = (event) => {
-      if (!state.recording) return;
-      const input = event.inputBuffer.getChannelData(0);
-      const remaining = Math.max(0, Math.floor(30 * state.context.sampleRate) - state.sampleCount);
-      const chunk = new Float32Array(input.subarray(0, remaining));
-      state.chunks.push(chunk);
-      state.sampleCount += chunk.length;
-      drawWaveform(chunk, true);
-      if (remaining <= input.length) stopRecording();
-    };
     state.source.connect(state.processor);
     state.processor.connect(state.silentGain);
     state.silentGain.connect(state.context.destination);
     $('recording-area').classList.add('recording');
     $('record-button').setAttribute('aria-label', 'Dừng thu âm');
     $('record-label').textContent = 'Đang thu âm…';
-    $('record-hint').textContent = 'Nhấn nút để dừng · Tối đa 30 giây';
+    $('record-hint').textContent = state.practiceMode === 'word' ? 'Đọc từ đã chọn rồi ngừng một nhịp · Tối đa 10 giây' : 'Nhấn nút để dừng · Tối đa 30 giây';
     $('audio-state').textContent = 'Đang lắng nghe bạn';
     state.timer = setInterval(() => {
       const duration = (performance.now() - state.startedAt) / 1000;
-      $('recording-time').textContent = timeLabel(Math.min(30, duration));
-      if (duration >= 30.2) stopRecording();
+      $('recording-time').textContent = timeLabel(Math.min(state.recordingLimit, duration));
+      pumpLive();
+      if (duration >= state.recordingLimit + 0.2) stopRecording();
     }, 160);
   } catch (error) {
     releaseMicrophone();
@@ -372,31 +537,71 @@ async function startRecording() {
   }
 }
 
+function collectRecordingChunk(input) {
+  if (!state.recording || !state.context) return;
+  const rate = state.context.sampleRate;
+  const remaining = Math.max(0, Math.floor(state.recordingLimit * rate) - state.sampleCount);
+  const chunk = new Float32Array(input.subarray(0, remaining));
+  if (chunk.length) {
+    state.chunks.push(chunk); state.sampleCount += chunk.length;
+    let power = 0;
+    for (const value of chunk) power += value * value;
+    if (Math.sqrt(power / chunk.length) >= 0.008) {
+      state.lastVoiceSample = state.sampleCount; state.voicedSamples += chunk.length;
+    }
+    drawWaveform(chunk, true);
+  }
+  const wordEnded = state.practiceMode === 'word' && state.voicedSamples >= 0.12 * rate
+    && state.sampleCount >= rate && state.sampleCount - state.lastVoiceSample >= 0.8 * rate;
+  if (!state.stopping && (remaining <= input.length || wordEnded)) stopRecording();
+}
+
 function releaseMicrophone() {
   clearInterval(state.timer);
   state.timer = null;
-  if (state.processor) { state.processor.onaudioprocess = null; state.processor.disconnect(); }
+  if (state.processor) {
+    if (state.processor.port) state.processor.port.onmessage = null;
+    else state.processor.onaudioprocess = null;
+    state.processor.disconnect();
+  }
   if (state.source) state.source.disconnect();
   if (state.silentGain) state.silentGain.disconnect();
   if (state.stream) state.stream.getTracks().forEach((track) => track.stop());
   if (state.context && state.context.state !== 'closed') state.context.close().catch(() => {});
   state.processor = state.source = state.silentGain = state.stream = state.context = null;
   state.recording = false;
+  state.stopping = false; state.flushRecording = null;
   $('recording-area').classList.remove('recording');
   $('record-button').setAttribute('aria-label', 'Bắt đầu thu âm');
 }
 
-function stopRecording() {
-  if (!state.recording) return;
+async function stopRecording() {
+  if (!state.recording || state.stopping) return;
+  state.stopping = true;
+  state.finalizing = true;
+  updateControls();
+  if (state.processor.port) {
+    await new Promise((resolve) => {
+      const timeout = setTimeout(resolve, 300);
+      state.flushRecording = () => { clearTimeout(timeout); resolve(); };
+      state.processor.port.postMessage('flush');
+    });
+  }
+  if (!state.context) { state.finalizing = false; return; }
   const rate = state.context.sampleRate;
-  const samples = new Float32Array(state.sampleCount);
-  let offset = 0;
-  for (const chunk of state.chunks) { samples.set(chunk, offset); offset += chunk.length; }
+  const samples = recordingSamples();
+  const autoAnalyze = state.liveActive || state.practiceMode === 'word';
+  const pending = state.livePromise;
   releaseMicrophone();
+  $('live-status').hidden = false;
+  $('live-status').textContent = 'Đã dừng thu · đang chốt kết quả…';
+  if (pending) await pending;
   state.chunks = [];
   try { setAudio(samples, rate, 'Bản thu của bạn'); }
   catch (error) { showAudioError(error.message); }
+  state.finalizing = false;
   updateControls();
+  if (autoAnalyze && state.audioBase64) await analyze();
 }
 
 async function uploadAudio(file) {
@@ -465,7 +670,7 @@ function drawWaveform(samples, live = false) {
 }
 
 async function analyze() {
-  if (state.busy || state.recording || !(state.audioBase64 || state.sampleId)) return;
+  if (state.busy || state.recording || state.finalizing || !(state.audioBase64 || state.sampleId)) return;
   clearResult();
   const revision = state.resultRevision;
   state.busy = true;
@@ -483,10 +688,18 @@ async function analyze() {
   const payload = { model_id: state.modelId, reference_text: $('reference-text').value.trim() };
   if (state.sampleId) payload.sample_id = state.sampleId;
   else payload.audio_base64 = state.audioBase64;
+  const wordMode = state.practiceMode === 'word';
+  const endpoint = wordMode ? '/api/analyze-live' : '/api/analyze';
+  if (wordMode) Object.assign(payload, { mode: 'word', word_index: state.wordIndex, final: true });
   try {
-    const result = await request('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const result = await request(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (revision !== state.resultRevision) return;
     state.result = result;
+    if (wordMode) {
+      const status = result.comparison?.words?.[0]?.status;
+      if (['match', 'difference'].includes(status)) state.wordResults[state.wordIndex] = status;
+      renderPractice();
+    }
     renderResult(state.result);
     loadGuidance();
     if (window.innerWidth <= 930) $('result-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -688,7 +901,7 @@ function renderComparisonWords(result) {
   const words = result.comparison?.words;
   if (!Array.isArray(words)) return;
   words.forEach((word, index) => {
-    const status = ['match', 'difference', 'unavailable'].includes(word.status) ? word.status : 'unavailable';
+    const status = ['match', 'difference', 'unavailable', 'pending', 'listening'].includes(word.status) ? word.status : 'unavailable';
     const errors = mappedWordErrors(result, index);
     const node = element(errors.length ? 'button' : 'span', `word ${status}${errors.length ? ' word-error-trigger' : ''}`, word.text);
     if (errors.length) {
@@ -937,9 +1150,10 @@ function resultStat(value, label) {
 }
 
 function renderResult(result) {
+  const preview = result.live?.is_final === false;
   $('result-empty').hidden = true;
   $('result-content').hidden = false;
-  $('save-result').hidden = false;
+  $('save-result').hidden = preview;
   $('guidance-progress').hidden = false;
   setGuidanceStage('mdd', 'complete', 'Đã có kết quả');
   $('guidance-block').hidden = false;
@@ -953,6 +1167,14 @@ function renderResult(result) {
   const experimental = model.experimental || result.analysis_kind === 'experimental_phonemes';
   $('result-kind').textContent = isBase ? 'BASE · ĐẶC TRƯNG ÂM THANH' : experimental ? 'CHECKPOINT THỬ NGHIỆM' : comparison ? 'ĐỐI CHIẾU ÂM VỊ' : 'NHẬN DIỆN ÂM VỊ';
   $('result-headline').textContent = isBase ? 'Âm thanh, dưới một góc nhìn khác.' : experimental ? 'Những âm đầu tiên mô hình nghe được.' : comparison ? 'Cùng nhìn lại từng âm.' : 'Mô hình đã lắng nghe.';
+  if (preview) {
+    $('result-kind').textContent = 'ĐANG ĐỌC · KẾT QUẢ TẠM THỜI';
+    $('result-headline').textContent = result.live.mode === 'word' ? 'Đang nghe từ bạn chọn.' : 'Kết quả theo nhịp bạn đọc.';
+    $('guidance-block').hidden = true;
+    setGuidanceStage('mdd', 'processing', 'Đang cập nhật');
+    setGuidanceStage('llm', 'waiting', 'Chờ dừng thu');
+    setGuidanceStage('voice', 'waiting', 'Chờ hướng dẫn');
+  }
   $('result-notice').textContent = result.notice || (isBase ? 'Mô hình BASE trích xuất biểu diễn âm thanh, chưa nhận diện âm vị hay chấm chất lượng phát âm.' : experimental ? 'Đây là kết quả thử nghiệm, chưa đủ cơ sở để kết luận về phát âm của bạn.' : 'Kết quả dưới đây là đầu ra thực tế của mô hình local.');
   $('result-stats').replaceChildren(
     resultStat(`${displayNumber(audio.duration_sec, 1)} s`, 'Độ dài bản thu'),
@@ -964,6 +1186,7 @@ function renderResult(result) {
   if (comparison) {
     const counts = comparison.counts || {};
     $('comparison-explanation').textContent = `Đối chiếu âm vị: ${displayNumber(counts.match, 0)} khớp · ${displayNumber(counts.substitution, 0)} thay thế · ${displayNumber(counts.deletion, 0)} bị thiếu · ${displayNumber(counts.insertion, 0)} thêm vào. Di chuột, dùng phím Tab hoặc chạm từ màu vàng để xem sai khác và cách luyện; nhấn lại để đóng.`;
+    if (preview) $('comparison-explanation').textContent = 'Xám: chưa đọc · Xanh lam: đang đọc · Xanh lá: khớp tạm thời · Vàng: khác biệt tạm thời. Di chuột hoặc chạm để xem âm mục tiêu và âm model nhận. Kết quả có thể đổi khi đọc tiếp.';
   }
   $('phoneme-block').hidden = isBase;
   $('phoneme-count').textContent = `${phones.length} âm vị`;
@@ -1102,6 +1325,10 @@ function saveResult() {
 
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 $('record-button').addEventListener('click', () => { if (state.recording) stopRecording(); else startRecording(); });
+$('mode-sentence').addEventListener('click', () => setPracticeMode('sentence'));
+$('mode-word').addEventListener('click', () => setPracticeMode('word'));
+$('word-next').addEventListener('click', () => choosePracticeWord(state.wordIndex + 1));
+$('live-enabled').addEventListener('change', (event) => { state.liveEnabled = event.target.checked; clearResult(); updateControls(); });
 $('upload-button').addEventListener('click', () => $('audio-file').click());
 $('audio-file').addEventListener('change', (event) => uploadAudio(event.target.files[0]));
 $('sample-button').addEventListener('click', loadSample);
@@ -1112,6 +1339,9 @@ $('shuffle-prompt').addEventListener('click', () => {
   if (prompt) { choosePrompt(prompt.id); clearResult(); }
 });
 $('reference-text').addEventListener('input', () => {
+  state.wordIndex = 0; state.wordResults = {};
+  resolveCustomReference();
+  if (state.practiceMode === 'word' && state.audioSamples) clearAudio();
   updateReferenceCount();
   const prompt = state.prompts.find((item) => item.id === state.promptId);
   if (prompt && $('reference-text').value !== prompt.text) {
@@ -1125,6 +1355,7 @@ $('reference-text').addEventListener('input', () => {
   clearResult(); updateControls();
 });
 $('model-select').addEventListener('change', (event) => {
+  state.wordResults = {};
   state.modelId = event.target.value;
   $('model-note').textContent = modelDescription(state.models.find((item) => item.id === state.modelId));
   clearResult(); updateControls();
@@ -1156,7 +1387,7 @@ document.addEventListener('pointerdown', (event) => {
 });
 window.addEventListener('scroll', positionWordTooltip, true);
 window.addEventListener('resize', () => { positionWordTooltip(); drawWaveform(state.audioSamples); if (!$('training-view').hidden) renderTraining(); });
-window.addEventListener('beforeunload', () => { if (state.recording) releaseMicrophone(); });
+window.addEventListener('beforeunload', () => { cancelLive(); if (state.recording) releaseMicrophone(); });
 if (!AudioContextClass) showAudioError('Trình duyệt chưa hỗ trợ Web Audio. Hãy mở demo bằng Chrome, Edge hoặc Firefox.');
 drawWaveform(null);
 updateControls();

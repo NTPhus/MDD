@@ -1,0 +1,33 @@
+{
+  "protocol_id": "speechocean762-canonical-majority-v1",
+  "dataset": "SpeechOcean762",
+  "repository": "https://github.com/jimbozhang/speechocean762",
+  "commit": "613968e3b0b789fc33936fb5eba1973176ba7d11",
+  "dataset_root": "data/external/speechocean762/613968e3b0b789fc33936fb5eba1973176ba7d11",
+  "paper": "https://www.isca-archive.org/interspeech_2021/zhang21x_interspeech.pdf",
+  "license": "CC BY 4.0 (original OpenSLR SLR101 record)",
+  "primary_checkpoint": "runs/windows-notebook-seed42-B-fold1/best_checkpoint",
+  "primary_selection": "entire official test split, 2500 utterances",
+  "comparison_checkpoints": {
+    "A": "runs/windows-notebook-seed42-A/best_checkpoint",
+    "C": "runs/windows-notebook-seed42-C-fold1/best_checkpoint"
+  },
+  "comparison_selection": "all official-test utterances where all five experts mark every canonical phone as score 2 and no expert marks an insertion; 179 utterances audited before model inference",
+  "human_phone_scores": {
+    "2": "correct",
+    "1": "right phone with a heavy accent; accepted for this protocol",
+    "0": "incorrect or missed"
+  },
+  "phone_error_gold": "At least 3 of 5 experts assign score 0 at the canonical position",
+  "word_error_gold": "At least 3 of 5 experts mark a score-0 phone or an inserted phone in that word",
+  "strict_correct_position_control": "All five experts assign score 2 at that position",
+  "accent_accepted_position_control": "All five experts assign score 1 or 2 at that position",
+  "phone_normalization": "Remove only trailing lexical-stress digit 0/1/2; retain AX, deviations marked *, and all categorical differences",
+  "prediction": "Same CPU FP32 greedy CTC decoder and unit-cost canonical alignment as the demo; 2 threads; no confidence threshold tuning",
+  "unsupported_or_failed_records": "Fail visibly and report coverage; do not silently drop records",
+  "insertion_reporting": "Predicted insertions reported separately from canonical-position phone detection; word detection includes expert insertion votes",
+  "metrics_scope": "External canonical-position/word detection under this rubric; not the L2-ARCTIC insertion-slot F1 and not a perceived-phone PER benchmark",
+  "no_training": true,
+  "no_llm_or_tts_calls": true,
+  "selection_frozen_before_predictions": true
+}

@@ -222,3 +222,22 @@ h1+p,.page-intro h1+p{font-size:13px;line-height:1.8}
   .language-tag>span{display:none}
   .privacy-note{font-size:11px}
 }
+/* Sentence snapshots and deliberate single-word practice. */
+.practice-modes { border: 0; padding: 0; margin: 18px 0 12px; min-width: 0; }
+.practice-modes legend { font-size: 10px; letter-spacing: .1em; font-weight: 700; color: #6d765f; margin-bottom: 9px; }
+.mode-buttons { display: flex; gap: 8px; }
+.mode-button { flex: 1; border: 1px solid #dce5cf; border-radius: 9px; padding: 11px 8px; background: #fff; color: #59634e; cursor: pointer; font: inherit; font-size: 12px; }
+.mode-button.selected { background: #eef3e8; color: #34452c; border-color: #8fa47a; font-weight: 700; }
+.live-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #58634d; }
+.live-toggle input { accent-color: #657e50; }
+.word-practice { padding: 14px; background: #f5f7f1; border-radius: 12px; margin: 12px 0; }
+.practice-words { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 12px; }
+.practice-word { border: 1px solid #dce5cf; border-radius: 7px; background: #fff; color: #59634e; padding: 7px 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.practice-word.selected { outline: 2px solid #657e50; outline-offset: 1px; }
+.practice-word.match { background: #e8f2e1; }
+.practice-word.difference { background: #fcf0d8; border-color: #d4b976; }
+.word-target { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+.live-status { border-left: 3px solid #8fa47a; background: #f2f6ed; padding: 10px 12px; font-size: 12px; line-height: 1.6; margin: 12px 0; }
+.word.pending { color: #858a80; background: #f1f2ee; }
+.word.listening { color: #536e89; background: #e8eff8; border: 1px dashed #8da7c0; }
+.mode-button:disabled, .practice-word:disabled { opacity: .55; cursor: not-allowed; }

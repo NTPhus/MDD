@@ -4,3 +4,4 @@ ipykernel>=6.29,<7
 nbconvert>=7.16,<8
 pandas>=2.2.3,<3
 matplotlib>=3.10,<4
+ipywidgets>=8.1,<9

@@ -1,0 +1,21 @@
+{
+  "protocol_id": "l2arctic-plus-cascade-feedback-v1",
+  "task": "annotated_phones_to_english_feedback",
+  "split": "test",
+  "generation": {
+    "do_sample": false,
+    "num_beams": 1,
+    "max_new_tokens": 1536
+  },
+  "context_length": 4096,
+  "seed": 42,
+  "quantization": "none-bf16-or-fp16",
+  "primary_metric": "suggestion_rougeL_on_reference_error_rows",
+  "bootstrap_repetitions": 2000,
+  "bootstrap_cluster": "speaker",
+  "metrics_scope": "Oracle coaching and real predicted-phone cascades reported separately; not learner improvement",
+  "failure_policy": "No repair or template fallback; invalid output receives zero text/coverage credit",
+  "checkpoint_selection": "Minimum validation loss; test is never used for checkpoint selection",
+  "attention_implementation": "sdpa",
+  "cpu_threads": 4
+}

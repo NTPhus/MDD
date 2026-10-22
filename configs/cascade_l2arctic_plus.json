@@ -1,0 +1,32 @@
+{
+  "protocol_id": "l2arctic-plus-cascade-v1",
+  "source_dir": "data/external/l2arctic-plus/e8c7684c545d94f2419fc4621e745236c192a353",
+  "original_protocol": "data/protocol/l2arctic-v1",
+  "protocol_dir": "data/protocol/l2arctic-plus-cascade-v1",
+  "processed_dir": "data/processed/l2arctic-plus-cascade-v1",
+  "validation_speakers": [
+    "HJK",
+    "LXC",
+    "PNV"
+  ],
+  "target_train_speakers": [
+    "HQTV",
+    "THV"
+  ],
+  "target_validation_speakers": [
+    "PNV"
+  ],
+  "target_test_speakers": [
+    "TLV"
+  ],
+  "run_root": "runs/cascade-l2arctic-plus-seed42",
+  "report_root": "data/generated/cascade-l2arctic-plus-seed42",
+  "audio_configs": {
+    "A": "configs/cascade_source.json",
+    "B": "configs/cascade_adapt.json",
+    "C": "configs/cascade_control.json"
+  },
+  "feedback_config": "configs/cascade_feedback_qlora.json",
+  "feedback_eval_config": "configs/cascade_feedback_eval.json",
+  "seed": 42
+}

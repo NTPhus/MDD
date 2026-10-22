@@ -1,0 +1,21 @@
+{
+  "dataset_kind": "published_l2arctic_plus",
+  "task": "annotated_phones_to_english_feedback",
+  "model_path": "models/pretrained/Qwen3-0.6B",
+  "dataset_dir": "data/processed/feedback-l2arctic-plus-en-v1",
+  "output_dir": "runs/feedback-l2arctic-plus-en-v1",
+  "source_dir": "data/external/l2arctic-plus/e8c7684c545d94f2419fc4621e745236c192a353",
+  "validation_speakers": ["HJK", "LXC", "SKA"],
+  "max_length": 3072,
+  "epochs": 3,
+  "eval_steps": 100,
+  "learning_rate": 0.0001,
+  "gradient_accumulation_steps": 8,
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "target_modules": ["q_proj", "v_proj"],
+  "min_train_examples": 100,
+  "min_validation_examples": 20,
+  "seed": 42
+}

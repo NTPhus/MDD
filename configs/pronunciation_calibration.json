@@ -1,0 +1,40 @@
+{
+  "experiment_id": "pronunciation-calibration-v1",
+  "method": "ctc_variant_posterior_margin_v1",
+  "protocol_dir": "data/protocol/l2arctic-plus-cascade-v1",
+  "protocol_sha256": "8692ddd427c5d99829c1997f255dd424ce455a8d63edec19004a09da9125f575",
+  "splits_sha256": "a30deae1afdee02e103408d5e724617e1d3d26e0a642d4e0771a1849b0840fdf",
+  "annotations": "data/processed/l2arctic-plus-cascade-v1/annotations.jsonl",
+  "annotations_sha256": "698044c9a8663fa10b91bd264dcfafe8203533270af142f849951bae87617343",
+  "checkpoint": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint",
+  "checkpoint_sha256": "da000521b31ad4d7445b8eb13d82d8a767d6535e678d727aae9baa8a8b177110",
+  "vocabulary_sha256": "1ebdf682aa547489a70aa72606a3f32fa38398a12977b978b2d874dac3d6bb8d",
+  "dictionary": "data/external/cmudict/74790861f652b15e4ac49015a90074ad62a27690/cmudict.dict",
+  "dictionary_sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22",
+  "output_root": "data/generated/pronunciation-calibration-v1",
+  "selection_hash_salt": "pronunciation-calibration-v1:42",
+  "fit_speakers": ["HJK", "LXC"],
+  "heldout_speakers": ["PNV"],
+  "pilot_counts": {"HJK": 10, "LXC": 10, "PNV": 20},
+  "cpu_threads": 2,
+  "threshold_policy": {
+    "positive_class": "manually annotated word has at least one substitution, deletion, or addition",
+    "max_false_positive_rate": 0.1,
+    "max_false_negative_rate": 0.2,
+    "min_coverage": 0.5,
+    "min_correct_decisions": 10,
+    "min_error_decisions": 5,
+    "grid_points": 31,
+    "objective": "maximize labelled-word decision coverage subject to registered FPR/FRR and decision-count constraints; tie-break by decided F1"
+  },
+  "no_training": true,
+  "no_llm_or_tts": true,
+  "limitations": [
+    "The frozen B checkpoint was selected using all 450 validation utterances. PNV is held out from threshold fitting, not from earlier checkpoint selection.",
+    "Shared read prompts across speakers follow the existing protocol; this is not a prompt-disjoint experiment.",
+    "Gold labels are manual L2-ARCTIC phone annotations. GPT-generated L2-Arctic-plus feedback text is not used as an acoustic label.",
+    "Pilot results are exploratory. One held-out speaker cannot establish robustness across accents or natural conversation.",
+    "This compares scoring/calibration on the same frozen weights, not a new before/after neural-training result.",
+    "The original 900 test utterances and SpeechOcean test remain outside calibration and default inference."
+  ]
+}
