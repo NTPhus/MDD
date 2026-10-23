@@ -119,10 +119,12 @@ def reference_resolution(root, text):
     raw_text = _text(text)
     dictionary, identity = _dictionary(root)
     tokens = raw_text.split()
-    missing, suggestions, replacements = [], [], {}
+    missing, suggestions, replacements, checks = [], [], {}, []
     searched = set()
     for index, token in enumerate(tokens):
         word = _word(token)
+        checks.append({'word': token, 'index': index,
+                       'in_dictionary': word in dictionary if dictionary else None})
         if word in dictionary:
             continue
         missing.append(token)
@@ -140,7 +142,11 @@ def reference_resolution(root, text):
     suggested = re.sub(r'\S+', lambda match: replacements.get(next(count), match.group()), raw_text)
     return {'status': 'needs_confirmation' if missing else 'asr', 'raw_text': raw_text,
             'target_text': None if missing else raw_text, 'suggested_text': suggested,
-            'missing_words': missing, 'suggestions': suggestions}
+            'missing_words': missing, 'suggestions': suggestions, 'word_checks': checks,
+            'dictionary_source': 'cmudict' if dictionary else None,
+            'dictionary_sha256': demo_reference.DICTIONARY_SHA256 if dictionary else None,
+            'suggestion_method': 'bounded_levenshtein_then_character_similarity',
+            'suggestions_require_confirmation': True}
 
 
 def reassess_reference(root, speech, target):

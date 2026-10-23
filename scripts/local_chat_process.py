@@ -16,14 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 _LOCK = threading.Lock()
 _PROCESS = None
 _EVENTS = None
+_DEVICE_POLICY = None
 
 
-def _start():
-    global _PROCESS, _EVENTS
+def _start(device_policy=None):
+    global _PROCESS, _EVENTS, _DEVICE_POLICY
     folder = ROOT / "data/generated/demo"
     folder.mkdir(parents=True, exist_ok=True)
+    from mdd.chat_runtime import requested_device
+    policy = requested_device() if device_policy is None else requested_device({'MDD_CHAT_DEVICE': device_policy})
     env = {**os.environ, "HF_HUB_OFFLINE":"1", "TRANSFORMERS_OFFLINE":"1", "TOKENIZERS_PARALLELISM":"false",
-           "OMP_NUM_THREADS":"2", "MKL_NUM_THREADS":"2", "CUDA_VISIBLE_DEVICES":"", "PYTHONIOENCODING":"utf-8"}
+           "OMP_NUM_THREADS":"2", "MKL_NUM_THREADS":"2", "PYTHONIOENCODING":"utf-8", 'MDD_CHAT_DEVICE': policy}
+    if policy == 'cpu':
+        env['CUDA_VISIBLE_DEVICES'] = ''
     with (folder / "chat-worker.log").open("a", encoding="utf-8") as log:
         process = subprocess.Popen([sys.executable, "-X", "utf8", "-u", str(ROOT / "scripts/local_chat_worker.py")],
             cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log,
@@ -37,7 +42,7 @@ def _start():
         finally:
             events.put(None)
     threading.Thread(target=receive, daemon=True, name="chat-worker-output").start()
-    _PROCESS, _EVENTS = process, events
+    _PROCESS, _EVENTS, _DEVICE_POLICY = process, events, policy
 
 
 def _send(value):
@@ -46,7 +51,7 @@ def _send(value):
 
 
 def shutdown():
-    global _PROCESS, _EVENTS
+    global _PROCESS, _EVENTS, _DEVICE_POLICY
     process = _PROCESS
     if process is None: return
     try:
@@ -70,36 +75,38 @@ def shutdown():
         for stream in (process.stdin, process.stdout):
             if stream: stream.close()
     finally:
-        _PROCESS = _EVENTS = None
+        _PROCESS = _EVENTS = _DEVICE_POLICY = None
 
 
 def complete(messages, config, max_tokens, timeout, *, on_text, cancelled, on_ready=None):
-    if config["device"] != "cpu":
-        raise ValueError("Chat inference is CPU only")
+    if config["device"] not in {'cpu', 'auto', 'cuda'}:
+        raise ValueError("Unsupported chat device policy")
     profile = config.get("generation_profile")
     if profile not in (None, "conversation"):
         raise ValueError("Unsupported generation profile")
     return _request({"type": "generate", "model_id": "qwen-trained" if config["adapter"] else "qwen-base",
                      "messages": messages, "max_tokens": min(max_tokens,384), "timeout": min(timeout,120.),
                      "generation_profile": profile}, timeout,
-                    on_text=on_text, cancelled=cancelled, on_ready=on_ready)
+                    on_text=on_text, cancelled=cancelled, on_ready=on_ready, device_policy=config['device'])
 
 
 def speech(request, *, on_stage, on_speech, on_text, cancelled):
-    return _request({"type": "speech", **request}, 240., on_stage=on_stage, on_speech=on_speech,
+    return _request({"type": "speech", **request}, 330., on_stage=on_stage, on_speech=on_speech,
                     on_text=on_text, cancelled=cancelled)
 
 
 def regenerate_reference(request, *, on_stage, on_speech, on_text, cancelled):
-    return _request({**request, 'type': 'regenerate_reference'}, 240., on_stage=on_stage, on_speech=on_speech,
+    return _request({**request, 'type': 'regenerate_reference'}, 330., on_stage=on_stage, on_speech=on_speech,
                     on_text=on_text, cancelled=cancelled)
 
 
-def _request(request, timeout, *, on_text, cancelled, on_ready=None, on_stage=None, on_speech=None):
+def _request(request, timeout, *, on_text, cancelled, on_ready=None, on_stage=None, on_speech=None, device_policy=None):
     with _LOCK:
         if cancelled.is_set(): return {"finish_reason":"cancelled","usage":{}}
-        if _PROCESS is None or _PROCESS.poll() is not None:
-            shutdown(); _start()
+        from mdd.chat_runtime import requested_device
+        policy = requested_device() if device_policy is None else requested_device({'MDD_CHAT_DEVICE': device_policy})
+        if _PROCESS is None or _PROCESS.poll() is not None or _DEVICE_POLICY != policy:
+            shutdown(); _start(policy)
         identifier = secrets.token_hex(16)
         _send({**request, "id":identifier})
         sent_cancel = False

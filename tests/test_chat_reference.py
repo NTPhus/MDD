@@ -59,8 +59,12 @@ class ChatReferenceTests(unittest.TestCase):
     def test_known_words_keep_original_grammar_negation_and_spacing(self):
         text = 'Yesterday  I go not to the park!'
         result = reference_resolution(self.root, text)
-        self.assertEqual(result, {'status': 'asr', 'raw_text': text, 'target_text': text,
-            'suggested_text': text, 'missing_words': [], 'suggestions': []})
+        expected = {'status': 'asr', 'raw_text': text, 'target_text': text,
+            'suggested_text': text, 'missing_words': [], 'suggestions': []}
+        self.assertEqual({key: result[key] for key in expected}, expected)
+        self.assertTrue(all(item['in_dictionary'] is True for item in result['word_checks']))
+        self.assertTrue(result['suggestions_require_confirmation'])
+        self.assertEqual(result['dictionary_sha256'], demo_reference.DICTIONARY_SHA256)
 
     def test_ambiguous_spelling_is_only_an_editable_draft(self):
         text = 'My fravorit food is rice'
@@ -76,6 +80,8 @@ class ChatReferenceTests(unittest.TestCase):
         self.assertIn('flavorist', result['suggestions'][0]['candidates'])
         self.assertEqual(_distance('fravorit', 'favorite', 2), 2)
         self.assertEqual(_distance('fravorit', 'flavorist', 2), 2)
+        self.assertEqual([item['in_dictionary'] for item in result['word_checks']], [True, False, True, True, True])
+        self.assertEqual(result['suggestion_method'], 'bounded_levenshtein_then_character_similarity')
 
     def test_draft_preserves_case_punctuation_known_tokens_and_numbers(self):
         text = 'Yesterday I go not 42, (FRAVORIT)!'
@@ -93,6 +99,7 @@ class ChatReferenceTests(unittest.TestCase):
     def test_missing_or_corrupt_dictionary_produces_no_candidates(self):
         self.path.write_bytes(b'favorite MADEUP\n')
         result = reference_resolution(self.root, 'fravorit')
+        self.assertIsNone(result['word_checks'][0]['in_dictionary'])
         self.assertEqual(result['status'], 'needs_confirmation')
         self.assertEqual(result['suggestions'][0]['candidates'], [])
         self.assertEqual(result['suggested_text'], 'fravorit')

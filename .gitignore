@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-kokoro/
 .tools/
 .ipynb_checkpoints/
 data/generated/
@@ -25,6 +26,7 @@ data/generated/
 # Downloaded model weights and partial downloads; keep model metadata.
 /models/pretrained/**/*.bin
 /models/pretrained/**/*.safetensors
+/models/pretrained/**/*.onnx
 /models/pretrained/**/*.part
 # Large downloaded Qwen tokenizer assets are reproduced by the pinned downloader.
 /models/pretrained/Qwen3-0.6B/tokenizer.json

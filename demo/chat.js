@@ -2,6 +2,11 @@
 
 // Show the completed reply before autoplay. Speech boundaries only move the
 // highlight; they never hide the words which have not been read yet.
+function replyReady(job) {
+  return job?.status === 'ready' || (job?.speech?.reply_ready === true
+    && !['error', 'cancelled', 'cancelling'].includes(job?.status));
+}
+
 class LiveReply {
   constructor({ onUpdate = () => {}, onVoice = () => {}, onError = () => {}, speak = null,
     cancelSpeech = () => {}, voice = true } = {}) {
@@ -78,7 +83,94 @@ class LiveReply {
     this.closed = true; this.mute();
   }
 }
-if (typeof module === 'object' && module.exports) module.exports = { LiveReply };
+// Opening audio is requested immediately; only its presentation waits for a
+// playable buffer and a short settling pause. Ordinary replies bypass this.
+async function prepareOpeningAudio(audio, { isCurrent = () => true, delayMs = 350, timeoutMs = 25000 } = {}) {
+  const playable = await new Promise((resolve, reject) => {
+    let poll, deadline;
+    const finish = (value, error) => {
+      clearInterval(poll); clearTimeout(deadline);
+      audio.removeEventListener('canplay', check); audio.removeEventListener('error', failed);
+      if (error) reject(error); else resolve(value);
+    };
+    const check = () => { if (!isCurrent()) finish(false); else if (audio.readyState >= 3) finish(true); };
+    const failed = () => finish(false, new Error('Không tải được giọng đọc. Bạn thử Phát lại.'));
+    audio.addEventListener('canplay', check); audio.addEventListener('error', failed);
+    poll = setInterval(check, 50);
+    deadline = setTimeout(() => finish(false, new Error('Giọng đọc tải quá lâu. Bạn thử Phát lại.')), timeoutMs);
+    audio.preload = 'auto';
+    try { audio.load(); check(); } catch (error) { finish(false, error); }
+  });
+  if (!playable) return false;
+  await new Promise(resolve => setTimeout(resolve, delayMs));
+  return isCurrent();
+}
+// Prefetch and an explicit Listen action share the same provider request. A
+// rejected request is removed so a later, explicit retry can try again.
+function sharedVoiceRequest(requests, key, create) {
+  if (requests.has(key)) return requests.get(key);
+  const pending = Promise.resolve().then(create).finally(() => {
+    if (requests.get(key) === pending) requests.delete(key);
+  });
+  requests.set(key, pending); return pending;
+}
+function voiceResourceKey(jobId, revision, target, selection, text) {
+  return JSON.stringify([jobId, revision, target, selection.provider || 'ai33', selection.voice_id || '', Number(selection.speed), text]);
+}
+function voiceCatalog(config, provider) {
+  if (provider === 'kokoro') return ['af_heart', 'am_michael', 'bf_emma', 'bm_george']
+    .map(id => config?.kokoro_voices?.find(voice => voice.id === id)).filter(Boolean);
+  return provider === 'ai33' ? config?.english_voices || [] : [];
+}
+function providerAvailable(config, provider) {
+  if (provider === 'kokoro') return config?.kokoro_available === true;
+  if (provider === 'ai33') return config?.ai33_available === true && config?.voice_locales?.includes('en-US');
+  return provider === 'browser';
+}
+function preferredVoiceProvider(config, preference, preferenceVersion = 0) {
+  // The English voice picker has four local choices when they are available.
+  // Old browser/API preferences belong to the previous provider picker.
+  if (providerAvailable(config, 'kokoro')) return 'kokoro';
+  if (providerAvailable(config, preference)) return preference;
+  if (providerAvailable(config, config?.default_voice_provider)) return config.default_voice_provider;
+  return ['kokoro', 'ai33', 'browser'].find(provider => providerAvailable(config, provider));
+}
+function voiceSelection(config, provider, voiceId, speed) {
+  const voices = voiceCatalog(config, provider);
+  const defaultId = provider === 'kokoro' ? config?.kokoro_default_voice_id : config?.default_voice_id;
+  const selected = voices.find(voice => voice.id === voiceId) || voices.find(voice => voice.id === defaultId) || voices[0];
+  return { provider, ...(selected ? { voice_id: selected.id } : {}), speed };
+}
+function voiceDescription(voice) {
+  return `${voice?.locale === 'en-GB' ? 'Anh' : 'Mỹ'} · ${voice?.gender === 'male' ? 'Nam' : 'Nữ'}`;
+}
+function conversationInterpretation(speech) {
+  const interpretation = speech?.interpretation;
+  if (speech?.conversation_source !== 'asr_interpreted' || !['accepted', 'unchanged'].includes(interpretation?.status)
+    || typeof interpretation.text !== 'string' || !interpretation.text.trim() || interpretation.text.length > 1000
+    || typeof speech.conversation_text !== 'string' || speech.conversation_text.trim() !== interpretation.text.trim()) return null;
+  return interpretation;
+}
+function conversationUserText(turn) {
+  for (const [source, expected, text] of [[turn.confirmedSource, 'user_confirmed', turn.confirmedText],
+    [turn.interpretedSource, 'asr_interpreted', turn.interpretedText], [turn.normalizedSource, 'asr_normalized', turn.normalizedText]]) {
+    if (source === expected && typeof text === 'string' && text.trim() && text.length <= 1000) return text;
+  }
+  return turn.content;
+}
+function updateUserSpeech(turn, speech) {
+  if (speech?.transcript) turn.content = speech.transcript;
+  const interpretation = conversationInterpretation(speech);
+  turn.interpretedText = interpretation?.text;
+  turn.interpretedSource = interpretation ? 'asr_interpreted' : undefined;
+  turn.interpretedRequiresConfirmation = interpretation?.requires_confirmation === true;
+  turn.normalizedText = speech?.conversation_source === 'asr_normalized' && speech.normalization?.lexical_preservation === true
+    ? speech.conversation_text : undefined;
+  turn.normalizedSource = turn.normalizedText ? 'asr_normalized' : undefined;
+}
+if (typeof module === 'object' && module.exports) module.exports = { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest,
+  voiceResourceKey, voiceCatalog, providerAvailable, preferredVoiceProvider, voiceSelection,
+  conversationInterpretation, conversationUserText, updateUserSpeech };
 
 (() => {
   if (typeof document === 'undefined') return;
@@ -102,19 +194,16 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     stopping: false, context: null, stream: null, source: null, processor: null, sink: null,
     chunks: [], sampleCount: 0, timer: null, flush: null, epoch: 0, micAllowed: () => true,
     speaking: null, speechEpoch: 0, audio: null, playback: null, speechTrackers: new Set(), audioFrame: null,
-    voiceTasks: new Set(), urls: new Set(), lastAudio: null, destroyed: false,
-    liveReply: null, liveTurnId: null, voiceStopped: false, topic: null, inRoom: false, starting: false, hintKey: '', repeatTarget: null,
+    voiceTasks: new Set(), voiceRequests: new Map(), voiceBuffers: new Map(), urls: new Set(), lastAudio: null, destroyed: false,
+    liveReply: null, liveTurnId: null, voiceStopped: false, openingPending: null, topic: null, inRoom: false, starting: false, hintKey: '', repeatTarget: null,
     stopRequested: false, recordingAudio: null, referenceRequests: new Map(), referenceOperation: null,
-    scrollHeld: false, lastScrollTop: 0, voiceId: '', voiceSpeed: 1, voicePreference: null,
-    pendingTopic: null, setupVoiceId: '', setupSpeed: 1, voiceFilter: '', previewAudio: null };
+    scrollHeld: false, lastScrollTop: 0, voiceId: '', voiceSpeed: 1, voicePreference: null, voicePreferenceVersion: 0,
+    pendingTopic: null, setupVoiceId: '', setupVoiceProvider: 'browser', setupSpeed: 1, voiceFilter: '', previewAudio: null };
   const sessionKey = () => state.model + (state.topic ? ':' + state.topic : '');
   const conversations = () => state.conversations[sessionKey()] ||= [];
   const turnRevision = turn => Math.max(Number.isSafeInteger(turn.referenceRevision) ? turn.referenceRevision : 0,
     Number.isSafeInteger(turn.metadata?.reference_revision) ? turn.metadata.reference_revision : 0);
-  const userConversationText = turn => turn.confirmedSource === 'user_confirmed' && typeof turn.confirmedText === 'string'
-    && turn.confirmedText.trim() && turn.confirmedText.length <= 1000 ? turn.confirmedText
-      : turn.normalizedSource === 'asr_normalized' && typeof turn.normalizedText === 'string'
-        && turn.normalizedText.trim() && turn.normalizedText.length <= 1000 ? turn.normalizedText : turn.content;
+  const userConversationText = conversationUserText;
   const lexicalText = text => (String(text || '').normalize('NFKC').replace(/’/g, "'").toLowerCase()
     .match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) || []).join('\u0000');
   function diagnosticView(speech) {
@@ -158,7 +247,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     try {
       sessionStorage.setItem('am-voice-chat-v2', JSON.stringify(state.conversations, (key, value) => ['audioUrl', 'voice'].includes(key) ? undefined : value));
       sessionStorage.setItem('am-chat-selection-v1', JSON.stringify({ model: state.model, topic: state.topic, inRoom: state.inRoom, mode: node('chat-mode').value,
-        voiceId: state.voiceId, voiceSpeed: state.voiceSpeed, voiceProvider: node('chat-voice-provider').value, autoRead: node('chat-auto-read').checked }));
+        voiceId: state.voiceId, voiceSpeed: state.voiceSpeed, voiceProvider: node('chat-voice-provider').value,
+        voiceProviderVersion: state.voicePreferenceVersion, autoRead: node('chat-auto-read').checked }));
     } catch {}
   }
   function restore() {
@@ -175,7 +265,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       if (['conversation', 'reading'].includes(selection.mode)) node('chat-mode').value = selection.mode;
       if (typeof selection.voiceId === 'string') state.voiceId = selection.voiceId;
       if ([.85, 1, 1.15].includes(selection.voiceSpeed)) state.voiceSpeed = selection.voiceSpeed;
-      if (['ai33', 'browser'].includes(selection.voiceProvider)) state.voicePreference = selection.voiceProvider;
+      if (['kokoro', 'ai33', 'browser'].includes(selection.voiceProvider)) state.voicePreference = selection.voiceProvider;
+      if (selection.voiceProviderVersion === 1) state.voicePreferenceVersion = 1;
       if (typeof selection.autoRead === 'boolean') node('chat-auto-read').checked = selection.autoRead;
     } catch {}
   }
@@ -196,23 +287,23 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     node('chat-retry-audio').disabled = locked || state.recording;
     for (const id of ['chat-read-prompt', 'chat-reading-listen']) node(id).disabled = audioLocked;
     for (const button of document.querySelectorAll('.chat-hint-keywords button')) button.disabled = audioLocked;
-    node('chat-stop-voice').hidden = !state.speaking;
+    node('chat-stop-voice').hidden = !state.speaking && !state.openingPending;
     for (const button of document.querySelectorAll('.chat-correction-listen,.chat-rewrite-listen,.chat-word-listen,.chat-sentence-listen,.chat-sound-listen')) button.disabled = audioLocked;
     for (const turn of conversations()) {
       const button = state.rows.get(turn.id)?.details.querySelector('.chat-sentence-listen');
       if (!button) continue;
       const voice = turn.sentenceVoice;
-      const waiting = state.voiceTasks.has(`sentence-${turn.id}:${turnRevision(turn)}`);
+      const waiting = Boolean(turn.sentenceVoiceSelection && state.voiceTasks.has(voiceRequestInfo(turn, true).key));
       button.disabled = audioLocked || turn.status !== 'ready' || waiting;
-      button.lastChild.textContent = waiting ? 'Đang tạo giọng đọc…'
-        : state.speaking === 'sentence-' + turn.id ? 'Dừng đọc câu'
+      button.setAttribute('aria-busy', String(waiting));
+      button.lastChild.textContent = state.speaking === 'sentence-' + turn.id ? 'Dừng đọc câu'
           : voice?.status === 'error' && voice.retryable ? 'Thử lại giọng đọc' : 'Nghe cả câu';
     }
     for (const button of document.querySelectorAll('.chat-correction-practise')) button.disabled = locked || state.recording || !button.dataset.jobId;
     if (node('chat-repeat-clear')) node('chat-repeat-clear').disabled = locked || state.recording;
     const statuses = { transcribing: 'Listening…', correcting: 'Preparing suggestions…', analyzing: 'Checking sounds…', generating: 'Replying…', coaching: 'Checking pronunciation…', cancelling: 'Stopping…' };
     node('chat-room-status').textContent = state.recording ? 'Recording…' : state.decoding ? 'Opening audio…' : state.pending ? 'Opening mic…'
-      : state.starting ? 'Starting…' : state.speaking ? 'Speaking…' : state.busy ? statuses[state.activeTurn?.status] || 'Thinking…' : 'Your turn';
+      : state.starting ? 'Starting…' : state.openingPending ? 'Preparing voice…' : state.speaking ? 'Speaking…' : state.busy ? statuses[state.activeTurn?.status] || 'Thinking…' : 'Your turn';
     node('chat-current-model').textContent = state.repeatTarget ? 'Practise your sentence' : node('chat-mode').value === 'reading' ? 'Read & practise' : state.config?.topics?.find(t => t.id === state.topic)?.title || 'English conversation';
     node('chat-topic-level').textContent = state.config?.topics?.find(t => t.id === state.topic)?.level || 'EN';
     const scenario = state.config?.topics?.find(t => t.id === state.topic);
@@ -220,8 +311,18 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     node('chat-scenario-title').textContent = scenario?.title || '';
     node('chat-scenario-description').textContent = scenario?.description || '';
     node('chat-settings-label').textContent = state.visible && state.inRoom
-      ? node('chat-voice-provider').value === 'ai33' ? (selectedVoice()?.name.split(' - ')[0] || 'ai33 · English') : 'Giọng đọc' : 'Settings';
-    node('chat-english-voice').disabled = node('chat-voice-provider').value !== 'ai33';
+      ? node('chat-voice-provider').value !== 'browser' ? (selectedVoice()?.name.split(' - ')[0] || 'Giọng tiếng Anh') : 'Giọng đọc' : 'Settings';
+    node('chat-english-voice').disabled = node('chat-voice-provider').value === 'browser';
+    const voiceProvider = node('chat-voice-provider').value;
+    const simpleVoices = state.config?.kokoro_available === true;
+    node('chat-voice-provider').hidden = simpleVoices;
+    document.querySelector('label[for="chat-voice-provider"]').hidden = simpleVoices;
+    document.querySelector('label[for="chat-english-voice"]').textContent = simpleVoices ? 'Giọng tiếng Anh'
+      : `Giọng tiếng Anh${voiceProvider === 'ai33' ? ' · ai33' : ''}`;
+    node('chat-english-voice').setAttribute('aria-label', 'Giọng tiếng Anh');
+    node('chat-voice-cost').hidden = simpleVoices;
+    node('chat-voice-cost').textContent = voiceProvider === 'kokoro' ? ''
+      : voiceProvider === 'ai33' ? 'ai33 reads the finished reply; API credits may apply.' : 'Giọng đọc sử dụng tính năng có sẵn của trình duyệt.';
     node('chat-settings').querySelector('summary').setAttribute('aria-label', 'Giọng đọc và cài đặt hội thoại');
     node('chat-model-description').textContent = state.model === 'qwen-trained' ? 'Fine-tuned Qwen for pronunciation practice tips.' : 'Original Qwen for comparison; it may not follow the coaching format.';
     node('chat-model-note').hidden = false;
@@ -364,9 +465,12 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
           : turn.metadata?.reply_source === 'conversation_unavailable' ? 'Chưa có phản hồi' : 'Qwen';
       const live = state.liveTurnId === turn.id ? state.liveReply : null;
       const playback = state.playback?.turnId === turn.id ? state.playback : null;
-      paintText(row, turn.role === 'user' ? userConversationText(turn) : playback ? turn.content : live ? live.visibleText : turn.content,
+      const openingPending = state.openingPending === turn;
+      paintText(row, openingPending ? '' : turn.role === 'user' ? userConversationText(turn) : playback ? turn.content : live ? live.visibleText : turn.content,
         playback ? playback.range : live?.range, playback ? playback.mode : live?.rangeMode);
-      row.meta.textContent = turn.role === 'user' ? '' : turn.error || ({ transcribing: 'Listening…', correcting: 'Preparing suggestions…', analyzing: 'Checking sounds…', generating: 'Replying…', coaching: 'Checking pronunciation…', cancelling: 'Stopping…', cancelled: 'Stopped' }[turn.status] || '');
+      row.meta.textContent = openingPending ? 'Đang chuẩn bị giọng đọc…' : turn.role === 'user'
+        ? turn.confirmedSource !== 'user_confirmed' && turn.interpretedRequiresConfirmation ? 'AI hiểu là' : ''
+        : replyReady(turn) ? '' : turn.error || ({ transcribing: 'Listening…', correcting: 'Preparing suggestions…', analyzing: 'Checking sounds…', generating: 'Replying…', coaching: 'Checking pronunciation…', cancelling: 'Stopping…', cancelled: 'Stopped' }[turn.status] || '');
       row.meta.hidden = !row.meta.textContent;
       const speechKey = JSON.stringify(turn.speech);
       if (speechKey !== row.speechKey || row.correctionJobId !== turn.jobId) {
@@ -402,10 +506,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
           else { stopSpeech(); row.audio.play().catch(() => showError('Không phát được bản ghi âm.')); }
         }); row.actions.append(replay);
       }
-      if (turn.role === 'assistant' && turn.content && terminal(turn.status)) {
-        const read = make('button', '', state.speaking === turn.id ? 'Dừng giọng đọc' : turn.voice?.status === 'generating' ? 'Đang tạo giọng…' : turn.voice?.status === 'error' && turn.voice.retryable ? 'Thử lại giọng đọc' : 'Phát lại');
+      if (turn.role === 'assistant' && turn.content && !openingPending && (replyReady(turn) || terminal(turn.status))) {
+        const read = make('button', '', state.speaking === turn.id ? 'Dừng giọng đọc' : turn.voice?.status === 'error' && turn.voice.retryable ? 'Thử lại giọng đọc' : 'Phát lại');
         read.prepend(icon('i-speaker'));
         read.type = 'button'; read.disabled = turn.voice?.status === 'generating' || Boolean(state.referenceOperation?.regenerating);
+        read.setAttribute('aria-busy', String(turn.voice?.status === 'generating'));
         read.addEventListener('click', () => state.speaking === turn.id ? stopSpeech() : speak(turn)); row.actions.append(read);
       }
       if (turn.role === 'assistant' && terminal(turn.status)
@@ -493,10 +598,13 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       .filter(([field, status]) => (rewrite[status] === undefined || rewrite[status] === 'ready')
         && typeof rewrite[field] === 'string' && rewrite[field].trim());
     if (rewrite.status !== 'ready' || !fields.length) {
-      row.rewrite.append(make('p', 'chat-rewrite-note', 'Chưa có gợi ý đủ tin cậy. Giữ nguyên câu bạn đã nói.'));
+      row.rewrite.append(make('p', 'chat-rewrite-note', 'Bạn thử nói lại hoặc sửa câu ở trên nhé.'));
       return;
     }
-    if (!rewrite.changed) row.rewrite.append(make('p', 'chat-rewrite-note', 'Qwen không đề xuất thay đổi.'));
+    if (!rewrite.changed && fields.length === 2 && !rewrite.partial
+      && !['partial', 'unavailable'].includes(rewrite.feedback_state)) {
+      row.rewrite.append(make('p', 'chat-rewrite-note', 'Qwen giữ nguyên cách diễn đạt của bạn.'));
+    }
     for (const [field, , caption] of fields) {
       const line = make('div', 'chat-rewrite-line');
       line.append(make('span', 'chat-rewrite-caption', caption), make('p', 'chat-rewrite-sentence', rewrite[field]));
@@ -511,6 +619,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     const speech = turn.speech;
     const pendingReference = state.referenceRequests.get(turn.jobId);
     const editorOpen = row.review.querySelector('.chat-reference-editor')?.open;
+    const soundsOpen = row.review.querySelector('.chat-phonetic-choices')?.open;
     row.review.replaceChildren(); if (!speech?.transcript) return;
     const resolution = speech.reference_resolution || {};
     const { diagnostic, words: candidates } = diagnosticView(speech);
@@ -519,8 +628,15 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     row.review.dataset.assessment = row.feedback.dataset.assessment;
     const missing = speech.missing_words?.length ? speech.missing_words : resolution.missing_words || [];
     const target = String(speech.reference_text || speech.transcript).trim();
-    row.review.append(make('span', 'chat-review-label', 'Câu đã nói'));
-    row.review.append(make('p', 'chat-target-text', target));
+    const interpretation = conversationInterpretation(speech);
+    const inferred = interpretation?.requires_confirmation === true && unconfirmed;
+    const original = String(speech.transcript).trim();
+    const showOriginal = inferred || lexicalText(original) !== lexicalText(target);
+    row.review.append(make('span', 'chat-review-label', showOriginal ? 'ASR gốc' : 'Câu đã nói'));
+    row.review.append(make('p', 'chat-target-text', showOriginal ? original : target));
+    if (showOriginal && !unconfirmed) {
+      row.review.append(make('span', 'chat-review-label', 'Câu đã xác nhận'), make('p', 'chat-confirmed-text', target));
+    }
     let note = '';
     if (diagnostic?.status === 'unavailable' && diagnostic.reason === 'reference_contains_unknown_words') {
       const unknown = diagnostic.missing_words || missing;
@@ -561,23 +677,69 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     }
     const editor = make('details', 'chat-reference-editor');
     editor.open = editorOpen ?? false;
-    editor.append(make('summary', '', 'Sửa câu'));
+    editor.append(make('summary', '', inferred ? 'Xác nhận hoặc sửa câu' : 'Sửa câu'));
     const input = make('textarea', 'chat-reference-input'); input.rows = 2; input.maxLength = 1000;
     input.setAttribute('aria-label', 'Câu tiếng Anh bạn đã nói trong bản thu');
     input.spellcheck = false;
-    if (!row.referenceDirty) row.referenceDraft = String(pendingReference?.referenceText || resolution.suggested_text || target);
+    // An interpretation is a draft for the learner to confirm. It never changes
+    // the acoustic reference or the sentence voice until explicitly submitted.
+    if (!row.referenceDirty) row.referenceDraft = String(pendingReference?.referenceText || (unconfirmed && interpretation?.text) || target);
     input.value = row.referenceDraft ?? target;
     input.disabled = Boolean(pendingReference);
     input.addEventListener('input', () => { row.referenceDraft = input.value; row.referenceDirty = true; });
     editor.append(input);
-    if (resolution.suggested_text && resolution.suggested_text !== target) {
-      editor.append(make('p', 'chat-reference-note', 'Sửa lại nếu câu này chưa đúng.'));
+    const selectWord = (index, original, candidate) => {
+      const matches = [...input.value.matchAll(/\S+/g)], token = matches[index];
+      if (!token || lexicalText(token[0]) !== lexicalText(original)) return;
+      const replacement = token[0].replace(/[A-Za-z]+(?:['’][A-Za-z]+)*/, candidate);
+      input.value = input.value.slice(0, token.index) + replacement + input.value.slice(token.index + token[0].length);
+      row.referenceDraft = input.value; row.referenceDirty = true; input.focus({ preventScroll: true });
+    };
+    const alternatives = Array.isArray(resolution.suggestions) ? resolution.suggestions : [];
+    if (alternatives.length) {
+      const choices = make('div', 'chat-spelling-choices');
+      choices.append(make('p', 'chat-reference-note', 'Chưa có trong từ điển · gợi ý theo cách viết'));
+      for (const suggestion of alternatives) {
+        if (typeof suggestion?.word !== 'string' || !Array.isArray(suggestion.candidates)) continue;
+        const line = make('div', 'chat-spelling-row'); line.append(make('strong', '', suggestion.word));
+        for (const candidate of suggestion.candidates) {
+          if (typeof candidate !== 'string' || !/^[a-z]{3,24}$/.test(candidate)) continue;
+          const choose = make('button', 'chat-spelling-choice', candidate); choose.type = 'button';
+          choose.disabled = Boolean(pendingReference); choose.title = 'Điền gợi ý; chưa đối chiếu audio';
+          choose.addEventListener('click', () => {
+            // Only replace this still-matching raw token. A prior manual edit
+            // must not be silently overwritten by an outdated suggestion.
+            selectWord(suggestion.index, suggestion.word, candidate);
+          });
+          line.append(choose);
+        }
+        choices.append(line);
+      }
+      editor.append(choices);
     }
-    const alternatives = Array.isArray(resolution.suggestions) ? resolution.suggestions
-      .filter(suggestion => typeof suggestion?.word === 'string' && Array.isArray(suggestion.candidates) && suggestion.candidates.length > 1)
-      .map(suggestion => suggestion.word + ': ' + suggestion.candidates.filter(candidate => typeof candidate === 'string').join(' / ')) : [];
-    if (alternatives.length) editor.append(make('p', 'chat-reference-note', 'Có thể là ' + alternatives.join(' · ')));
-    const apply = make('button', 'chat-reference-apply', pendingReference ? 'Đang đối chiếu…' : 'Đối chiếu audio này');
+    const sounds = speech.phonetic_candidates;
+    if (speech.reference_source === 'asr' && sounds?.status === 'available'
+      && sounds.diagnostic_only === true && sounds.requires_confirmation === true) {
+      const choices = make('details', 'chat-phonetic-choices'); choices.open = soundsOpen ?? false;
+      choices.append(make('summary', '', 'Từ gần âm đã nghe'));
+      for (const word of sounds.words || []) {
+        const line = make('div', 'chat-spelling-row');
+        line.append(make('strong', '', word.asr_word));
+        const observed = (word.heard_phones || []).join(' ');
+        const heard = make('span', 'chat-heard-phones', observed ? `Âm model (ARPAbet): ${observed}` : 'Chưa tách được âm');
+        line.append(heard);
+        for (const candidate of (word.candidates || []).slice(0, 3)) {
+          if (typeof candidate.word !== 'string' || !/^[a-z]+(?:'[a-z]+)?$/.test(candidate.word) || candidate.word.length > 24) continue;
+          const choose = make('button', 'chat-spelling-choice chat-phonetic-choice', candidate.word); choose.type = 'button';
+          choose.disabled = Boolean(pendingReference); choose.title = 'Gợi ý theo âm; bấm để điền, rồi xác nhận câu bạn đã nói';
+          choose.addEventListener('click', () => selectWord(word.index, word.asr_word, candidate.word));
+          line.append(choose);
+        }
+        choices.append(line);
+      }
+      editor.append(choices);
+    }
+    const apply = make('button', 'chat-reference-apply', pendingReference ? 'Đang đối chiếu…' : inferred ? 'Xác nhận câu này' : 'Đối chiếu audio này');
     apply.type = 'button'; apply.disabled = Boolean(state.busy || state.referenceOperation || pendingReference || row.referenceExpired || turn.status !== 'ready' || !turn.jobId);
     apply.addEventListener('click', async () => {
       if (state.busy || state.referenceOperation || state.recording || state.pending || state.stopping || state.decoding || state.starting
@@ -627,7 +789,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       turn.content = job.text || ''; turn.status = job.status; turn.error = job.error?.message;
       if (!started && epoch === state.epoch && state.visible) { beginReply(turn); started = true; }
       if (['error', 'cancelled'].includes(job.status)) stopSpeech();
-      if (started) state.liveReply?.update(turn.content, { final: job.status === 'coaching' || terminal(job.status) });
+      if (started) state.liveReply?.update(turn.content, { final: replyReady(job) || terminal(job.status) });
+      autoplayReply(turn);
+      prefetchSentenceVoice(turn);
       row.referenceDirty = false; row.referenceDraft = job.speech?.conversation_text || reference;
       row.speechKey = ''; render(); return true;
     };
@@ -645,6 +809,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         // the live reply, its speech queue, the displayed user or the history.
         if (busyOwned) Object.assign(turn, previous);
         turn.speech = job.speech; turn.referenceRevision = revision; turn.metadata = job.metadata || previous.metadata;
+        if (user) {
+          user.confirmedText = job.speech.conversation_text; user.confirmedSource = 'user_confirmed'; user.confirmedRevision = revision;
+        }
         row.referenceDirty = false; row.referenceDraft = job.speech.reference_text || reference;
         accepted = true; return;
       }
@@ -692,8 +859,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         currentRow.speechKey = '';
       }
       row.speechKey = ''; render(); save();
-      if (owner && accepted && regenerated && turn.status === 'ready' && epoch === state.epoch && state.visible && !state.voiceStopped
-        && node('chat-auto-read').checked && node('chat-voice-provider').value === 'ai33') speak(turn);
+      if (owner && accepted && regenerated && epoch === state.epoch) autoplayReply(turn);
+      if (owner && accepted && epoch === state.epoch) prefetchSentenceVoice(turn);
     }
   }
   function renderHints() {
@@ -732,34 +899,55 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       button.append(keywords, make('span', 'chat-topic-cta', 'Chọn giọng & bắt đầu ↗')); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
     }
   }
-  function selectedVoice() { return state.config?.english_voices?.find(v => v.id === state.voiceId); }
+  const currentVoiceProvider = () => node('chat-voice-provider').value;
+  const serverVoiceSelected = () => ['kokoro', 'ai33'].includes(currentVoiceProvider());
+  function selectedVoice() { return voiceCatalog(state.config, currentVoiceProvider()).find(v => v.id === state.voiceId); }
+  function renderVoiceOptions() {
+    const provider = currentVoiceProvider();
+    const selection = voiceSelection(state.config, provider, state.voiceId, state.voiceSpeed);
+    state.voiceId = selection.voice_id || '';
+    node('chat-english-voice').replaceChildren(...voiceCatalog(state.config, provider).map(voice => {
+      const option = make('option', '', provider === 'kokoro' ? `${voiceDescription(voice)} · ${voice.name}`
+        : `${voice.name} · ${voice.locale}`); option.value = voice.id; return option;
+    }));
+    node('chat-english-voice').value = state.voiceId;
+  }
   function stopVoicePreview() {
     if (state.previewAudio) { state.previewAudio.pause(); state.previewAudio.removeAttribute('src'); state.previewAudio.load(); state.previewAudio = null; }
   }
   function setupSelection() {
-    const voice = state.config?.english_voices?.find(v => v.id === state.setupVoiceId);
-    node('topic-setup-selection').textContent = `${voice ? voice.name.split(' - ')[0] + ' · ' + voice.locale : 'Giọng trình duyệt'} · ${state.setupSpeed}×`;
+    const voice = voiceCatalog(state.config, state.setupVoiceProvider).find(v => v.id === state.setupVoiceId);
+    node('topic-setup-selection').textContent = `${voice ? state.setupVoiceProvider === 'kokoro'
+      ? voiceDescription(voice) : voice.name.split(' - ')[0] + ' · ' + voice.locale : 'Giọng trình duyệt'} · ${state.setupSpeed}×`;
   }
   function renderSetupVoices() {
     const container = node('topic-voice-options'); container.replaceChildren();
+    const simpleVoices = state.config.kokoro_available === true;
+    node('chat-topic-setup').classList.toggle('curated-voices', simpleVoices);
+    node('topic-voice-search').hidden = simpleVoices;
+    document.querySelector('label[for="topic-voice-search"]').hidden = simpleVoices;
+    document.querySelector('.topic-voice-filters').hidden = simpleVoices;
     const query = node('topic-voice-search').value.trim().toLocaleLowerCase();
-    const voices = (state.config?.english_voices || []).filter(v => (!state.voiceFilter || v.locale === state.voiceFilter)
-      && `${v.name} ${v.provider} ${v.locale}`.toLocaleLowerCase().includes(query));
-    node('topic-voice-count').textContent = `${voices.length} giọng ai33`;
+    const voices = (simpleVoices ? ['kokoro'] : ['ai33']).flatMap(provider => providerAvailable(state.config, provider)
+      ? voiceCatalog(state.config, provider).map(voice => ({ ...voice, voiceProvider: provider })) : []).filter(v => simpleVoices
+        || (!state.voiceFilter || v.locale === state.voiceFilter) && `${v.name} ${v.provider} ${v.locale}`.toLocaleLowerCase().includes(query));
+    node('topic-voice-count').textContent = `${voices.length} giọng`;
     for (const voice of voices) {
       const row = make('div', 'topic-voice-row'), label = make('label', 'topic-voice-choice');
       const radio = make('input'); radio.type = 'radio'; radio.name = 'topic-voice'; radio.value = voice.id;
-      radio.checked = state.setupVoiceId === voice.id;
-      radio.disabled = !state.config.ai33_available;
+      radio.checked = state.setupVoiceId === voice.id && state.setupVoiceProvider === voice.voiceProvider;
+      radio.disabled = !providerAvailable(state.config, voice.voiceProvider);
       const accent = voice.locale === 'en-GB' ? 'UK' : 'US';
-      label.append(radio, make('span', 'topic-voice-accent', accent));
-      const copy = make('span', 'topic-voice-copy'); copy.append(make('strong', '', voice.name.split(' - ')[0]));
-      copy.append(make('small', '', `${voice.gender === 'female' ? 'Nữ' : voice.gender === 'male' ? 'Nam' : 'English'} · ${voice.provider === 'edge' ? 'Edge' : 'ElevenLabs'}`));
+      label.append(radio);
+      if (!simpleVoices) label.append(make('span', 'topic-voice-accent', accent));
+      const copy = make('span', 'topic-voice-copy'); copy.append(make('strong', '', simpleVoices ? voiceDescription(voice) : voice.name.split(' - ')[0]));
+      copy.append(make('small', '', simpleVoices ? voice.name : `${voice.gender === 'female' ? 'Nữ' : voice.gender === 'male' ? 'Nam' : 'English'} · ${voice.provider === 'edge' ? 'Edge' : 'ElevenLabs'}`));
       label.append(copy);
-      if (voice.id === state.config.default_voice_id) label.append(make('span', 'topic-voice-badge', 'Mặc định'));
-      radio.addEventListener('change', () => { state.setupVoiceId = voice.id; setupSelection(); });
+      if (!simpleVoices && voice.voiceProvider === preferredVoiceProvider(state.config) && voice.id === (voice.voiceProvider === 'kokoro'
+        ? state.config.kokoro_default_voice_id : state.config.default_voice_id)) label.append(make('span', 'topic-voice-badge', 'Mặc định'));
+      radio.addEventListener('change', () => { state.setupVoiceId = voice.id; state.setupVoiceProvider = voice.voiceProvider; setupSelection(); });
       const preview = make('button', 'topic-voice-preview'); preview.type = 'button'; preview.append(icon('i-play'));
-      preview.setAttribute('aria-label', `Nghe thử ${voice.name}`); preview.title = 'Nghe thử'; preview.disabled = !voice.preview_url;
+      preview.setAttribute('aria-label', `Nghe thử ${simpleVoices ? voiceDescription(voice) : voice.name}`); preview.title = 'Nghe thử'; preview.disabled = !voice.preview_url;
       preview.addEventListener('click', async () => {
         stopVoicePreview();
         if (!/^\/api\/chat\/voice-preview\/[\w-]+$/.test(voice.preview_url || '')) return;
@@ -771,25 +959,29 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       });
       row.append(label, preview); container.append(row);
     }
-    if (!voices.length) container.append(make('p', 'topic-no-voices', query ? 'Không tìm thấy giọng phù hợp.' : 'Chưa có giọng ai33 cho bộ lọc này.'));
-    const fallback = make('label', 'topic-browser-choice'), radio = make('input');
-    radio.type = 'radio'; radio.name = 'topic-voice'; radio.value = 'browser'; radio.checked = state.setupVoiceId === 'browser';
-    radio.addEventListener('change', () => { state.setupVoiceId = 'browser'; setupSelection(); });
-    fallback.append(radio, make('span', '', 'Dùng giọng tiếng Anh của trình duyệt')); container.append(fallback);
+    if (!voices.length) container.append(make('p', 'topic-no-voices', query ? 'Không tìm thấy giọng phù hợp.' : 'Chưa có giọng đọc cho bộ lọc này.'));
+    if (!simpleVoices) {
+      const fallback = make('label', 'topic-browser-choice'), radio = make('input');
+      radio.type = 'radio'; radio.name = 'topic-voice'; radio.value = 'browser'; radio.checked = state.setupVoiceId === 'browser';
+      radio.addEventListener('change', () => { state.setupVoiceId = 'browser'; state.setupVoiceProvider = 'browser'; setupSelection(); });
+      fallback.append(radio, make('span', '', 'Dùng giọng tiếng Anh của trình duyệt')); container.append(fallback);
+    }
     setupSelection();
   }
   function openTopicSetup(topicId) {
     if (state.busy || state.recording || state.starting || !state.config) return;
     const topic = state.config.topics?.find(t => t.id === topicId); if (!topic) return;
     stopSpeech(); stopVoicePreview(); state.pendingTopic = topicId; state.voiceFilter = '';
-    state.setupVoiceId = node('chat-voice-provider').value === 'ai33' && selectedVoice() ? state.voiceId : 'browser';
+    state.setupVoiceProvider = serverVoiceSelected() && selectedVoice() ? currentVoiceProvider() : 'browser';
+    state.setupVoiceId = state.setupVoiceProvider !== 'browser' ? state.voiceId : 'browser';
     state.setupSpeed = state.voiceSpeed;
     node('topic-setup-title').textContent = topic.title; node('topic-setup-level').textContent = topic.level;
     node('topic-setup-description').textContent = topic.description;
     node('topic-setup-role').textContent = topic.role || 'Your English conversation partner';
     node('topic-setup-auto-read').checked = node('chat-auto-read').checked;
     node('topic-voice-search').value = '';
-    node('topic-setup-status').textContent = state.config.ai33_available ? 'Nghe thử mẫu có sẵn. Giọng ai33 khi trò chuyện sử dụng credit của tài khoản.' : 'ai33 chưa được cấu hình. Bạn vẫn có thể dùng giọng trình duyệt.';
+    node('topic-setup-status').textContent = state.config.kokoro_available ? 'Chọn giọng Mỹ hoặc Anh, nam hoặc nữ. Nhấn nút nghe thử để tìm giọng bạn thích.'
+      : state.config.ai33_available ? 'Nghe thử mẫu có sẵn. Giọng ai33 khi trò chuyện sử dụng credit của tài khoản.' : 'Bạn có thể dùng giọng tiếng Anh của trình duyệt.';
     for (const button of document.querySelectorAll('[data-voice-locale]')) button.setAttribute('aria-pressed', String(!button.dataset.voiceLocale));
     for (const radio of document.querySelectorAll('[name=topic-speed]')) radio.checked = Number(radio.value) === state.setupSpeed;
     renderSetupVoices(); node('chat-topic-setup').showModal();
@@ -806,8 +998,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       const job = await api('/api/chat/topic', { model_id: state.model, topic_id: topicId, request_id: uuid() });
       if (epoch !== state.epoch || !state.visible) return;
       const turn = { id: uuid(), role: 'assistant', opening: true, content: job.text, status: 'ready', jobId: job.id, metadata: job.metadata };
+      if (node('chat-auto-read').checked) state.openingPending = turn;
       conversations().push(turn); beginReply(turn); render(); state.liveReply.update(turn.content, { final: true });
-      if (node('chat-auto-read').checked && node('chat-voice-provider').value === 'ai33') speak(turn);
+      if (state.openingPending === turn) speak(turn, false, { opening: true });
     } catch (error) { showError(error.message); }
     finally { state.starting = false; render(); save(); }
   }
@@ -836,8 +1029,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       span.classList.toggle('is-speaking', active);
       if (active) span.setAttribute('aria-current', 'true'); else span.removeAttribute('aria-current');
     }
-    row.timing.hidden = !range || mode !== 'estimated';
-    row.timing.textContent = row.timing.hidden ? '' : 'Đánh dấu từ ước lượng';
+    row.timing.hidden = true;
+    row.timing.textContent = '';
   }
   function cancelBrowserSpeech() {
     for (const tracker of state.speechTrackers) tracker.dispose();
@@ -865,11 +1058,12 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   function beginReply(turn) {
     state.liveReply?.dispose(); state.liveTurnId = turn.id; state.voiceStopped = false;
     state.liveReply = new LiveReply({
-      voice: state.visible && node('chat-auto-read').checked && node('chat-voice-provider').value === 'browser',
+      voice: state.openingPending !== turn && state.visible && node('chat-auto-read').checked && node('chat-voice-provider').value === 'browser',
       speak: window.speechSynthesis && window.SpeechSynthesisUtterance ? browserVoice : null,
       cancelSpeech: cancelBrowserSpeech,
       onUpdate: (text, range, mode, readUntil) => {
         const row = state.rows.get(turn.id); if (!row) return;
+        if (state.openingPending === turn) return;
         if (state.playback?.turnId === turn.id) return;
         const scrollSnapshot = chatScrollSnapshot();
         paintText(row, text, range, mode, readUntil); restoreChatScroll(scrollSnapshot);
@@ -932,12 +1126,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       let pollFailures = 0;
       while (!state.destroyed) {
         turn.content = job.text || ''; turn.status = job.status; turn.metadata = job.metadata; turn.error = job.error?.message; turn.jobId = job.id;
-        turn.speech = job.speech; if (job.speech?.transcript) user.content = job.speech.transcript;
-        if (job.speech?.conversation_source === 'asr_normalized' && job.speech?.normalization?.lexical_preservation === true) {
-          user.normalizedText = job.speech.conversation_text; user.normalizedSource = 'asr_normalized';
-        }
+        turn.speech = job.speech; updateUserSpeech(user, job.speech);
         if (['error', 'cancelled'].includes(job.status)) stopSpeech();
-        state.liveReply?.update(turn.content, { final: job.status === 'coaching' || terminal(job.status) });
+        state.liveReply?.update(turn.content, { final: replyReady(job) || terminal(job.status) });
+        autoplayReply(turn);
+        prefetchSentenceVoice(turn);
         render(); if (terminal(job.status)) break;
         await pause(job.status === 'generating' ? 300 : 700);
         try { job = await api('/api/chat/jobs/' + job.id); pollFailures = 0; }
@@ -948,7 +1141,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       state.busy = false; state.job = null; state.activeTurn = null;
       if (turn.status === 'error') { node('chat-audio-preview').src = user.audioUrl; node('chat-audio-retry').hidden = false; }
       render(); save();
-      if (turn.status === 'ready' && state.visible && !state.voiceStopped && node('chat-auto-read').checked && node('chat-voice-provider').value === 'ai33') speak(turn);
+      autoplayReply(turn);
     }
   }
   async function upload(file) {
@@ -1027,7 +1220,13 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     } catch (error) { releaseMic(); showError(error.name === 'NotAllowedError' ? 'Allow microphone access in your browser, or upload audio.' : 'The microphone could not be opened. Try uploading an audio file.'); }
     finally { state.pending = false; render(); }
   }
-  function stopSpeech() {
+  function revealOpening(turn) {
+    if (state.openingPending !== turn) return;
+    state.openingPending = null;
+    if (state.liveTurnId === turn.id) state.liveReply?.revealAll();
+    render();
+  }
+  function stopSpeech(preserveOpening = null) {
     state.voiceStopped = true; state.speechEpoch++;
     const playback = state.playback; state.playback = null; playback?.tracker?.dispose();
     const activeRow = playback?.row || state.rows.get(playback?.turnId || state.speaking);
@@ -1036,72 +1235,164 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
     state.liveReply?.mute(); cancelBrowserSpeech();
     if (state.recordingAudio) { state.recordingAudio.pause(); state.recordingAudio = null; }
     if (state.audio) { state.audio.pause(); state.audio = null; } state.speaking = null; render();
+    if (state.openingPending && state.openingPending !== preserveOpening) revealOpening(state.openingPending);
   }
-  function speakText(text, id, turn = null) {
+  function speakText(text, id, turn = null, { opening = false } = {}) {
     if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating) return;
     showError();
-    stopSpeech();
-    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { showError('Browser speech is unavailable. Select ai33 to hear a completed reply.'); return; }
-    const epoch = state.speechEpoch;
+    stopSpeech(opening ? turn : null);
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { if (opening) revealOpening(turn); showError('Browser speech is unavailable. Select Kokoro or ai33 to hear a completed reply.'); return; }
+    const epoch = state.speechEpoch; let openingTimer;
     if (turn && state.liveTurnId === turn.id) state.liveReply?.revealAll();
     const playback = turn ? { turnId: turn.id, range: null, mode: null } : null;
     state.playback = playback;
     const valid = () => epoch === state.speechEpoch && !state.destroyed && (!playback || state.playback === playback);
     const finish = (completed = false) => {
       if (!valid()) return;
+      clearTimeout(openingTimer);
       const row = turn && state.rows.get(turn.id);
       if (row) paintText(row, turn.content, null, null, completed ? text.length : 0);
       state.playback = null; state.speaking = null; render();
     };
     try {
       browserVoice(text, {
-        start: () => { if (valid()) { state.speaking = id; render(); } },
+        start: () => { if (valid()) { clearTimeout(openingTimer); if (opening) revealOpening(turn); state.speaking = id; render(); } },
         boundary: (index, mode) => {
           if (!valid() || !playback) return;
           const range = window.MDDSpeechHighlight.wordRange(text, index); if (!range) return;
           playback.range = range; playback.mode = mode;
           const row = state.rows.get(turn.id); if (row) paintText(row, turn.content, range, mode);
         },
-        end: () => finish(true),
-        error: () => { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } },
+        end: () => { if (valid() && opening) revealOpening(turn); finish(true); },
+        error: () => { if (valid()) { if (opening) revealOpening(turn); finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } },
       }, turn ? .98 : .92);
-    } catch (error) { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } }
+      if (opening && state.openingPending === turn) openingTimer = setTimeout(() => {
+        if (valid() && state.openingPending === turn) { stopSpeech(); showError('Giọng đọc chưa bắt đầu. Bạn thử Phát lại.'); }
+      }, 25000);
+    } catch (error) { if (valid()) { if (opening) revealOpening(turn); finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } }
   }
-  async function speak(turn, sentence = false) {
-    if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating) return;
+  function autoplayReply(turn) {
+    const revision = turnRevision(turn);
+    if (!replyReady(turn) || !turn.content || !state.visible || state.voiceStopped
+      || !node('chat-auto-read').checked || !serverVoiceSelected()
+      || turn.autoVoiceRevision === revision) return;
+    turn.autoVoiceRevision = revision;
+    speak(turn);
+  }
+  function voiceRequestInfo(turn, sentence) {
+    const selectionField = sentence ? 'sentenceVoiceSelection' : 'voiceSelection';
+    const otherSelection = turn[sentence ? 'voiceSelection' : 'sentenceVoiceSelection'];
+    // A turn keeps the voice and speed chosen when its first audio was queued.
+    // Changing Settings applies to the next turn, matching the server contract.
+    turn[selectionField] ||= otherSelection ? { ...otherSelection }
+      : voiceSelection(state.config, currentVoiceProvider(), state.voiceId, state.voiceSpeed);
+    // Legacy sessions omitted provider and used AI33 voice IDs. Keep their
+    // provider explicit rather than sending an AI33 ID to the new local default.
+    turn[selectionField].provider ||= 'ai33';
+    const text = sentence ? String(turn.speech?.reference_text || turn.speech?.transcript || '').trim() : turn.content;
+    const revision = turnRevision(turn), target = sentence ? 'sentence' : 'reply';
+    return { text, revision, selection: turn[selectionField],
+      key: voiceResourceKey(turn.jobId, revision, target, turn[selectionField], text),
+      field: sentence ? 'sentence_voice' : 'voice', turnField: sentence ? 'sentenceVoice' : 'voice',
+      keyField: sentence ? 'sentenceVoiceKey' : 'voiceKey' };
+  }
+  function bufferedSentenceAudio(key, voice) {
+    let audio = state.voiceBuffers.get(key);
+    if (!audio || audio.src !== new URL(voice.url, location.href).href && audio.src !== voice.url) {
+      audio = new Audio(voice.url); audio.preload = 'auto';
+      state.voiceBuffers.set(key, audio);
+      // Loading a buffer is independent of the currently playing bot reply.
+      // It must never call play(), stopSpeech(), or claim the playback slot.
+      try { audio.load(); } catch {}
+    }
+    // Keep a small recent set without ever evicting the audio being played.
+    state.voiceBuffers.delete(key); state.voiceBuffers.set(key, audio);
+    while (state.voiceBuffers.size > 24) {
+      const oldest = [...state.voiceBuffers].find(([otherKey, buffer]) => otherKey !== key && buffer !== state.audio);
+      if (!oldest) break;
+      state.voiceBuffers.delete(oldest[0]);
+    }
+    return audio;
+  }
+  async function requestVoiceResource(turn, sentence = false) {
+    const info = voiceRequestInfo(turn, sentence), epoch = state.epoch;
+    const current = () => epoch === state.epoch && info.revision === turnRevision(turn) && !state.destroyed
+      && !['error', 'cancelled', 'cancelling'].includes(turn.status)
+      && voiceRequestInfo(turn, sentence).key === info.key;
+    if (turn[info.keyField] === info.key && turn[info.turnField]?.status === 'ready') return turn[info.turnField];
+    return sharedVoiceRequest(state.voiceRequests, info.key, async () => {
+      if (!current()) return null;
+      state.voiceTasks.add(info.key); controls();
+      try {
+        const deadline = performance.now() + 60000;
+        let job;
+        while (current()) {
+          try {
+            job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US', ...info.selection,
+              ...(sentence ? { target: 'sentence' } : {}) });
+            break;
+          } catch (error) {
+            // Another sentence may still hold the bounded background slot.
+            // A busy response has not submitted a provider task, so retrying
+            // that response cannot create duplicate synthesis jobs.
+            if (error.code !== 'chat_voice_busy' || performance.now() >= deadline) throw error;
+            await pause(400);
+          }
+        }
+        if (!job || !current() || (job.metadata?.reference_revision || 0) !== info.revision) return null;
+        turn[info.keyField] = info.key; turn[info.turnField] = job[info.field]; render();
+        while (job[info.field]?.status === 'generating') {
+          await pause(info.selection.provider === 'kokoro' ? 150 : 700); if (!current()) return null;
+          job = await api('/api/chat/jobs/' + turn.jobId);
+          if (!current() || (job.metadata?.reference_revision || 0) !== info.revision) return null;
+          turn[info.turnField] = job[info.field]; render();
+        }
+        const voice = job[info.field];
+        if (voice?.status === 'error') throw new Error(voice.message);
+        if (voice?.status === 'ready' && /^\/api\/chat\/audio\/[0-9a-f]{32}$/.test(voice.url)) {
+          if (sentence) bufferedSentenceAudio(info.key, voice);
+          return voice;
+        }
+        return null;
+      } finally { state.voiceTasks.delete(info.key); render(); }
+    });
+  }
+  function prefetchSentenceVoice(turn) {
+    if (!serverVoiceSelected() || !state.visible || !state.inRoom || !turn.jobId
+      || ['error', 'cancelled', 'cancelling'].includes(turn.status)
+      || !String(turn.speech?.reference_text || turn.speech?.transcript || '').trim()) return;
+    const info = voiceRequestInfo(turn, true);
+    if (turn.sentencePrefetchKey === info.key) return;
+    turn.sentencePrefetchKey = info.key;
+    // Read aloud controls autoplay, not preparation of this opt-in sound-detail
+    // button. Browser voice does not request any provider audio.
+    requestVoiceResource(turn, true).catch(() => {});
+  }
+  async function speak(turn, sentence = false, { opening = false } = {}) {
+    if (state.recording || state.pending || state.stopping || (state.referenceOperation?.regenerating && !replyReady(turn))) return;
     const text = sentence ? String(turn.speech?.reference_text || turn.speech?.transcript || '').trim() : turn.content;
     const playId = sentence ? 'sentence-' + turn.id : turn.id;
-    const voiceField = sentence ? 'sentence_voice' : 'voice', turnField = sentence ? 'sentenceVoice' : 'voice';
     if (!text) return;
-    if (node('chat-voice-provider').value !== 'ai33') { speakText(text, playId, sentence ? null : turn); return; }
-    if (!turn.jobId || turn.status !== 'ready') { showError('ai33 needs a completed reply from this page session.'); return; }
-    const revision = turnRevision(turn), taskKey = `${playId}:${revision}`;
-    if (state.voiceTasks.has(taskKey)) return;
+    if (!serverVoiceSelected()) { speakText(text, playId, sentence ? null : turn, { opening }); return; }
+    if (!turn.jobId || (sentence ? turn.status !== 'ready' : !replyReady(turn))) { showError('Giọng đọc cần câu trả lời hoàn tất trong phiên hiện tại.'); return; }
+    const info = voiceRequestInfo(turn, sentence), revision = info.revision;
     showError();
-    stopSpeech(); state.voiceTasks.add(taskKey); const model = state.model, epoch = state.speechEpoch;
-    const current = () => epoch === state.speechEpoch && revision === turnRevision(turn) && !state.destroyed;
+    stopSpeech(opening ? turn : null); const model = state.model, epoch = state.speechEpoch;
+    const current = () => epoch === state.speechEpoch && revision === turnRevision(turn) && !state.destroyed
+      && (!opening || state.visible && state.inRoom && state.model === model && conversations().includes(turn));
     try {
-      const selectionField = sentence ? 'sentenceVoiceSelection' : 'voiceSelection';
-      turn[selectionField] ||= { ...(state.voiceId ? { voice_id: state.voiceId } : {}), speed: state.voiceSpeed };
-      let job = await api('/api/chat/voice', { job_id: turn.jobId, locale: 'en-US', ...turn[selectionField], ...(sentence ? { target: 'sentence' } : {}) });
-      if (!current() || (job.metadata?.reference_revision || 0) !== revision) return;
-      turn[turnField] = job[voiceField]; render();
-      while (job[voiceField]?.status === 'generating') {
-        await pause(1000); if (!current()) return;
-        job = await api('/api/chat/jobs/' + turn.jobId);
-        if (!current() || (job.metadata?.reference_revision || 0) !== revision) return;
-        turn[turnField] = job[voiceField]; render();
-      }
-      const voice = job[voiceField];
-      if (voice?.status === 'error') throw new Error(voice.message);
+      const voice = await requestVoiceResource(turn, sentence);
+      if (!current()) return;
       if (voice?.status === 'ready' && /^\/api\/chat\/audio\/[0-9a-f]{32}$/.test(voice.url) && state.visible && state.model === model && epoch === state.speechEpoch) {
-        // ai33 currently returns audio without word timestamps. Follow the real
+        // Provider audio has no word timestamps. Follow the real
         // playhead using an explicitly estimated word map, for the exact slice
         // synthesized by ChatService._synthesize (not the rest of a long reply).
         if (!sentence && state.liveTurnId === turn.id) state.liveReply?.revealAll();
         const row = sentence ? state.rows.get(turn.id)?.sentenceRow : state.rows.get(turn.id);
-        if (row) paintText(row, text, null, null, 0);
-        const audio = new Audio(voice.url), playback = { turnId: playId, row, range: null, mode: null };
+        if (row && !opening) paintText(row, text, null, null, 0);
+        const audio = sentence ? bufferedSentenceAudio(info.key, voice) : new Audio(voice.url);
+        if (sentence) audio.currentTime = 0;
+        const playback = { turnId: playId, row, range: null, mode: null };
         state.audio = audio; state.playback = playback;
         const valid = () => current() && state.audio === audio && state.playback === playback;
         const spokenText = [...text].slice(0, 5000).join('');
@@ -1128,11 +1419,15 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
         audio.ontimeupdate = updateTime; audio.onseeked = updateTime;
         audio.onpause = () => { if (valid()) { clearFrame(); tracker.end(); state.speaking = null; render(); } };
         audio.onended = () => finish(true);
-        audio.onerror = () => { if (valid()) { finish(); showError('Không phát được audio ai33. Bạn thử Phát lại.'); } };
+        audio.onerror = () => { if (valid()) { finish(); showError('Không phát được giọng đọc. Bạn thử Phát lại.'); } };
+        if (opening) {
+          if (!await prepareOpeningAudio(audio, { isCurrent: valid })) return;
+          revealOpening(turn);
+        }
         await audio.play();
       }
     } catch (error) { if (current()) { stopSpeech(); showError(error.message || 'The English voice could not be played.'); } }
-    finally { state.voiceTasks.delete(taskKey); render(); }
+    finally { render(); }
   }
   async function cancel() {
     if (!state.activeTurn) return;
@@ -1161,13 +1456,15 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
       node('chat-practice').replaceChildren(...state.config.practice_prompts.map(prompt => { const option = make('option', '', prompt.text); option.value = prompt.id; return option; }));
       const voice = node('chat-voice-provider').querySelector('option[value="ai33"]'); voice.disabled = !state.config.ai33_available || !state.config.voice_locales.includes('en-US');
       voice.textContent = voice.disabled ? 'ai33 · Unavailable' : state.config.english_voice_name || 'ai33 · Full reply';
-      if (!voice.disabled && (state.voicePreference || state.config.default_voice_provider) === 'ai33') node('chat-voice-provider').value = 'ai33';
-      if (!state.config.english_voices?.some(v => v.id === state.voiceId)) state.voiceId = state.config.default_voice_id || state.config.english_voices?.[0]?.id || '';
-      node('chat-english-voice').replaceChildren(...(state.config.english_voices || []).map(v => { const option = make('option', '', `${v.name} · ${v.locale}`); option.value = v.id; return option; }));
-      node('chat-english-voice').value = state.voiceId; node('chat-voice-speed').value = state.voiceSpeed;
+      const kokoro = node('chat-voice-provider').querySelector('option[value="kokoro"]'); kokoro.disabled = !state.config.kokoro_available;
+      kokoro.textContent = kokoro.disabled ? 'Kokoro local · Unavailable' : 'Kokoro local · English';
+      if (state.config.kokoro_available && state.voicePreference !== 'kokoro') state.voiceId = '';
+      node('chat-voice-provider').value = preferredVoiceProvider(state.config, state.voicePreference, state.voicePreferenceVersion);
+      if (state.config.kokoro_available) state.voicePreferenceVersion = 1;
+      renderVoiceOptions(); node('chat-voice-speed').value = state.voiceSpeed;
       if (!state.config.speech_ready) showError('Local speech recognition is not ready on the server.');
       if (!window.isSecureContext) node('chat-mic-status').textContent = 'Microphone access needs HTTPS. Audio uploads are available here.';
-      renderTopics(); render();
+      renderTopics(); render(); save();
     } catch (error) { showError(error.message); }
   }
   const readingActions = make('div', 'chat-reading-actions'), clearRepeat = make('button', 'text-button chat-repeat-clear', 'Back to conversation');
@@ -1200,7 +1497,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   node('chat-practice').addEventListener('change', () => { stopSpeech(); state.repeatTarget = null; render(); });
   node('chat-read-prompt').addEventListener('click', () => speakText(node('chat-practice-text').textContent, 'prompt'));
   node('chat-reading-listen').addEventListener('click', () => speakText(node('chat-reading-text').textContent, 'prompt'));
-  node('chat-voice-provider').addEventListener('change', () => { stopSpeech(); controls(); save(); });
+  node('chat-voice-provider').addEventListener('change', () => {
+    stopSpeech(); state.voicePreference = currentVoiceProvider();
+    if (state.config?.kokoro_available) state.voicePreferenceVersion = 1;
+    renderVoiceOptions(); controls(); save();
+  });
   node('chat-english-voice').addEventListener('change', () => { stopSpeech(); state.voiceId = node('chat-english-voice').value; controls(); save(); });
   node('chat-voice-speed').addEventListener('change', () => { stopSpeech(); state.voiceSpeed = Number(node('chat-voice-speed').value); save(); });
   node('topic-voice-search').addEventListener('input', renderSetupVoices);
@@ -1217,9 +1518,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply }
   node('chat-topic-setup').addEventListener('close', () => { stopVoicePreview(); state.pendingTopic = null; });
   node('topic-setup-start').addEventListener('click', () => {
     const topic = state.pendingTopic; if (!topic) return;
-    node('chat-voice-provider').value = state.setupVoiceId === 'browser' ? 'browser' : 'ai33';
+    node('chat-voice-provider').value = state.setupVoiceProvider;
+    state.voicePreference = state.setupVoiceProvider;
+    if (state.config?.kokoro_available) state.voicePreferenceVersion = 1;
     if (state.setupVoiceId !== 'browser') state.voiceId = state.setupVoiceId;
-    state.voiceSpeed = state.setupSpeed; node('chat-english-voice').value = state.voiceId; node('chat-voice-speed').value = state.voiceSpeed;
+    state.voiceSpeed = state.setupSpeed; renderVoiceOptions(); node('chat-voice-speed').value = state.voiceSpeed;
     node('chat-auto-read').checked = node('topic-setup-auto-read').checked;
     stopVoicePreview(); node('chat-topic-setup').close(); save(); startTopic(topic);
   });

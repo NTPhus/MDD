@@ -1,0 +1,23 @@
+{
+  "built_at_bangkok": "2026-10-23T09:45:14.415022+07:00",
+  "source": "pipeline_content.json",
+  "chapters": 11,
+  "diagrams": [
+    "architecture",
+    "workflow",
+    "routing",
+    "reference"
+  ],
+  "outputs": [
+    {
+      "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.pdf",
+      "bytes": 178523,
+      "sha256": "bbf48c6ea22f35d35b4500d0b72124a46d316eaecda130052a64bfdcc1e96b67"
+    },
+    {
+      "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.docx",
+      "bytes": 395014,
+      "sha256": "c46f502d14b6e3dccc510c3878e9b14b3f674ce645edf4a7ec0214738c954303"
+    }
+  ]
+}

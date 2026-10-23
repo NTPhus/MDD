@@ -136,7 +136,7 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
         metadata = self.run_regeneration(qwen)
         requests = [call.args[0] for call in qwen.generate.call_args_list]
         self.assertEqual(len(requests), 2)
-        rewrite, dialogue = requests
+        dialogue, rewrite = requests
         self.assertEqual(dialogue['messages'][-1], {'role': 'user', 'content': self.target})
         self.assertEqual(dialogue['messages'][-len(self.history)-1:-1], self.history)
         self.assertNotIn(self.raw, json.dumps(dialogue['messages']))
@@ -148,12 +148,13 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
         feedback = next(index for index, event in enumerate(self.events)
                         if event['type'] == 'speech' and event['speech']['rewrite']['status'] == 'ready'
                         and event['speech']['coaching']['status'] in ('ready', 'unavailable'))
-        self.assertLess(feedback, generating)
+        self.assertLess(first_chunk, feedback)
         self.assertLess(generating, first_chunk)
-        self.assertNotIn('spoken_response', self.events[feedback]['speech'])
-        self.assertTrue(all(event['speech']['rewrite']['status'] == 'ready'
-                            and event['speech']['coaching']['status'] != 'pending'
-                            for event in self.events[first_chunk:] if event['type'] == 'speech'))
+        published = next(event['speech'] for event in self.events
+                         if event['type'] == 'speech' and event['speech'].get('reply_ready'))
+        self.assertEqual(published['rewrite']['status'], 'pending')
+        self.assertEqual(published['coaching']['status'], 'pending')
+        self.assertEqual(published['spoken_response'], self.events[feedback]['speech']['spoken_response'])
         final = self.events[-1]['speech']
         for field in ('transcript', 'phonemes', 'assessment', 'target_words', 'reference_text'):
             self.assertEqual(final[field], self.speech[field])
@@ -213,19 +214,18 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
         self.assertEqual(self.run_regeneration(qwen), {'finish_reason': 'cancelled'})
         qwen.generate.assert_not_called(); self.engine.analyze.assert_not_called()
 
-    def test_cancel_after_feedback_snapshot_prevents_conversation_generation_and_chunks(self):
+    def test_cancel_after_reply_snapshot_prevents_optional_feedback_generation(self):
         qwen = self.qwen(iter(['This response must never be generated.']))
         def emit(event):
             self.events.append(deepcopy(event))
-            if (event['type'] == 'speech' and event['speech']['rewrite']['status'] == 'ready'
-                    and event['speech']['coaching']['status'] != 'pending'):
+            if event['type'] == 'speech' and event['speech'].get('reply_ready'):
                 self.cancelled.set()
         result = self.engine.regenerate(self.request, self.cancelled, emit, qwen)
         self.assertEqual(result, {'finish_reason': 'cancelled'})
         self.assertEqual(qwen.generate.call_count, 1)
-        self.assertNotIn('generation_profile', qwen.generate.call_args.args[0])
-        self.assertEqual([event for event in self.events if event['type'] == 'chunk'], [])
-        self.assertNotIn('generating', [event.get('stage') for event in self.events])
+        self.assertEqual(qwen.generate.call_args.args[0]['generation_profile'], 'conversation')
+        self.assertTrue(any(event['type'] == 'chunk' for event in self.events))
+        self.assertNotIn('correcting', [event.get('stage') for event in self.events])
 
     def test_cancel_at_generating_stage_does_not_call_conversation_model(self):
         qwen = self.qwen(iter(['This response must never be generated.']))
@@ -235,11 +235,10 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
                 self.cancelled.set()
         result = self.engine.regenerate(self.request, self.cancelled, emit, qwen)
         self.assertEqual(result, {'finish_reason': 'cancelled'})
-        self.assertEqual(qwen.generate.call_count, 1)
-        self.assertNotIn('generation_profile', qwen.generate.call_args.args[0])
+        qwen.generate.assert_not_called()
         self.assertEqual([event for event in self.events if event['type'] == 'chunk'], [])
 
-    def test_unavailable_writing_help_is_terminal_before_reply_and_does_not_leak(self):
+    def test_unavailable_writing_help_does_not_delay_or_leak_into_published_reply(self):
         qwen = Mock()
         def generate(request, cancelled, emit):
             if request.get('generation_profile') != 'conversation':
@@ -247,8 +246,8 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
                 raise RuntimeError('Optional writer unavailable')
             terminal = self.events[-2] if self.events[-1].get('stage') == 'generating' else self.events[-1]
             self.assertEqual(terminal['type'], 'speech')
-            self.assertEqual(terminal['speech']['rewrite']['status'], 'unavailable')
-            self.assertNotEqual(terminal['speech']['coaching']['status'], 'pending')
+            self.assertEqual(terminal['speech']['rewrite']['status'], 'pending')
+            self.assertEqual(terminal['speech']['coaching']['status'], 'pending')
             emit({'type': 'chunk', 'text': 'Did the journey take a long time?'})
             return {'finish_reason': 'stop'}
         qwen.generate.side_effect = generate
@@ -346,7 +345,7 @@ class ReferenceRegenerationPipelineTests(unittest.TestCase):
         qwen.generate.side_effect = generate
         self.assertEqual(self.run_regeneration(qwen), {'finish_reason': 'cancelled'})
         self.assertEqual([e for e in self.events if e['type'] == 'chunk'], [])
-        self.assertEqual(qwen.generate.call_count, 2)
+        self.assertEqual(qwen.generate.call_count, 1)
 
     def test_initial_audio_reply_does_not_receive_regeneration_apology(self):
         result = deepcopy(self.speech)

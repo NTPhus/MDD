@@ -825,6 +825,32 @@ body.chat-room-open .chat-reading-card { margin: 16px 0 0; }
   .topic-setup-footer .primary-button{width:100%}
 }
 
+/* Four local voices stay visible together without a nested scrolling list. */
+.topic-setup.curated-voices .topic-voice-list{max-height:none;overflow:visible;padding:2px}
+.topic-setup.curated-voices #topic-voice-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.topic-setup.curated-voices .topic-voice-row{min-height:86px;border-radius:13px;transition:border-color .15s,background-color .15s,box-shadow .15s}
+.topic-setup.curated-voices .topic-voice-row:hover{border-color:var(--accent)}
+.topic-setup.curated-voices .topic-voice-row:has(input:checked){border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent)}
+.topic-setup.curated-voices .topic-voice-choice{align-self:stretch;gap:8px;padding:14px 0 14px 12px}
+.topic-setup.curated-voices .topic-voice-copy{gap:5px}
+.topic-setup.curated-voices .topic-voice-copy strong{font-size:16px;font-weight:600}
+.topic-setup.curated-voices .topic-voice-copy small{line-height:1.5}
+.topic-setup.curated-voices .topic-voice-badge{display:none}
+.topic-setup.curated-voices .topic-voice-preview{width:30px;height:38px;margin-right:5px;color:var(--accent-hover)}
+@media(max-width:700px){
+  .topic-setup.curated-voices .topic-setup-brief{padding:14px}
+  .topic-setup.curated-voices .topic-brief-card{padding:12px;margin-bottom:8px}
+  .topic-setup.curated-voices .topic-brief-card p{font-size:14px;line-height:1.55;margin-top:7px}
+  .topic-setup.curated-voices .topic-brief-card>span{font-size:13px;line-height:1.5}
+  .topic-setup.curated-voices .topic-setup-note{font-size:13px;line-height:1.5;margin-top:10px}
+  .topic-setup.curated-voices .topic-setup-options{padding:18px 14px}
+  .topic-setup.curated-voices #topic-voice-options{gap:8px}
+  .topic-setup.curated-voices .topic-voice-row{min-height:82px}
+  .topic-setup.curated-voices .topic-voice-choice{gap:6px;padding-left:9px}
+  .topic-setup.curated-voices .topic-voice-copy strong{font-size:15px}
+  .topic-setup.curated-voices .topic-voice-preview{width:28px;margin-right:3px}
+}
+
 /* Purple actions and white conversation surfaces, independent of layout. */
 .chat-view .page-intro h1 em, .chat-eyebrow, .chat-topic-cta,
 .chat-other-modes button, .chat-learning-tag { color: var(--accent); }
@@ -865,3 +891,11 @@ body.chat-room-open .chat-hint-keywords button, .chat-message-actions button:hov
   color: var(--accent-hover);
 }
 .chat-check input, body.chat-room-open .chat-check input { accent-color: var(--accent); }
+.chat-spelling-choices { margin: 10px 0; }
+.chat-spelling-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; font-size: 13px; }
+.chat-spelling-row strong { margin-right: 4px; overflow-wrap: anywhere; }
+.chat-spelling-choice { padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--accent-hover); }
+.chat-spelling-choice:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.chat-phonetic-choices { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.chat-phonetic-choices>summary { color: var(--accent-hover); cursor: pointer; font-size: 13px; }
+.chat-heard-phones { flex-basis: 100%; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }

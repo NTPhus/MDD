@@ -56,7 +56,7 @@ def _stock_language_praise(text):
 
 
 class GroundedReply:
-    def __init__(self, state, emit, *, transcript=None, history=()):
+    def __init__(self, state, emit, *, transcript=None, history=(), needs_clarification=False):
         self.state = state
         self.emit = emit
         self.buffer = ''
@@ -69,8 +69,26 @@ class GroundedReply:
         self.language_request = isinstance(transcript, str) and _asks_about_language(transcript)
         self.pending_language_praise = False
         self.history = history
+        self.needs_clarification = needs_clarification
+        self.accepted_clarification = False
 
     def _clause(self, text):
+        if self.needs_clarification:
+            # An unrelated fluent answer must not masquerade as understanding
+            # a transcript whose words remain unresolved. This narrow gate is
+            # not a semantic judge; rejected output uses the existing fallback.
+            wording = _plain(text)
+            clarification = ('?' in text and bool(re.search(
+                r'\b(?:clarify|clarification|repeat|rephrase|mishear|misheard)\b|'
+                r'\b(?:what|which).*(?:mean|refer|word|part|said|say)\b|'
+                r'\b(?:say|read|type|write|explain).*(?:again|sentence|said|mean|last part)\b|'
+                r'\bdid you mean\b|\bnot (?:understand|catch|hear)\b', wording)))
+            if not clarification:
+                self.blocked.append({'text': text.strip(), 'reason': 'unresolved_transcript_requires_clarification'})
+                return
+            self.accepted_clarification = True
+            self.emit(text)
+            return
         if self.contextual_contribution:
             if (not self.accepted_contribution and not self.language_request and _stock_language_praise(text)):
                 self.pending += text
@@ -130,6 +148,8 @@ class GroundedReply:
 
     @property
     def needs_retry(self):
+        if self.needs_clarification:
+            return not self.accepted_clarification
         if self.contextual_contribution:
             return not self.accepted_contribution
         if self.state is None or self.accepted_question:

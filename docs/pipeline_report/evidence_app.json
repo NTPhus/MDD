@@ -1,0 +1,1406 @@
+{
+  "scope": "Read-only audit of browser, HTTP/API jobs, UI workflow and deployment templates. No code/runtime changes or API/model/provider calls. No credential files read.",
+  "as_of_bangkok": "2026-10-23T09:36:50.926570+07:00",
+  "summary_vi": [
+    "Ứng dụng hiện tại là UI JavaScript + Python ThreadingHTTPServer. Browser gửi WAV sau khi thu xong; HTTP dùng job polling, không SSE/WebSocket. Worker nội bộ phát event stage/speech/chunk để server cập nhật snapshot JSON.",
+    "Hội thoại ưu tiên hoàn tất câu trả lời trước khi cập nhật feedback trong collapse. speech.reply_ready cho phép hiển thị/đọc reply trong khi job vẫn correcting/coaching.",
+    "Sửa reference giữ acoustic evidence và raw transcript. Chỉ khi thay đổi các từ đã nói mới sinh lại Qwen reply trên cùng job/revision mới và vô hiệu hóa voice cũ.",
+    "Mô hình local và Projector/training/benchmark là các luồng riêng. TTS ai33 là nhánh mạng tùy chọn nhận text; browser voice là lựa chọn thay thế."
+  ],
+  "app_architecture": [
+    {
+      "id": "A01",
+      "statement_vi": "scripts/serve_demo.py dựng DemoApplication và DemoServer; mặc định bind 127.0.0.1:8765, --threads mặc định 2 (1–4). --lan là opt-in, yêu cầu --allow-host RFC1918 và bind 0.0.0.0.",
+      "sources": [
+        {
+          "file": "scripts/serve_demo.py",
+          "line_start": 14,
+          "line_end": 35,
+          "symbol": "main"
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 38,
+          "line_end": 65,
+          "symbol": "validate_lan_hosts"
+        }
+      ]
+    },
+    {
+      "id": "A02",
+      "statement_vi": "Startup bật HF_HUB_OFFLINE và TRANSFORMERS_OFFLINE, báo acoustic inference CPU, Qwen theo requested_device(); server không khởi động hoặc dừng training.",
+      "sources": [
+        {
+          "file": "scripts/serve_demo.py",
+          "line_start": 28,
+          "line_end": 40,
+          "symbol": "main"
+        }
+      ]
+    },
+    {
+      "id": "A03",
+      "statement_vi": "Backend là ThreadingHTTPServer chuẩn Python; DemoApplication giữ FeedbackService và ChatService riêng, ChatService nhận capability_loader từ FeedbackService.",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 140,
+          "line_end": 150,
+          "symbol": "DemoApplication.__init__"
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 473,
+          "line_end": 488,
+          "symbol": "DemoServer"
+        }
+      ]
+    },
+    {
+      "id": "A04",
+      "statement_vi": "Trang và static assets được phục vụ từ explicit allowlist trong demo/, không phải filesystem server cho toàn repo. / và /index.html là entry; #chat là tab client-side.",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 29,
+          "line_end": 34,
+          "symbol": "STATIC_FILES"
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 550,
+          "line_end": 557,
+          "symbol": "DemoHandler._dispatch"
+        },
+        {
+          "file": "README.md",
+          "line_start": 62,
+          "line_end": 62
+        }
+      ]
+    },
+    {
+      "id": "A05",
+      "statement_vi": "Một generation slot và một voice slot trong mỗi ChatService; job chạy daemon thread, model worker được gọi qua scripts.local_chat_process. Job store chỉ trong RAM, giữ tối đa khoảng 32 completed jobs rồi prune.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 73,
+          "line_end": 91,
+          "symbol": "ChatService.__init__"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 414,
+          "line_end": 463,
+          "symbol": "_generate_speech / _prune"
+        }
+      ]
+    },
+    {
+      "id": "A06",
+      "statement_vi": "Hai coach IDs qwen-base và qwen-trained; trained chỉ ready nếu base files có đủ, provenance completed/scientific_training và adapter files tồn tại. Khi submit còn kiểm tra adapter SHA256.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 93,
+          "line_end": 108,
+          "symbol": "_models"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 208,
+          "line_end": 214,
+          "symbol": "submit"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 300,
+          "line_end": 304,
+          "symbol": "submit_speech"
+        }
+      ]
+    },
+    {
+      "id": "A07",
+      "statement_vi": "config công bố ASR/grammar selections, acoustic_device=cpu, reply_model_id=qwen-base, pronunciation_method=ctc_variant_posterior_margin_v1, collapsed feedback và reply-only autoplay. Model picker bắt đầu qwen-trained ở state JS, fallback qwen-base nếu chưa ready; đây là coach selection, không chứng minh reply đang dùng adapter.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 110,
+          "line_end": 143,
+          "symbol": "config"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 127,
+          "line_end": 136,
+          "symbol": "state"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1254,
+          "line_end": 1271,
+          "symbol": "initialize"
+        }
+      ]
+    }
+  ],
+  "browser_audio": [
+    {
+      "id": "B01",
+      "statement_vi": "Mic cần secure context (HTTPS hoặc localhost) và getUserMedia; yêu cầu một channel, tắt echoCancellation/noiseSuppression/autoGainControl. Browser có thể thu ở sample rate thực của AudioContext.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 1077,
+          "line_end": 1087,
+          "symbol": "microphone"
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "statement_vi": "Mic ưu tiên AudioWorklet /recorder-worklet.js, fallback createScriptProcessor(4096,1,1). Chunks lưu trong RAM của browser, giới hạn 30 × context.sampleRate samples; timer tự Stop & send tại 30 giây.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 1088,
+          "line_end": 1104,
+          "symbol": "microphone"
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "statement_vi": "Khi Stop & send, flush Worklet, nối chunks, dừng microphone tracks và AudioContext, kiểm tra tối thiểu 0,25 giây; resample OfflineAudioContext về 16 kHz rồi đóng gói RIFF/WAVE mono PCM signed 16 bit.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 974,
+          "line_end": 988,
+          "symbol": "wav / resample"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1051,
+          "line_end": 1075,
+          "symbol": "releaseMic / stopMic"
+        }
+      ]
+    },
+    {
+      "id": "B04",
+      "statement_vi": "Upload nhận file tối đa 25 MiB trước decode; decoded duration phải 0,25–30 giây và tối đa 2 channels. UI downmix trung bình các channels, resample 16 kHz rồi gửi cùng WAV contract. Định dạng upload cụ thể phụ thuộc decodeAudioData của browser.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 1032,
+          "line_end": 1049,
+          "symbol": "upload"
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "statement_vi": "Chat API kiểm tra lại WAV độc lập: base64 ≤1.400.000 ký tự, decoded ≤1 MiB, RIFF/WAVE PCM mono 16 kHz, sample width 2 bytes, 4.000–480.000 frames, dữ liệu đủ. HTTP body /api/chat/speech tối đa 2 MiB.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 278,
+          "line_end": 292,
+          "symbol": "submit_speech"
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 558,
+          "line_end": 569,
+          "symbol": "DemoHandler._dispatch"
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "statement_vi": "Không có microphone network streaming trong chat: browser chỉ gọi sendAudio sau khi thu xong/đọc file; request là JSON audio_base64. Không gửi audio chunks tới HTTP API trong quá trình mic đang thu.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 990,
+          "line_end": 1004,
+          "symbol": "sendAudio"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1058,
+          "line_end": 1075,
+          "symbol": "stopMic"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1088,
+          "line_end": 1102,
+          "symbol": "microphone"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/chat/config",
+      "purpose_vi": "Model/voice readiness, topics, prompts, audio limits và policy flags.",
+      "handler": "ChatService.config",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 535,
+          "line_end": 536
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 110,
+          "line_end": 143
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/speech",
+      "purpose_vi": "Nộp recording + paired history + topic hoặc practice target; trả HTTP 200 với job snapshot, không chờ toàn pipeline.",
+      "request_fields": [
+        "model_id",
+        "request_id",
+        "audio_base64",
+        "history",
+        "topic_id",
+        "practice_id",
+        "correction_job_id"
+      ],
+      "handler": "ChatService.submit_speech",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 558,
+          "line_end": 583
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 249,
+          "line_end": 321
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/jobs/{id}",
+      "purpose_vi": "Poll status, partial text, speech, metadata, error, voice, sentence_voice.",
+      "handler": "ChatService.poll",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 540,
+          "line_end": 541
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 501,
+          "line_end": 510
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/reference",
+      "purpose_vi": "Xác nhận/sửa text của recording còn trong phiên; reassess và chỉ regenerate khi có thay đổi lexical.",
+      "request_fields": [
+        "job_id",
+        "reference_text"
+      ],
+      "handler": "ChatService.reference",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 578,
+          "line_end": 583
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 323,
+          "line_end": 412
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/cancel",
+      "purpose_vi": "Đặt cooperative cancel event cho job đang chạy; response snapshot có thể cancelling trước khi worker kết thúc.",
+      "request_fields": [
+        "job_id"
+      ],
+      "handler": "ChatService.cancel",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 512,
+          "line_end": 520
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/topic",
+      "purpose_vi": "Tạo lượt mở đầu biên soạn sẵn từ topic catalog, ready ngay; không phải output mới của Qwen.",
+      "request_fields": [
+        "model_id",
+        "request_id",
+        "topic_id"
+      ],
+      "handler": "ChatService.start_topic",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 224,
+          "line_end": 247
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/voice",
+      "purpose_vi": "Yêu cầu audio ai33 cho server-owned reply hoặc target sentence; tạo voice job async, tiếp tục poll cùng jobs endpoint.",
+      "request_fields": [
+        "job_id",
+        "locale",
+        "target (optional: reply/sentence)",
+        "voice_id (optional)",
+        "speed (optional)"
+      ],
+      "handler": "ChatService.voice",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 522,
+          "line_end": 578
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/audio/{id}",
+      "purpose_vi": "Phát audio cache qua opaque ID của current server session.",
+      "handler": "ChatService.audio",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 542,
+          "line_end": 544
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 641,
+          "line_end": 661
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/voice-preview/{voice_id}",
+      "purpose_vi": "Nghe mẫu giọng catalog, proxy/download cache tại backend.",
+      "handler": "ChatService.voice_preview",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 537,
+          "line_end": 539
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 145,
+          "line_end": 169
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/send",
+      "purpose_vi": "Text chat API vẫn có backend, dù UI speaking không có ô nhập tin nhắn; không nên vẽ là đường người dùng chính của #chat.",
+      "handler": "ChatService.submit",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 171,
+          "line_end": 222
+        },
+        {
+          "file": "README.md",
+          "line_start": 64,
+          "line_end": 64
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/analyze ; /api/analyze-live",
+      "purpose_vi": "Workspace phát âm riêng; synchronous analyze, live snapshots là full bidirectional decoding với tentative prefix comparison, không chat job stream.",
+      "handler": "DemoApplication.analyze",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 350,
+          "line_end": 438
+        },
+        {
+          "file": "src/mdd/demo_realtime.py",
+          "line_start": 1,
+          "line_end": 5
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/feedback",
+      "purpose_vi": "Feedback riêng cho analysis_id từ workspace phát âm; không cần POST này để nhận speech feedback trong chat polling.",
+      "handler": "DemoApplication.feedback",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 438,
+          "line_end": 462
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/reference",
+      "purpose_vi": "Kiểm tra availability của canonical reference trong workspace phát âm.",
+      "handler": "DemoApplication.reference_info",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 327,
+          "line_end": 348
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/status ; /api/prompts ; /api/samples/{id} ; /api/voice/{id}",
+      "purpose_vi": "Readiness/catalog, prompts, sample audio và workspace feedback voice. Chỉ liệt kê nhóm liên quan để phân biệt với chat routes.",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 531,
+          "line_end": 548
+        }
+      ]
+    }
+  ],
+  "jobs_and_presentation": [
+    {
+      "id": "J01",
+      "statement_vi": "submit_speech dùng request_id làm idempotency key và payload fingerprint: gửi lại cùng nội dung trả cùng job; cùng ID nhưng nội dung khác trả conflict. Không xếp hàng nhiều lượt: generation slot bận trả 409.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 293,
+          "line_end": 313,
+          "symbol": "submit_speech"
+        }
+      ]
+    },
+    {
+      "id": "J02",
+      "statement_vi": "Job bắt đầu transcribing; worker callbacks cho phép transcribing, analyzing, correcting, generating, coaching. Terminal statuses là ready/error/cancelled; cancelling là trạng thái trung gian. Đừng vẽ mọi tên stage như thứ tự cố định được API đảm bảo.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 307,
+          "line_end": 320,
+          "symbol": "submit_speech"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 414,
+          "line_end": 453,
+          "symbol": "_generate_speech"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 168,
+          "line_end": 168
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 512,
+          "line_end": 520,
+          "symbol": "cancel"
+        }
+      ]
+    },
+    {
+      "id": "J03",
+      "statement_vi": "Browser poll 300 ms khi status=generating, 700 ms khi stage khác. Mỗi fetch timeout 25 giây; poll có tối đa 3 lỗi liên tiếp trước báo lỗi UI. Đây là polling HTTP JSON, không HTTP token streaming/SSE/WebSocket.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 171,
+          "line_end": 182,
+          "symbol": "api"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1004,
+          "line_end": 1024,
+          "symbol": "sendAudio"
+        }
+      ]
+    },
+    {
+      "id": "J04",
+      "statement_vi": "Streaming chỉ ở tầng worker nội bộ: local_chat_process nhận event ready/stage/speech/chunk/done và chuyển callbacks cập nhật job trong RAM. Poll công khai bỏ mọi speech field bắt đầu bằng underscore, gồm compressed acoustic evidence.",
+      "sources": [
+        {
+          "file": "scripts/local_chat_process.py",
+          "line_start": 93,
+          "line_end": 139,
+          "symbol": "speech / regenerate_reference / _request"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 424,
+          "line_end": 432,
+          "symbol": "_generate_speech"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 501,
+          "line_end": 510,
+          "symbol": "poll"
+        }
+      ]
+    },
+    {
+      "id": "J05",
+      "statement_vi": "UI xem reply sẵn khi job.status=ready HOẶC speech.reply_ready=true và không error/cancelled/cancelling. LiveReply chỉ hiện toàn bộ text khi final, sau đó mới queue voice; do đó partial tokens trong snapshot không đồng nghĩa UI đang hiển thị từng token.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 3,
+          "line_end": 38,
+          "symbol": "replyReady / LiveReply.update"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1011,
+          "line_end": 1018,
+          "symbol": "sendAudio"
+        }
+      ]
+    },
+    {
+      "id": "J06",
+      "statement_vi": "Phần feedback là outer details/collapse riêng, chứa review/reference editor, sound details, optional completion, grammar/natural rewrite; reply vẫn là message riêng. Feedback cập nhật sau không thay thế reply hiện hữu.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 351,
+          "line_end": 416,
+          "symbol": "render"
+        },
+        {
+          "file": "README.md",
+          "line_start": 60,
+          "line_end": 60
+        }
+      ]
+    }
+  ],
+  "reference_confirmation": [
+    {
+      "id": "R01",
+      "statement_vi": "Câu ASR chưa được xác nhận được xem là provisional; spelling/sound candidates chỉ điền draft khi người dùng bấm, không tự thay target. Editor giới hạn 1.000 ký tự và chỉ cho apply khi recording job đã ready, còn ID trong phiên.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 538,
+          "line_end": 668,
+          "symbol": "turnReview"
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "statement_vi": "reassess_reference giữ nguyên raw transcript, phonemes và recording metadata; dùng server-owned phones/posterior evidence để so target mới, không chạy lại ASR hoặc acoustic encoder. Không có canonical đầy đủ thì không ghép partial alignment thành phán xét phát âm.",
+      "sources": [
+        {
+          "file": "src/mdd/chat_reference.py",
+          "line_start": 152,
+          "line_end": 227,
+          "symbol": "reassess_reference"
+        }
+      ]
+    },
+    {
+      "id": "R03",
+      "statement_vi": "So lexical bằng Unicode NFKC + lowercase + apostrophe normalization + word tokenization. Chỉ khác hoa/thường, spacing hoặc punctuation là no-op: update pronunciation provenance, không generate Qwen mới, không đổi reply voice đang phát.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 36,
+          "line_end": 41,
+          "symbol": "spoken_text_key"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 343,
+          "line_end": 361,
+          "symbol": "reference"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 718,
+          "line_end": 725,
+          "symbol": "regenerateReference"
+        }
+      ]
+    },
+    {
+      "id": "R04",
+      "statement_vi": "Khi từ thay đổi, reference_revision tăng; giữ tối đa 4 reply revisions cũ, clear job.text, reset voice/sentence_voice, bỏ voice IDs cũ, khởi động regenerate_reference trên cùng job. ASR/phoneme evidence được dùng lại; Qwen được chạy lại để trả lời text đã xác nhận.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 362,
+          "line_end": 412,
+          "symbol": "reference"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 433,
+          "line_end": 438,
+          "symbol": "_generate_speech"
+        }
+      ]
+    },
+    {
+      "id": "R05",
+      "statement_vi": "Frontend kiểm tra job ID/revision và quyền sở hữu operation để bỏ stale responses; changed reference cập nhật user.confirmedText, và history() ưu tiên confirmedText cho các lượt sau. Raw user.content/transcript vẫn giữ riêng, không biến confirmed reference thành gold test label.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 139,
+          "line_end": 146,
+          "symbol": "userConversationText / lexicalText"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 670,
+          "line_end": 740,
+          "symbol": "regenerateReference"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 961,
+          "line_end": 967,
+          "symbol": "history"
+        }
+      ]
+    },
+    {
+      "id": "R06",
+      "statement_vi": "Thao tác luyện lại câu completion gửi correction_job_id; server chỉ lấy completed completion_only target của cùng model/topic. Audio mới được đối chiếu target đó; đây không phải chấm lại audio cũ bằng câu Qwen đã sửa.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 265,
+          "line_end": 277,
+          "symbol": "submit_speech"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 314,
+          "line_end": 317,
+          "symbol": "submit_speech"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1001,
+          "line_end": 1003,
+          "symbol": "sendAudio"
+        }
+      ]
+    }
+  ],
+  "history_and_cancel": [
+    {
+      "id": "H01",
+      "statement_vi": "Browser tách conversation theo model và topic; sessionStorage lưu text/metadata và lựa chọn UI. audioUrl và voice không được lưu; restored turns tối đa 40 và jobId bị xóa, trạng thái dang dở chuyển cancelled. Reload không phục hồi quyền reassess/ai33 của job cũ.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 137,
+          "line_end": 144,
+          "symbol": "sessionKey / conversations"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 184,
+          "line_end": 207,
+          "symbol": "save / restore"
+        }
+      ]
+    },
+    {
+      "id": "H02",
+      "statement_vi": "history() chỉ gửi cặp user/assistant có assistant ready, bỏ opening. Giới hạn tối đa 20 messages và 12.000 ký tự bằng cách bỏ cả cặp đầu; user text ưu tiên confirmed rồi normalized lexical-preserving rồi raw ASR. Completion/rewrite không tự ghi đè nội dung history.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 139,
+          "line_end": 144,
+          "symbol": "userConversationText"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 961,
+          "line_end": 967,
+          "symbol": "history"
+        }
+      ]
+    },
+    {
+      "id": "H03",
+      "statement_vi": "Backend kiểm tra role xen kẽ, tối đa 21 messages tính current user, user≤2.000 chars/assistant≤12.000 và tổng≤16.000. Đây là validation ở API ngoài giới hạn context token của model worker.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 171,
+          "line_end": 197,
+          "symbol": "_validate"
+        }
+      ]
+    },
+    {
+      "id": "H04",
+      "statement_vi": "Stop AI đặt stopRequested và POST cancel; nếu response submit chưa về thì gửi cancel ngay khi có server-owned job ID. End room dừng mic/voice, rời room và giữ history. beforeunload gửi cancel keepalive nếu còn active job.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 1004,
+          "line_end": 1008,
+          "symbol": "sendAudio"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1239,
+          "line_end": 1252,
+          "symbol": "cancel / endRoom"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1362,
+          "line_end": 1364,
+          "symbol": "beforeunload"
+        }
+      ]
+    },
+    {
+      "id": "H05",
+      "statement_vi": "Cancel là cooperative: server set threading.Event và status=cancelling; local_chat_process gửi cancel message xuống worker, sau đó job kết thúc cancelled. Dừng voice ở browser là thao tác độc lập, không tự dừng toàn pipeline.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 512,
+          "line_end": 520,
+          "symbol": "cancel"
+        },
+        {
+          "file": "scripts/local_chat_process.py",
+          "line_start": 112,
+          "line_end": 116,
+          "symbol": "_request"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1114,
+          "line_end": 1124,
+          "symbol": "stopSpeech"
+        }
+      ]
+    }
+  ],
+  "topics_and_voice": [
+    {
+      "id": "V01",
+      "statement_vi": "Topic opening và guidance lấy từ speech_topics catalog; start_topic tạo ready job ngay với source=topic_catalog. Browser giữ lịch sử theo topic/coach và có bước chọn voice/speed trước khi bắt đầu.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 224,
+          "line_end": 247,
+          "symbol": "start_topic"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 856,
+          "line_end": 888,
+          "symbol": "openTopicSetup / startTopic"
+        }
+      ]
+    },
+    {
+      "id": "V02",
+      "statement_vi": "Autoplay chỉ nhắm reply và mỗi reference revision tối đa một lần. Browser TTS dùng speechSynthesis tiếng Anh, ưu tiên voice local; sound/word/sentence mẫu chỉ đọc theo hành động người dùng riêng.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 918,
+          "line_end": 939,
+          "symbol": "browserVoice"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1159,
+          "line_end": 1184,
+          "symbol": "autoplayReply / speak"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 583,
+          "line_end": 585,
+          "symbol": "turnReview"
+        }
+      ]
+    },
+    {
+      "id": "V03",
+      "statement_vi": "ai33 voice endpoint nhận job_id thay vì arbitrary client text. Reply có thể tạo voice khi speech.reply_ready ngay cả khi job đang correcting/coaching; target=sentence chỉ lấy server-owned reference_text/transcript và yêu cầu job ready.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 522,
+          "line_end": 556,
+          "symbol": "voice"
+        }
+      ]
+    },
+    {
+      "id": "V04",
+      "statement_vi": "Voice ID phải thuộc catalog, tốc độ API hữu hạn 0,5–1,5; UI preset 0,85/1/1,15. Sau khi đã tạo audio cho lượt/revision, đổi selection không tạo lại tùy ý: server trả conflict hoặc dùng cache; lựa chọn mới áp dụng lượt tiếp.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 125,
+          "line_end": 126,
+          "symbol": "config"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 531,
+          "line_end": 564,
+          "symbol": "voice"
+        }
+      ]
+    },
+    {
+      "id": "V05",
+      "statement_vi": "Nhánh ai33 có một voice slot riêng; client.synthesize/resume nhận text tối đa 5.000 ký tự. Cache ở data/generated/tts/ai33/chat; result dùng /api/chat/audio/{opaque_id}, không trả local path hoặc provider URL. Poll voice cùng jobs endpoint mỗi 1 giây.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 86,
+          "line_end": 86
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 565,
+          "line_end": 619,
+          "symbol": "voice / _synthesize"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1184,
+          "line_end": 1195,
+          "symbol": "speak"
+        }
+      ]
+    },
+    {
+      "id": "V06",
+      "statement_vi": "Catalog public chỉ nhận en-US/en-GB và provider edge/elevenlabs. Preview URL chỉ chấp nhận HTTPS trên hai CDN allowlisted, không userinfo/query/fragment; API đổi preview thành local route. Đây là metadata giọng, không phải credential catalog.",
+      "sources": [
+        {
+          "file": "src/mdd/chat_voices.py",
+          "line_start": 8,
+          "line_end": 49,
+          "symbol": "normalize_voice / load_voices"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 145,
+          "line_end": 169,
+          "symbol": "english_voices / voice_preview"
+        }
+      ]
+    },
+    {
+      "id": "V07",
+      "statement_vi": "Topic opening có presentation gate riêng: nếu bật auto-read, chờ ai33 playable buffer + 350 ms; thường reply hiện đủ chữ trước voice. ai33 không cung cấp word timestamps ở UI này, highlight theo playhead dùng estimated word map; không gọi đó là forced alignment.",
+      "sources": [
+        {
+          "file": "demo/chat.js",
+          "line_start": 86,
+          "line_end": 110,
+          "symbol": "prepareOpeningAudio"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 883,
+          "line_end": 886,
+          "symbol": "startTopic"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1195,
+          "line_end": 1207,
+          "symbol": "speak"
+        }
+      ]
+    },
+    {
+      "id": "V08",
+      "statement_vi": "Đường local ASR/Qwen không gọi external LLM API theo thiết kế ChatService; ai33 TTS là external text-to-speech tùy chọn và có thể phát sinh credit. Browser voice là lựa chọn khác. Không khẳng định mọi browser speech voice đều offline vì fallback có thể không localService.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 1,
+          "line_end": 1
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 609,
+          "line_end": 611,
+          "symbol": "_synthesize"
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 867,
+          "line_end": 867
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 922,
+          "line_end": 926,
+          "symbol": "browserVoice"
+        }
+      ]
+    }
+  ],
+  "pronunciation_workspace_distinction": [
+    {
+      "id": "P01",
+      "statement_vi": "/api/analyze và /api/analyze-live thuộc workspace phân tích reference có sẵn, dùng LocalInference CPU và inference_lock riêng; BASE backbone không có phone head nên không được diễn giải như phoneme recognizer.",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 399,
+          "line_end": 438,
+          "symbol": "analyze"
+        }
+      ]
+    },
+    {
+      "id": "P02",
+      "statement_vi": "Realtime preview không phải causal streaming model: mỗi snapshot decode toàn audio đã thu; prefix-comparison miễn phạt unread suffix, từ hiện tại listening, kết quả tentative. Chỉ final mới register analysis_id/feedback; preview không cache feedback.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_realtime.py",
+          "line_start": 1,
+          "line_end": 5
+        },
+        {
+          "file": "src/mdd/demo_realtime.py",
+          "line_start": 40,
+          "line_end": 83,
+          "symbol": "prefix_comparison / preview_assessment"
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 427,
+          "line_end": 438,
+          "symbol": "analyze"
+        }
+      ]
+    },
+    {
+      "id": "P03",
+      "statement_vi": "Không ghép nhầm /api/feedback vào đường chat: chat trả speech.comparison/coaching/rewrite trong job snapshots; workspace final analysis mới có analysis_id rồi gọi /api/feedback và /api/voice/{id}.",
+      "sources": [
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 438,
+          "line_end": 470,
+          "symbol": "analyze / feedback / voice_audio"
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 501,
+          "line_end": 510,
+          "symbol": "poll"
+        }
+      ]
+    }
+  ],
+  "deployment": [
+    {
+      "id": "D01",
+      "statement_vi": "Có ba topology: truy cập localhost trực tiếp → Python8765; LAN HTTP → Nginx public port thường80 → Python127.0.0.1:8765; ngrok HTTPS → Nginx ingress127.0.0.1:8081 → Python127.0.0.1:8765. Ngrok control4040 riêng loopback, không đi qua app proxy.",
+      "sources": [
+        {
+          "file": "scripts/serve_demo.py",
+          "line_start": 16,
+          "line_end": 35,
+          "symbol": "main"
+        },
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 3,
+          "line_end": 7
+        },
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 80,
+          "line_end": 100
+        },
+        {
+          "file": "scripts/deploy_demo_ngrok.py",
+          "line_start": 382,
+          "line_end": 393,
+          "symbol": "main"
+        }
+      ]
+    },
+    {
+      "id": "D02",
+      "statement_vi": "Templates là cấu hình render từ validated placeholders; backend của reverse-proxy vẫn loopback, không bật --lan cho topology Nginx. Tất cả paths kể cả JS/CSS/audio đều proxy vào app allowlist; không root/alias trực tiếp repo.",
+      "sources": [
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 9,
+          "line_end": 33
+        },
+        {
+          "file": "deploy/nginx/nginx.conf.template",
+          "line_start": 38,
+          "line_end": 64
+        }
+      ]
+    },
+    {
+      "id": "D03",
+      "statement_vi": "Nginx kiểm tra raw Host và same-origin, sau đó rewrite Host/Origin về backend loopback. Ngrok template chỉ chấp nhận exact verified HTTPS public hostname và agent phải preserve public Host; không wildcard domain.",
+      "sources": [
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 35,
+          "line_end": 48
+        },
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 88,
+          "line_end": 110
+        },
+        {
+          "file": "deploy/nginx/ngrok.conf.template",
+          "line_start": 18,
+          "line_end": 42
+        }
+      ]
+    },
+    {
+      "id": "D04",
+      "statement_vi": "Proxy tối đa body16 MiB chung, nhưng app chat speech có giới hạn hẹp hơn2 MiB HTTP/1MiB WAV. Request/response buffering, cache và upstream retries tắt; read timeout1500s chỉ cho proxy, không thay job/model/provider timeout.",
+      "sources": [
+        {
+          "file": "deploy/nginx/nginx.conf.template",
+          "line_start": 50,
+          "line_end": 84
+        },
+        {
+          "file": "deploy/nginx/ngrok.conf.template",
+          "line_start": 46,
+          "line_end": 78
+        },
+        {
+          "file": "src/mdd/demo.py",
+          "line_start": 567,
+          "line_end": 567
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 279,
+          "line_end": 292
+        }
+      ]
+    },
+    {
+      "id": "D05",
+      "statement_vi": "LAN HTTP cho upload/sample nhưng mic từ remote browser cần HTTPS; dùng localhost hoặc public HTTPS ngrok để đạt secure context. Ngrok kết thúc TLS public, hop nội bộ loopback dùng HTTP.",
+      "sources": [
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 60,
+          "line_end": 62
+        },
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 113,
+          "line_end": 116
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 1081,
+          "line_end": 1081
+        }
+      ]
+    },
+    {
+      "id": "D06",
+      "statement_vi": "Evidence này xác minh code/template/docs, không truy vấn listener, không tạo tunnel, không gọi TTS hoặc load model. Địa chỉ LAN cụ thể trong README là cấu hình được tài liệu ghi lại, không dùng làm bằng chứng endpoint live hiện giờ.",
+      "sources": [
+        {
+          "file": "deploy/nginx/README.md",
+          "line_start": 3,
+          "line_end": 5
+        }
+      ]
+    }
+  ],
+  "runtime_boundaries": [
+    {
+      "id": "X01",
+      "statement_vi": "serve_demo chỉ phục vụ inference/UI; không gọi training launcher, benchmark hoặc notebook. Request dispatch thực chạy ChatService → local_chat_process → local_chat_worker (speech_engine.run/regenerate hoặc text engine.generate).",
+      "sources": [
+        {
+          "file": "scripts/serve_demo.py",
+          "line_start": 34,
+          "line_end": 42
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 414,
+          "line_end": 438,
+          "symbol": "_generate_speech"
+        },
+        {
+          "file": "scripts/local_chat_worker.py",
+          "line_start": 215,
+          "line_end": 234,
+          "symbol": "main"
+        }
+      ]
+    },
+    {
+      "id": "X02",
+      "statement_vi": "Projector là nhánh nghiên cứu độc lập; pipeline speech UI mô tả ASR + phoneme B + CMUdict + text Qwen, không audio-prefix Projector. Không lấy API readiness/status đọc training artifacts làm bằng chứng server tự train.",
+      "sources": [
+        {
+          "file": "README.md",
+          "line_start": 24,
+          "line_end": 37
+        },
+        {
+          "file": "README.md",
+          "line_start": 88,
+          "line_end": 88
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 110,
+          "line_end": 143,
+          "symbol": "config"
+        },
+        {
+          "file": "scripts/serve_demo.py",
+          "line_start": 40,
+          "line_end": 40
+        }
+      ]
+    },
+    {
+      "id": "X03",
+      "statement_vi": "Không mô tả qwen-trained coach là model ASR hay model conversation mặc định của speech: config công bố reply_model_id=qwen-base; ASR và grammar IDs do registry chọn riêng. Chi tiết recipe/checkpoint selection nên lấy audit runtime/model registry của agent khác.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 110,
+          "line_end": 143,
+          "symbol": "config"
+        },
+        {
+          "file": "README.md",
+          "line_start": 88,
+          "line_end": 88
+        }
+      ]
+    }
+  ],
+  "documentation_drift": [
+    {
+      "id": "DRIFT01",
+      "document": "README.md:66",
+      "stale_claim_vi": "/api/chat/reference không chạy lại Qwen và giữ nguyên history kể cả đổi câu đích.",
+      "current_behavior_vi": "reassess_reference tự nó không neural inference; nhưng wrapper ChatService.reference phân nhánh lexical change, regenerate Qwen trên cùng job, update confirmedText dùng trong history sau. Không thay raw ASR transcript.",
+      "sources": [
+        {
+          "file": "README.md",
+          "line_start": 66,
+          "line_end": 66
+        },
+        {
+          "file": "src/mdd/chat_reference.py",
+          "line_start": 152,
+          "line_end": 157
+        },
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line_start": 343,
+          "line_end": 412
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 698,
+          "line_end": 725
+        },
+        {
+          "file": "demo/chat.js",
+          "line_start": 961,
+          "line_end": 967
+        }
+      ],
+      "recommendation_vi": "Dựa trên code mới; phân biệt reassess-only với regenerate-on-lexical-change."
+    }
+  ],
+  "diagram_suggestions": [
+    {
+      "id": "FIG-APP-01",
+      "title_vi": "Kiến trúc triển khai và ranh giới dịch vụ",
+      "nodes": [
+        "Browser JS: capture/upload, mono16k WAV, session history",
+        "Localhost direct hoặc LAN Nginx hoặc ngrok HTTPS ingress",
+        "Python DemoServer: routes/guards",
+        "ChatService: RAM jobs + generation slot",
+        "Local worker: speech/model pipeline",
+        "Optional ai33 TTS: text only",
+        "Browser speechSynthesis: alternative voice"
+      ],
+      "edges_vi": [
+        "Browser → POST speech → ChatService → worker",
+        "Browser ← GET jobs snapshots ← ChatService",
+        "ChatService → ai33 synthesize text → local audio cache → GET audio → Browser",
+        "Browser → speechSynthesis khi chọn browser voice"
+      ],
+      "warnings_vi": [
+        "Không vẽ Projector/training trong inference path.",
+        "Không đặt external LLM API giữa app và Qwen local.",
+        "Ngrok là lớp vận chuyển public HTTPS, không mô hình AI."
+      ]
+    },
+    {
+      "id": "FIG-APP-02",
+      "title_vi": "Một lượt nói: capture, job polling và reply-first feedback",
+      "mermaid": "sequenceDiagram\n participant U as Browser\n participant A as HTTP API / ChatService\n participant W as Local worker\n U->>U: Capture ≤30s, resample mono16k PCM16 WAV\n U->>A: POST /api/chat/speech (audio_base64, history, topic)\n A-->>U: HTTP200 job id + transcribing snapshot\n A->>W: speech request\n loop Until terminal\n W-->>A: stage / speech / chunk events\n U->>A: GET /api/chat/jobs/id\n A-->>U: status + text + speech + voice\n end\n Note over U,W: reply_ready can become true before feedback finishes\n U->>U: Reveal completed reply, optional autoplay\n W-->>A: Later rewrite/coaching feedback and ready\n U->>U: Update collapsed feedback without speaking twice",
+      "warnings_vi": [
+        "Stage labels không bảo đảm một thứ tự tuyệt đối; thứ tự chi tiết lấy audit worker.",
+        "Không vẽ mỗi microphone chunk là HTTP request."
+      ]
+    },
+    {
+      "id": "FIG-APP-03",
+      "title_vi": "Sửa câu tham chiếu và chống kết quả cũ",
+      "mermaid": "flowchart TD\n E[User edits confirmed text] --> P[POST chat/reference with job_id]\n P --> R[Reassess using retained original phones/posteriors]\n R --> C{Spoken words changed?}\n C -->|No: case/punctuation only| N[Update reference provenance; keep reply and voice]\n C -->|Yes| V[Increment revision; retain raw transcript; invalidate old reply voice]\n V --> Q[Regenerate local Qwen on confirmed text, same job]\n Q --> H[Update confirmed history text and new reply]\n H --> T[Optional new voice for new revision]",
+      "warnings_vi": [
+        "Đổi reference không tạo audio mới hoặc ASR inference mới.",
+        "Changed reference vẫn chạy Qwen mới; README66 đang mô tả phiên cũ."
+      ]
+    },
+    {
+      "id": "FIG-APP-04",
+      "title_vi": "Hai loại realtime cần phân biệt",
+      "left_vi": "Chat: stop recording rồi submit WAV; server job có internal text/event streaming nhưng browser poll snapshots; UI chỉ reveal complete reply.",
+      "right_vi": "Pronunciation workspace: POST analyze-live với whole-audio snapshots, bidirectional full decode, tentative prefix comparison; không causal incremental model."
+    }
+  ],
+  "source_files": [
+    {
+      "file": "README.md",
+      "sha256": "d26bfe36a089214313e340f3b84ee4392ee055612e6a3e1039b944a76ec486eb",
+      "line_count": 472
+    },
+    {
+      "file": "demo/chat.js",
+      "sha256": "9e3d429d350f75f6ea8a3263875306ff0ceca1570ba3f21796384031e4d56d09",
+      "line_count": 1368
+    },
+    {
+      "file": "deploy/nginx/README.md",
+      "sha256": "4875aab19120b25318cca4c0bc0bce055f3fca0ed898fd9e06349917b5a69006",
+      "line_count": 123
+    },
+    {
+      "file": "deploy/nginx/nginx.conf.template",
+      "sha256": "a97129188e8e3544e94977967f8a9b45dce3c9e9fea7c454149f9381742071bc",
+      "line_count": 87
+    },
+    {
+      "file": "deploy/nginx/ngrok.conf.template",
+      "sha256": "412406334d0f883809ab5e899130ca75394e3054d7ff49b0cff4bc68bebf6b20",
+      "line_count": 81
+    },
+    {
+      "file": "scripts/deploy_demo_ngrok.py",
+      "sha256": "fc6cfc6a2499b7ee85198c721ed1e48113c7ae268f462af18fbaaf25754bf4cf",
+      "line_count": 415
+    },
+    {
+      "file": "scripts/local_chat_process.py",
+      "sha256": "a055e780311cd467bf70d11ec1ac42c664a647678086b813b4ca162267d98bd1",
+      "line_count": 142
+    },
+    {
+      "file": "scripts/local_chat_worker.py",
+      "sha256": "6eba885479c3b603e62ae5697acc351b0098d0185b6d029a2b42e4d6db1e87f3",
+      "line_count": 243
+    },
+    {
+      "file": "scripts/serve_demo.py",
+      "sha256": "a1c373e4453c0dedd4eb72ebe0d075fb81091a2a620c48eb28728d23ab5ad574",
+      "line_count": 50
+    },
+    {
+      "file": "src/mdd/chat_reference.py",
+      "sha256": "f8f5a3e8dd06f933633e76942f94336baf1a9652e0eeb68484bb96fe80ce90a5",
+      "line_count": 227
+    },
+    {
+      "file": "src/mdd/chat_voices.py",
+      "sha256": "51f3fd14f2a1df74916ef307f6a9ec0aca23c665d31a076d0a8a7198b16544ef",
+      "line_count": 53
+    },
+    {
+      "file": "src/mdd/demo.py",
+      "sha256": "2e020fdf8e0d602f96aa7df020fe03bc76fe5d52c5b0b2b8f09471ea119f5276",
+      "line_count": 601
+    },
+    {
+      "file": "src/mdd/demo_chat.py",
+      "sha256": "a7d2624f18e6b76a3ecbf7f8bb76991d38229988fd2b4fb5c84f738cfe70ed80",
+      "line_count": 667
+    },
+    {
+      "file": "src/mdd/demo_realtime.py",
+      "sha256": "c2760ac61ed8b75cb4bb91e57832550cfbc33477fc03f28af27777ab6a7d05a5",
+      "line_count": 83
+    }
+  ]
+}

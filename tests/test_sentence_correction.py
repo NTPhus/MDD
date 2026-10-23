@@ -228,7 +228,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.result.update(transcript=transcript, reference_text=transcript,
                            missing_words=['divicote', 'getesir'])
         self.request['rewrite_enabled'] = True
-        qwen = self.qwen_with_outputs([('not JSON', 'stop'), ('Hi!', 'stop'), ("You're welcome!", 'stop')])
+        qwen = self.qwen_with_outputs([('Hi!', 'stop'), ("You're welcome!", 'stop'), ('not JSON', 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         output = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         final = self.events[-1]['speech']
@@ -242,61 +242,75 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.assertEqual(final['reference_text'], transcript)
         self.assertEqual(final['spoken_response'], output)
 
-    def test_optional_grammar_help_precedes_bot_reply_and_never_relabels_audio(self):
+    def test_unresolved_words_never_receive_the_reported_great_day_reply(self):
+        self.result.update(transcript='It was the divicote true getesir',
+                           reference_text='It was the divicote true getesir',
+                           missing_words=['divicote', 'getesir'])
+        self.request['rewrite_enabled'] = True
+        bad = 'It was a great day! How does it feel for you today?'
+        qwen = self.qwen_with_outputs([(bad, 'stop'), (bad, 'stop'), ('not JSON', 'stop')])
+        metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
+        output = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
+        self.assertNotIn('great day', output)
+        self.assertIn('Could you say that another way?', output)
+        self.assertEqual(metadata['reply_source'], 'clarification_fallback')
+        self.assertTrue(all(attempt['blocked_questions'] for attempt in metadata['reply_attempts']))
+
+    def test_bot_reply_precedes_optional_grammar_help_and_never_relabels_audio(self):
         self.original = 'Yesterday I go to the park'
         self.result.update(transcript=self.original, reference_text=self.original)
         self.request['rewrite_enabled'] = True
         rewrite = json.dumps({'grammar_corrected': 'Yesterday I went to the park.',
                               'natural': 'I went to the park yesterday.', 'explanation': 'Use the past tense.'})
-        qwen = self.qwen_with_outputs([(rewrite, 'stop'), ('Did you enjoy your time there?', 'stop')])
+        qwen = self.qwen_with_outputs([('Did you enjoy your time there?', 'stop'), (rewrite, 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         final = self.events[-1]['speech']
         first_chunk = next(index for index, event in enumerate(self.events) if event['type'] == 'chunk')
         written = next(index for index, event in enumerate(self.events)
                        if event['type'] == 'speech' and event['speech']['rewrite']['status'] == 'ready')
-        self.assertLess(written, first_chunk)
+        self.assertLess(first_chunk, written)
         completed_feedback = next(index for index, event in enumerate(self.events)
             if event['type'] == 'speech' and event['speech']['rewrite']['status'] == 'ready'
             and event['speech']['coaching']['status'] in ('ready', 'unavailable'))
-        self.assertLess(completed_feedback, first_chunk)
-        self.assertTrue(all(event['speech']['rewrite']['status'] == 'ready'
-                            and event['speech']['coaching']['status'] != 'pending'
-                            for event in self.events[first_chunk:] if event['type'] == 'speech'))
+        self.assertLess(first_chunk, completed_feedback)
+        published = next(event['speech'] for event in self.events
+                         if event['type'] == 'speech' and event['speech'].get('reply_ready'))
+        self.assertEqual(published['rewrite']['status'], 'pending')
+        self.assertEqual(published['coaching']['status'], 'pending')
+        self.assertEqual(published['spoken_response'], 'Did you enjoy your time there?')
         self.assertEqual(final['transcript'], self.original)
         self.assertEqual(final['reference_text'], self.original)
         self.assertEqual(final['rewrite']['grammar_corrected'], 'Yesterday I went to the park.')
         self.assertEqual(final['spoken_response'], 'Did you enjoy your time there?')
         self.assertEqual(final['correction']['status'], 'not_needed')
         self.assertEqual(metadata['rewrite_mode'], 'grammar_and_natural')
-        self.assertNotIn('generation_profile', qwen.generate.call_args_list[0].args[0])
+        self.assertNotIn('generation_profile', qwen.generate.call_args_list[1].args[0])
 
-    def test_completion_and_sound_coach_precede_reply_without_relabeling_the_audio(self):
+    def test_reply_precedes_completion_and_sound_coach_without_relabeling_the_audio(self):
         reference = {"canonical_phones": ["F", "R"], "canonical_word_indices": [7, 7]}
         self.result.update(reference=reference, comparison={"words": [{"text": "friend", "status": "difference"}]})
         feedback = {"friend": [{"issue": "Possible sound difference.", "suggestion": "Practise friend slowly."}]}
-        qwen = self.qwen_with_outputs([(self.correction_json(), "stop"),
-                                       (json.dumps(feedback), "stop"),
-                                       ("That sounds enjoyable! What did you do at the park?", "stop")])
+        qwen = self.qwen_with_outputs([("That sounds enjoyable! What did you do at the park?", "stop"), (self.correction_json(), "stop"), (json.dumps(feedback), "stop")])
         with patch("scripts.local_speech_engine.native_condition", return_value={"input_alignment_status": "ok"}) as native, \
              patch("scripts.l2arctic_plus_data.messages", return_value=[{"role": "user", "content": "Sound evidence"}]), \
              patch("scripts.local_speech_engine.grounded_coaching", return_value=feedback):
             metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         stages = [event["stage"] for event in self.events if event["type"] == "stage"]
-        self.assertEqual(stages, ["transcribing", "correcting", "coaching", "generating"])
+        self.assertEqual(stages, ["transcribing", "generating", "correcting", "coaching"])
         corrected_index = next(index for index, event in enumerate(self.events)
                                if event["type"] == "speech" and event["speech"]["correction"]["status"] == "ready")
         first_reply_index = next(index for index, event in enumerate(self.events) if event["type"] == "chunk")
-        self.assertLess(corrected_index, first_reply_index)
+        self.assertLess(first_reply_index, corrected_index)
         coached_index = next(index for index, event in enumerate(self.events)
                              if event['type'] == 'speech' and event['speech']['coaching']['status'] == 'ready')
-        self.assertLess(coached_index, first_reply_index)
+        self.assertLess(first_reply_index, coached_index)
         final = self.events[-1]["speech"]
         self.assertEqual(final["transcript"], self.original)
         self.assertEqual(final["reference_text"], self.original)
         self.assertEqual(final["correction"]["corrected"], self.corrected)
         native.assert_called_once_with(self.original, reference, ["F", "R"])
         requests = [call.args[0] for call in qwen.generate.call_args_list]
-        self.assertEqual([request["model_id"] for request in requests], ["qwen-base", "qwen-trained", "qwen-base"])
+        self.assertEqual([request["model_id"] for request in requests], ["qwen-base", "qwen-base", "qwen-trained"])
         self.assertEqual(metadata["correction_status"], "ready")
         self.assertEqual(final["correction"]["mode"], "completion_only")
         self.assertIn("go park", final["correction"]["corrected"])
@@ -308,14 +322,13 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.original, self.corrected = "Japan", "I would love to travel to Japan."
         self.result.update(transcript=self.original, reference_text=self.original)
         self.request.update(topic_id='travel')
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'),
-                                       ('Japan has many places to explore. What interests you most about Japan?', 'stop')])
+        qwen = self.qwen_with_outputs([('Japan has many places to explore. What interests you most about Japan?', 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         final = self.events[-1]['speech']
         self.assertEqual(final['correction']['corrected'], self.corrected)
         self.assertEqual(final['transcript'], 'Japan')
         self.assertEqual(final['reference_text'], 'Japan')
-        first, second = [call.args[0] for call in qwen.generate.call_args_list]
+        second, first = [call.args[0] for call in qwen.generate.call_args_list]
         self.assertIn('Where would you love to travel', json.dumps(first['messages']))
         self.assertEqual(second['messages'][-1]['content'], 'Japan')
         self.assertEqual(metadata['dialogue_policy'], 'natural_conversation')
@@ -323,16 +336,16 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
     def test_grammar_rewrite_is_rejected_and_bot_keeps_talking_about_raw_utterance(self):
         invalid = json.dumps({'corrected': 'Yesterday I went to the park with my friend.',
                               'explanation': 'Use past tense.'})
-        qwen = self.qwen_with_outputs([(invalid, 'stop'), ('What did you do at the park?', 'stop')])
+        qwen = self.qwen_with_outputs([('What did you do at the park?', 'stop'), (invalid, 'stop')])
         self.engine.run(self.request, self.cancelled, self.emit, qwen)
         final = self.events[-1]['speech']
         self.assertEqual(final['correction']['status'], 'unavailable')
         self.assertEqual(final['transcript'], self.original)
-        self.assertEqual(qwen.generate.call_args_list[1].args[0]['messages'][-1]['content'], self.original)
+        self.assertEqual(qwen.generate.call_args_list[0].args[0]['messages'][-1]['content'], self.original)
 
     def test_echoing_model_output_is_removed_before_live_reply_and_voice(self):
         raw = f'You said: "{self.original}." How was your visit?'
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (raw, 'stop')])
+        qwen = self.qwen_with_outputs([(raw, 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         self.assertEqual(emitted, 'How was your visit?')
@@ -341,8 +354,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.assertEqual(len(metadata['omitted_leading_echoes']), 1)
 
     def test_repeated_echo_only_output_reports_model_failure_without_blame_on_recording(self):
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (self.original + '.', 'stop'),
-                                       (self.original + '.', 'stop')])
+        qwen = self.qwen_with_outputs([(self.original + '.', 'stop'), (self.original + '.', 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk').strip()
         self.assertNotIn(self.original, emitted)
@@ -358,15 +370,14 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         response = 'Did you find a quiet spot to sit?'
         self.request['history'] = [{'role': 'user', 'content': 'I need some fresh air.'},
                                    {'role': 'assistant', 'content': 'Did you get outside?'}]
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (self.original + '.', 'stop'),
-                                       (response, 'stop')])
+        qwen = self.qwen_with_outputs([(self.original + '.', 'stop'), (response, 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         self.assertEqual(emitted, response)
         self.assertEqual(self.events[-1]['speech']['spoken_response'], response)
         self.assertEqual(metadata['reply_source'], 'qwen_retry')
         self.assertEqual(metadata['reply_generation_attempts'], 2)
-        first, retry = [call.args[0] for call in qwen.generate.call_args_list[1:]]
+        first, retry = [call.args[0] for call in qwen.generate.call_args_list[:2]]
         self.assertEqual(retry['messages'][1:], first['messages'][1:])
         self.assertEqual(retry['messages'][-1]['content'], self.original)
         self.assertEqual(retry['model_id'], 'qwen-base')
@@ -379,12 +390,12 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.original = self.corrected = 'It was the divicote true getesir'
         self.result.update(transcript=self.original, reference_text=self.original)
         response = 'Could you explain what you mean by the last few words?'
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), ('Hi!', 'stop'), (response, 'stop')])
+        qwen = self.qwen_with_outputs([('Hi!', 'stop'), (response, 'stop'), (self.correction_json(), 'stop')])
         original_generate = qwen.generate.side_effect
 
         def generate(request, cancelled, callback):
             metadata = original_generate(request, cancelled, callback)
-            if qwen.generate.call_count == 2:
+            if qwen.generate.call_count == 1:
                 self.assertFalse(any(event['type'] == 'chunk' for event in self.events),
                                  'The greeting-only first attempt must stay private before retry.')
             return metadata
@@ -403,10 +414,10 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.assertEqual(qwen.generate.call_count, 3, 'One completion fixture and at most two dialogue attempts.')
 
     def test_cancelling_an_echo_retry_does_not_emit_a_fallback_or_voice(self):
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (self.original + '.', 'stop')])
+        qwen = self.qwen_with_outputs([(self.original + '.', 'stop'), (self.correction_json(), 'stop')])
         original_generate = qwen.generate.side_effect
         def generate(request, cancelled, callback):
-            if qwen.generate.call_count == 3:
+            if qwen.generate.call_count == 2:
                 cancelled.set()
                 return {'finish_reason': 'cancelled'}
             return original_generate(request, cancelled, callback)
@@ -420,8 +431,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         response = 'Would you prefer a hot drink or something cold?'
         self.request['history'] = [{'role': 'user', 'content': 'I need a break.'},
                                    {'role': 'assistant', 'content': previous}]
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (previous, 'stop'),
-                                       (response, 'stop')])
+        qwen = self.qwen_with_outputs([(previous, 'stop'), (response, 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         self.assertEqual(emitted, response)
@@ -438,15 +448,14 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
                     'What can I get for you?'):
             with self.subTest(bad=bad):
                 self.events.clear()
-                qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'), (bad, 'stop'),
-                                               (response, 'stop')])
+                qwen = self.qwen_with_outputs([(bad, 'stop'), (response, 'stop'), (self.correction_json(), 'stop')])
                 metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
                 emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk').strip()
                 self.assertEqual(emitted, response)
                 self.assertEqual(self.events[-1]['speech']['spoken_response'], response)
                 self.assertEqual(metadata['reply_generation_attempts'], 2)
                 self.assertTrue(metadata['blocked_questions'] or metadata['omitted_echoes'])
-                request = qwen.generate.call_args_list[1].args[0]
+                request = qwen.generate.call_args_list[0].args[0]
                 self.assertEqual(request['conversation_state']['next_action'], 'ASK_TEMPERATURE')
                 self.assertEqual(request['messages'][-1]['content'], order)
                 self.assertEqual([message['role'] for message in request['messages']], ['system', 'user'])
@@ -457,8 +466,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.result.update(transcript=order, reference_text=order)
         self.request['topic_id'] = 'food'
         good = 'Would you like the drinks hot or iced?'
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'),
-                                       (good + ' What can I get for you?', 'stop')])
+        qwen = self.qwen_with_outputs([(good + ' What can I get for you?', 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk').strip()
         self.assertEqual(emitted, good)
@@ -471,8 +479,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         self.result.update(transcript=order, reference_text=order)
         self.request['topic_id'] = 'food'
         question = "Could you please specify the size of the coffee and milk tea you'd like?"
-        qwen = self.qwen_with_outputs([(self.correction_json(), 'stop'),
-            ("I'm sorry, but I can only provide one item at a time. " + question, 'stop')])
+        qwen = self.qwen_with_outputs([("I'm sorry, but I can only provide one item at a time. " + question, 'stop'), (self.correction_json(), 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         emitted = ''.join(event['text'] for event in self.events if event['type'] == 'chunk').strip()
         self.assertEqual(emitted, question)
@@ -484,7 +491,7 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         for raw, reason in (("not json", "stop"), (self.correction_json(), "length")):
             with self.subTest(reason=reason):
                 self.events.clear()
-                qwen = self.qwen_with_outputs([(raw, reason), ("How was your visit?", "stop")])
+                qwen = self.qwen_with_outputs([("How was your visit?", "stop"), (raw, reason)])
                 metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
                 final = self.events[-1]["speech"]
                 self.assertEqual(final["correction"]["status"], "unavailable")
@@ -510,10 +517,13 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
                 self.assertEqual(qwen.generate.call_count, 1)
                 self.assertNotIn("correcting", [event.get("stage") for event in self.events])
 
-    def test_cancellation_during_correction_prevents_late_reply_or_published_repair(self):
+    def test_cancellation_during_correction_keeps_published_reply_and_withholds_repair(self):
         qwen = Mock()
 
         def cancel(request, cancelled, callback):
+            if request.get('generation_profile') == 'conversation':
+                callback({'type': 'chunk', 'text': 'How was your visit?'})
+                return {'finish_reason': 'stop'}
             callback({"type": "chunk", "text": self.correction_json()})
             cancelled.set()
             return {"finish_reason": "stop"}
@@ -521,8 +531,11 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
         qwen.generate.side_effect = cancel
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         self.assertEqual(metadata["finish_reason"], "cancelled")
-        self.assertEqual(qwen.generate.call_count, 1)
-        self.assertFalse(any(event["type"] == "chunk" for event in self.events))
+        self.assertEqual(qwen.generate.call_count, 2)
+        self.assertEqual(''.join(event['text'] for event in self.events if event['type'] == 'chunk'), 'How was your visit?')
+        published = self.events[-2]['speech']
+        self.assertTrue(published['reply_ready'])
+        self.assertEqual(published['correction']['status'], 'pending')
         self.assertFalse(any(event["type"] == "speech" and event["speech"]["correction"]["status"] == "ready"
                              for event in self.events))
 

@@ -258,5 +258,36 @@ class GroundedReplyTests(unittest.TestCase):
                 self.assertFalse(policy.needs_retry)
 
 
+class UnresolvedTranscriptReplyTests(unittest.TestCase):
+    raw = 'It was the divicote true getesir'
+
+    def check(self, reply):
+        emitted = []
+        policy = GroundedReply(None, emitted.append, transcript=self.raw, needs_clarification=True)
+        for character in reply: policy.push(character)
+        policy.finish()
+        return ''.join(emitted), policy
+
+    def test_reported_unrelated_reply_is_blocked_before_text_or_voice(self):
+        output, policy = self.check('It was a great day! How does it feel for you today?')
+        self.assertEqual(output, '')
+        self.assertTrue(policy.needs_retry)
+        self.assertTrue(all(item['reason'] == 'unresolved_transcript_requires_clarification' for item in policy.blocked))
+
+    def test_clarification_is_kept_without_unrelated_leading_praise(self):
+        output, policy = self.check('That sounds nice. Could you repeat the sentence?')
+        self.assertEqual(output.strip(), 'Could you repeat the sentence?')
+        self.assertFalse(policy.needs_retry)
+        self.assertEqual(len(policy.blocked), 1)
+
+    def test_known_word_meaning_question_is_valid_and_unclear_names_are_not_invented(self):
+        for reply in ('Could you clarify what "divicote" refers to in this context?',
+                      'What did you mean by the last part?', 'Could you type the sentence you said?'):
+            with self.subTest(reply=reply):
+                output, policy = self.check(reply)
+                self.assertEqual(output, reply)
+                self.assertFalse(policy.needs_retry)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,4 +1,4 @@
-"""CPU-only Qwen worker. JSONL IPC; model generation stays on its main thread."""
+"""Local Qwen worker. JSONL IPC; model generation stays on its main thread."""
 from __future__ import annotations
 
 from contextlib import nullcontext
@@ -13,6 +13,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'src'))
 
 
 def generation_options(profile=None):
@@ -28,7 +29,7 @@ def generation_options(profile=None):
     return {"do_sample": False}
 
 
-def bounded_inputs(tokenizer, messages, context, max_tokens):
+def bounded_inputs(tokenizer, messages, context, max_tokens, device='cpu'):
     """Keep the system and current utterance while evicting complete old turns.
 
     A topic can begin with an authored assistant opener, before the first
@@ -39,7 +40,7 @@ def bounded_inputs(tokenizer, messages, context, max_tokens):
     history, dropped = list(messages), 0
     while True:
         text = tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True, enable_thinking=False)
-        inputs = tokenizer(text, add_special_tokens=False, return_tensors="pt").to("cpu")
+        inputs = tokenizer(text, add_special_tokens=False, return_tensors="pt").to(device)
         if inputs["input_ids"].shape[-1] + max_tokens <= context:
             return inputs, dropped
         if len(history) <= 2:
@@ -58,46 +59,92 @@ def bounded_inputs(tokenizer, messages, context, max_tokens):
 
 
 class QwenChatEngine:
-    def __init__(self):
+    def __init__(self, device='cpu'):
         self.model = self.tokenizer = None
         self.adapter_key = None
+        self.adapter_keys = {}
+        self.device = 'cpu'
+        self.runtime = {}
+        self.requested_device = device
+        self._threads_set = False
 
     def load(self, trained):
+        import hashlib
+        if trained not in (False, True, 'qwen-base', 'qwen-trained', 'qwen-grammar'):
+            raise ValueError('invalid_model')
+        name = 'grammar' if trained == 'qwen-grammar' else 'chat' if trained is True or trained == 'qwen-trained' else None
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         if self.model is None:
+            from mdd.chat_runtime import select_runtime
             # Set thread pools once, before executing any tensor computation.
-            torch.set_num_threads(2)
-            torch.set_num_interop_threads(1)
+            if not self._threads_set:
+                torch.set_num_threads(2)
+                torch.set_num_interop_threads(1)
+                self._threads_set = True
             path = ROOT / "models/pretrained/Qwen3-0.6B"
             self.tokenizer = AutoTokenizer.from_pretrained(str(path), local_files_only=True, trust_remote_code=False)
-            self.model = AutoModelForCausalLM.from_pretrained(str(path), local_files_only=True,
-                trust_remote_code=False, dtype=torch.float32, attn_implementation="eager").cpu().eval().requires_grad_(False)
-        if trained:
+            self.runtime = select_runtime(torch, self.requested_device)
+            self.device = self.runtime['device']
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(str(path), local_files_only=True,
+                    trust_remote_code=False, dtype=getattr(torch, self.runtime['dtype']),
+                    attn_implementation=self.runtime['attention'], device_map={'': self.device})
+            except torch.cuda.OutOfMemoryError:
+                if self.runtime['requested'] != 'auto' or self.device == 'cpu':
+                    raise
+                import gc
+                self.model = None
+                gc.collect()
+                torch.cuda.empty_cache()
+                self.runtime = {**select_runtime(torch, 'cpu'), 'requested': 'auto', 'reason': 'cuda_load_oom'}
+                self.device = 'cpu'
+                self.model = AutoModelForCausalLM.from_pretrained(str(path), local_files_only=True,
+                    trust_remote_code=False, dtype=torch.float32, attn_implementation='eager', device_map={'': 'cpu'})
+            self.model.eval().requires_grad_(False)
+        if name:
             from peft import PeftModel
-            path = ROOT / "runs/cascade-l2arctic-plus-seed42/Q/adapter"
+            if name == 'grammar':
+                from mdd.demo_model_registry import grammar_selection
+                selected = grammar_selection(ROOT)
+                if not selected['ready']: raise ValueError('Grammar adapter is not validated')
+                path, expected = selected['adapter'], selected['sha256']
+            else:
+                run = ROOT / 'runs/cascade-l2arctic-plus-seed42/Q'
+                path = run / 'adapter'
+                expected = json.loads((run / 'training_provenance.json').read_text(encoding='utf-8'))['adapter_sha256']
             weight = path / "adapter_model.safetensors"
-            key = (weight.stat().st_mtime_ns, weight.stat().st_size)
-            if self.adapter_key != key:
+            key = (weight.stat().st_mtime_ns, weight.stat().st_size, expected)
+            if self.adapter_keys.get(name) != key:
+                if hashlib.sha256(weight.read_bytes()).hexdigest() != expected:
+                    raise ValueError('Adapter checksum mismatch')
                 if isinstance(self.model, PeftModel):
-                    self.model.delete_adapter("chat")
-                    self.model.load_adapter(str(path), adapter_name="chat", is_trainable=False, local_files_only=True)
+                    if name in self.model.peft_config: self.model.delete_adapter(name)
+                    self.model.load_adapter(str(path), adapter_name=name, is_trainable=False, local_files_only=True,
+                                            torch_device=self.device, device_map={'': self.device})
                 else:
-                    self.model = PeftModel.from_pretrained(self.model, str(path), adapter_name="chat", is_trainable=False, local_files_only=True)
+                    self.model = PeftModel.from_pretrained(self.model, str(path), adapter_name=name, is_trainable=False, local_files_only=True,
+                                                            torch_device=self.device, device_map={'': self.device})
+                self.model.to(self.device)
+                self.adapter_keys[name] = key
                 self.adapter_key = key
-                self.model.eval().requires_grad_(False)
+            self.model.set_adapter(name)
+            self.model.requires_grad_(False)
+            self.model.eval().requires_grad_(False)
 
     def generate(self, request, cancelled, emit):
         profile = request.get("generation_profile")
         sampling = generation_options(profile)
         import torch
         from transformers import TextStreamer, StoppingCriteria, StoppingCriteriaList
-        trained = request["model_id"] == "qwen-trained"
-        self.load(trained)
+        trained = request["model_id"] != "qwen-base"
+        loading_started = time.monotonic()
+        self.load(request['model_id'])
+        loading_sec = round(time.monotonic() - loading_started, 3)
         if cancelled.is_set():
             return {"finish_reason":"cancelled", "usage":{}}
         inputs, dropped = bounded_inputs(self.tokenizer, request["messages"],
-            min(4096, self.model.config.max_position_embeddings), request["max_tokens"])
+            min(4096, self.model.config.max_position_embeddings), request["max_tokens"], device=self.device)
         length = inputs["input_ids"].shape[-1]
         emit({"type":"ready"})
 
@@ -123,7 +170,9 @@ class QwenChatEngine:
         return {"finish_reason":"cancelled" if cancelled.is_set() else "stop" if len(ids) and int(ids[-1]) in eos_ids else "length",
                 "usage":{"prompt_tokens":length,"completion_tokens":len(ids)}, "context_messages_dropped":dropped,
                 "generation_profile": profile, "sampling": sampling,
-                "latency_sec":round(time.monotonic() - started, 3)}
+                "latency_sec":round(time.monotonic() - started, 3),
+                "generation_latency_sec":round(time.monotonic() - started, 3),
+                "model_load_sec":loading_sec, "qwen_runtime": dict(self.runtime)}
 
 
 def main():
@@ -163,7 +212,8 @@ def main():
                 for event in events.values(): event.set()
             queue.put(None)
     threading.Thread(target=read, daemon=True, name="chat-ipc-reader").start()
-    engine = QwenChatEngine()
+    from mdd.chat_runtime import requested_device
+    engine = QwenChatEngine(device=requested_device())
     speech_engine = LocalSpeechEngine()
     while True:
         item = queue.get()
@@ -172,7 +222,7 @@ def main():
         identifier = request["id"]
         try:
             faulthandler.dump_traceback_later(300 if request["type"] in {'speech', 'regenerate_reference'} else 150, repeat=False)
-            if request["model_id"] not in {"qwen-base", "qwen-trained"}:
+            if request["model_id"] not in {"qwen-base", "qwen-trained", "qwen-grammar"}:
                 raise ValueError("invalid_model")
             emit = lambda value: write({"id":identifier, **value})
             if request['type'] == 'speech':

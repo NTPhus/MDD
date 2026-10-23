@@ -1,0 +1,17 @@
+{
+  "description": "Local text-recovery diagnostics. Inputs are ASR-like text fixtures, not an audio ASR benchmark. Prompt examples and development controls are identified explicitly.",
+  "cases": [
+    {"id": "today_prompt_example", "group": "prompt_example", "transcript": "i have a meeting to day", "expected_text": "I have a meeting today.", "expected_status": "accepted"},
+    {"id": "today_variant", "group": "development", "transcript": "i stayed at home to day", "expected_text": "I stayed at home today.", "expected_status": "accepted"},
+    {"id": "software_variant", "group": "development", "transcript": "My brother is a soft ware developer", "expected_text": "My brother is a software developer.", "expected_status": "unchanged"},
+    {"id": "favorite_variant", "group": "development", "transcript": "My fravorit food is pizza", "expected_text": "My favorite food is pizza.", "expected_status": "accepted"},
+    {"id": "engineer_variant", "group": "development", "transcript": "I work as a sockway engineer", "expected_text": "I work as a software engineer.", "expected_status": "accepted"},
+    {"id": "journey_user_example", "group": "known_user_example", "transcript": "It was the divicote true getesir", "history": [{"role": "assistant", "content": "How was your journey?"}], "expected_text": "It was difficult to get there.", "expected_status": "accepted"},
+    {"id": "occupation_user_example", "group": "known_user_example", "transcript": "Curly am ma a sockway engineer", "history": [{"role": "assistant", "content": "What do you do for work?"}], "expected_text": "Currently, I am a software engineer.", "expected_status": "accepted"},
+    {"id": "negation_number_control", "group": "control", "transcript": "I do not want two coffees", "expected_text": "I do not want two coffees.", "expected_status": "unchanged"},
+    {"id": "grammar_control", "group": "control", "transcript": "I usually wakes up at seven am", "expected_text": "I usually wakes up at seven am.", "expected_status": "unchanged"},
+    {"id": "nonsense_prompt_example", "group": "prompt_example", "transcript": "Banana software yesterday purple", "expected_text": null, "expected_status": "ambiguous"},
+    {"id": "unclear_variant", "group": "control", "transcript": "blue breakfast purple goes", "expected_text": null, "expected_status": "ambiguous"},
+    {"id": "daycare_prompt_example", "group": "prompt_example", "transcript": "I go to day care", "expected_text": "I go to day care.", "expected_status": "unchanged"}
+  ]
+}

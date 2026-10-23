@@ -98,6 +98,8 @@ class AI33TTS:
         self.cache_dir = Path(cache_dir)
         self.api = build_opener(NoRedirect())
         self.downloads = build_opener()
+        self.last_timing = {}
+        self._timing = None
 
     def request(self, method, path, payload=None, timeout=30):
         # Only read-only requests can be retried automatically. A failed POST
@@ -105,6 +107,8 @@ class AI33TTS:
         attempts = 3 if method == "GET" else 1
         for attempt in range(attempts):
             try:
+                if self._timing is not None:
+                    self._timing["request_count"] += 1
                 return self._request_once(method, path, payload, timeout)
             except AI33Error as error:
                 if not error.retryable or attempt + 1 == attempts:
@@ -147,6 +151,8 @@ class AI33TTS:
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             remaining = deadline - time.monotonic()
+            if self._timing is not None:
+                self._timing["poll_count"] += 1
             result = self.request("GET", "/v1/task/" + quote(task_id, safe=""),
                                   timeout=max(0.001, min(30, remaining)))
             status = (field(result, "status", "state") or "").lower()
@@ -170,6 +176,8 @@ class AI33TTS:
         # CDN download deliberately has no xi-api-key or Authorization header.
         for attempt in range(3):
             try:
+                if self._timing is not None:
+                    self._timing["download_attempts"] += 1
                 # A completed task can precede CDN propagation. Retry only
                 # these read-only downloads; task submission is never retried.
                 # The CDN also rejects urllib's default user agent.
@@ -221,11 +229,21 @@ class AI33TTS:
         speed = self.speed if speed is None else speed
         if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not 0.5 <= speed <= 1.5:
             raise AI33Error("Voice speed must be between 0.5 and 1.5.")
+        # JSON hashes distinguish 1 from 1.0 although the provider does not.
+        # Canonicalize new requests, and retain old integer-key receipts so an
+        # existing paid task/audio can be reused without another submission.
+        speed = float(speed)
         payload = {"text": text, "voice_id": voice_id, "speed": speed}
         cache_input = {"base_url": self.base_url, "locale": locale, "payload": payload}
         digest = hashlib.sha256(json.dumps(cache_input, sort_keys=True).encode()).hexdigest()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         receipt_path = self.cache_dir / (digest + ".json")
+        if not receipt_path.exists() and speed.is_integer():
+            legacy_input = {**cache_input, "payload": {**payload, "speed": int(speed)}}
+            legacy_digest = hashlib.sha256(json.dumps(legacy_input, sort_keys=True).encode()).hexdigest()
+            legacy_path = self.cache_dir / (legacy_digest + ".json")
+            if legacy_path.exists():
+                receipt_path, digest = legacy_path, legacy_digest
         return payload, receipt_path, digest, voice_id
 
     def can_resume(self, text, locale="en-US", *, voice_id=None, speed=None):
@@ -242,33 +260,66 @@ class AI33TTS:
 
     def synthesize(self, text, locale="en-US", voice_id=None, *, speed=None, resume_only=False):
         """Return cached audio; retain the accepted task before polling/download."""
-        payload, receipt_path, digest, voice_id = self._cache_request(text, locale, voice_id, speed)
-        if receipt_path.exists():
-            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            if receipt.get("audio_file"):
-                audio = self.cache_dir / receipt["audio_file"]
-                if audio.is_file() and hashlib.sha256(audio.read_bytes()).hexdigest() == receipt.get("audio_sha256"):
-                    return audio
-            task_id = receipt["task_id"]
-        else:
-            if resume_only:
-                raise AI33Error("No cached task to resume; no new request was submitted.", code="ai33_no_cached_task")
-            result = self.request("POST", "/v3/text-to-speech", payload)
-            task_id = field(result, "task_id")
-            if not task_id:
-                raise AI33Error("Submission returned no recognized task_id. Check task history "
-                                "before submitting again; the response schema may differ.")
-            receipt = {
-                "provider": "ai33", "base_url": self.base_url, "task_id": task_id,
-                "locale": locale, "voice_id": voice_id, "speed": payload['speed'],
-                "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
-            }
+        # Timings contain numbers/booleans only, including on errors. Counts
+        # distinguish task polls from actual API attempts (GET may retry).
+        timing = {name: 0.0 for name in ("total_sec", "cache_lookup_sec", "submit_sec", "wait_sec", "download_sec")}
+        timing.update(cache_hit=False, resumed_task=False, new_tasks_submitted=0,
+                      request_count=0, poll_count=0, download_attempts=0)
+        self.last_timing = self._timing = timing
+        started = time.perf_counter()
+        try:
+            lookup_started = time.perf_counter()
+            try:
+                payload, receipt_path, digest, voice_id = self._cache_request(text, locale, voice_id, speed)
+                cached_task = receipt_path.exists()
+                if cached_task:
+                    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                    if receipt.get("audio_file"):
+                        audio = self.cache_dir / receipt["audio_file"]
+                        if audio.is_file() and hashlib.sha256(audio.read_bytes()).hexdigest() == receipt.get("audio_sha256"):
+                            timing["cache_hit"] = True
+                            return audio
+                    task_id = receipt["task_id"]
+                    timing["resumed_task"] = True
+            finally:
+                timing["cache_lookup_sec"] = time.perf_counter() - lookup_started
+            if not cached_task:
+                if resume_only:
+                    raise AI33Error("No cached task to resume; no new request was submitted.", code="ai33_no_cached_task")
+                submit_started = time.perf_counter()
+                try:
+                    # Count the submission attempt even if its response is lost;
+                    # it may already have created a billable task. Never retry.
+                    timing["new_tasks_submitted"] = 1
+                    result = self.request("POST", "/v3/text-to-speech", payload)
+                finally:
+                    timing["submit_sec"] = time.perf_counter() - submit_started
+                task_id = field(result, "task_id")
+                if not task_id:
+                    raise AI33Error("Submission returned no recognized task_id. Check task history "
+                                    "before submitting again; the response schema may differ.")
+                receipt = {
+                    "provider": "ai33", "base_url": self.base_url, "task_id": task_id,
+                    "locale": locale, "voice_id": voice_id, "speed": payload['speed'],
+                    "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                }
+                self.save_receipt(receipt_path, receipt)
+            wait_started = time.perf_counter()
+            try:
+                url = self.wait(task_id)
+            finally:
+                timing["wait_sec"] = time.perf_counter() - wait_started
+            download_started = time.perf_counter()
+            try:
+                audio, audio_hash = self.download(url, self.cache_dir / digest)
+            finally:
+                timing["download_sec"] = time.perf_counter() - download_started
+            receipt.update(audio_file=audio.name, audio_sha256=audio_hash)
             self.save_receipt(receipt_path, receipt)
-        url = self.wait(task_id)
-        audio, audio_hash = self.download(url, self.cache_dir / digest)
-        receipt.update(audio_file=audio.name, audio_sha256=audio_hash)
-        self.save_receipt(receipt_path, receipt)
-        return audio
+            return audio
+        finally:
+            timing["total_sec"] = time.perf_counter() - started
+            self._timing = None
 
     @staticmethod
     def save_receipt(path, receipt):

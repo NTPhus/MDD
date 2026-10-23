@@ -1,6 +1,7 @@
 """Offline integration tests: no account, network traffic or credits required."""
 
 from email.message import Message
+import hashlib
 import io
 import json
 import os
@@ -38,6 +39,72 @@ class AI33Tests(unittest.TestCase):
     def audio_response(self):
         return Response(b"RIFF" + b"\x00" * 4 + b"WAVE" + b"test-audio", "audio/wav")
 
+    def cached_receipt(self, text, speed, *, audio=True):
+        """Build a receipt with the original unnormalized JSON cache key."""
+        payload = {"text": text, "voice_id": "example-english", "speed": speed}
+        cache_input = {"base_url": self.client.base_url, "locale": "en-US", "payload": payload}
+        digest = hashlib.sha256(json.dumps(cache_input, sort_keys=True).encode()).hexdigest()
+        receipt = {"task_id": "existing-task", "voice_id": "example-english", "speed": speed}
+        path = self.cache / (digest + ".json")
+        if audio:
+            data = b"ID3cached-audio"
+            file = self.cache / (digest + ".mp3")
+            file.write_bytes(data)
+            receipt.update(audio_file=file.name, audio_sha256=hashlib.sha256(data).hexdigest())
+        self.client.save_receipt(path, receipt)
+        return path, self.cache / (digest + ".mp3")
+
+    def test_equivalent_integer_and_float_speeds_share_one_submission_and_cache(self):
+        responses = [{"task_id": "one-task"}, {"status": "done", "audio_url": "https://cdn.example/a.wav"}]
+        with patch.object(self.client.api, "open", side_effect=[Response(json.dumps(value).encode()) for value in responses]) as api, \
+                patch.object(self.client.downloads, "open", return_value=self.audio_response()) as download:
+            first = self.client.synthesize("Hello.", speed=1)
+            self.assertEqual(self.client.synthesize("Hello.", speed=1.0), first)
+            self.assertEqual(self.client.synthesize("Hello."), first)
+        self.assertEqual(api.call_count, 2)
+        self.assertEqual(download.call_count, 1)
+        self.assertIs(type(json.loads(api.call_args_list[0].args[0].data)['speed']), float)
+        self.assertTrue(self.client.last_timing['cache_hit'])
+        self.assertEqual(self.client.last_timing['new_tasks_submitted'], 0)
+
+    def test_legacy_integer_cache_is_reused_without_network_or_receipt_migration(self):
+        legacy, audio = self.cached_receipt("Hello.", 1)
+        original = legacy.read_bytes()
+        with patch.object(self.client, "request") as request, patch.object(self.client.downloads, "open") as download:
+            for speed in (1, 1.0, None):
+                self.assertEqual(self.client.synthesize("Hello.", speed=speed), audio)
+        request.assert_not_called()
+        download.assert_not_called()
+        self.assertEqual(legacy.read_bytes(), original)
+        self.assertEqual(list(self.cache.glob('*.json')), [legacy])
+        self.assertTrue(self.client.last_timing['cache_hit'])
+        _, different, _, _ = self.client._cache_request("Hello.", "en-US", speed=.85)
+        self.assertNotEqual(different, legacy)
+
+    def test_canonical_float_receipt_is_preferred_when_both_legacy_receipts_exist(self):
+        legacy, _ = self.cached_receipt("Hello.", 1)
+        canonical, audio = self.cached_receipt("Hello.", 1.0)
+        originals = {path: path.read_bytes() for path in (legacy, canonical)}
+        with patch.object(self.client, "request") as request:
+            self.assertEqual(self.client.synthesize("Hello.", speed=1), audio)
+            self.assertEqual(self.client.synthesize("Hello.", speed=1.0), audio)
+        request.assert_not_called()
+        self.assertEqual({path: path.read_bytes() for path in (legacy, canonical)}, originals)
+
+    def test_legacy_integer_pending_task_resumes_with_float_speed_using_get_only(self):
+        _, canonical, _, _ = self.client._cache_request("Hello.", "en-US", speed=1.0)
+        legacy, _ = self.cached_receipt("Hello.", 1, audio=False)
+        self.assertFalse(canonical.exists())
+        self.assertTrue(self.client.can_resume("Hello.", speed=1.0))
+        with patch.object(self.client, "request", return_value={"status": "done", "audio_url": "https://cdn.example/a.wav"}) as request, \
+                patch.object(self.client.downloads, "open", return_value=self.audio_response()):
+            self.assertTrue(self.client.resume("Hello.", speed=1.0).exists())
+        self.assertEqual([call.args[0] for call in request.call_args_list], ['GET'])
+        self.assertTrue(legacy.exists())
+        self.assertFalse(canonical.exists())
+        self.assertEqual(self.client.last_timing['new_tasks_submitted'], 0)
+        self.assertTrue(self.client.last_timing['resumed_task'])
+
     def test_submit_poll_download_cache_and_key_isolation(self):
         responses = [
             {"data": {"task_id": "example-task"}},
@@ -68,6 +135,65 @@ class AI33Tests(unittest.TestCase):
         self.assertNotIn("unit-test-secret", receipt_text)
         self.assertNotIn("signature=private", receipt_text)
         self.assertNotIn("I think this is useful.", receipt_text)
+
+    def test_stage_timings_measure_submit_poll_and_download_then_cache_without_network(self):
+        responses = [
+            {"task_id": "private-task"}, {"status": "processing"},
+            {"status": "done", "audio_url": "https://cdn.example/a.wav?signature=private"},
+        ]
+        with patch.object(self.client.api, "open", side_effect=[Response(json.dumps(value).encode()) for value in responses]) as api, \
+                patch.object(self.client.downloads, "open", return_value=self.audio_response()) as download, \
+                patch("scripts.ai33_tts.time.sleep"), \
+                patch("scripts.ai33_tts.time.perf_counter", side_effect=[0, 1, 3, 4, 9, 10, 25, 26, 29, 30]):
+            audio = self.client.synthesize("Do not put learner text in timings.")
+        timing = self.client.last_timing.copy()
+        self.assertEqual({key: timing[key] for key in ("total_sec", "cache_lookup_sec", "submit_sec", "wait_sec", "download_sec")},
+                         {"total_sec": 30, "cache_lookup_sec": 2, "submit_sec": 5, "wait_sec": 15, "download_sec": 3})
+        self.assertFalse(timing["cache_hit"])
+        self.assertFalse(timing["resumed_task"])
+        self.assertEqual((timing["new_tasks_submitted"], timing["request_count"], timing["poll_count"], timing["download_attempts"]), (1, 3, 2, 1))
+        self.assertTrue(all(type(value) in (int, float, bool) for value in timing.values()))
+        self.assertNotIn("private", json.dumps(timing))
+        self.assertEqual(api.call_count, 3)
+        self.assertEqual(download.call_count, 1)
+        with patch.object(self.client.api, "open") as api, patch.object(self.client.downloads, "open") as download, \
+                patch("scripts.ai33_tts.time.perf_counter", side_effect=[100, 101, 102, 103]):
+            self.assertEqual(self.client.synthesize("Do not put learner text in timings."), audio)
+        api.assert_not_called()
+        download.assert_not_called()
+        self.assertTrue(self.client.last_timing["cache_hit"])
+        self.assertEqual(self.client.last_timing["total_sec"], 3)
+        self.assertEqual(self.client.last_timing["cache_lookup_sec"], 1)
+        for key in ("submit_sec", "wait_sec", "download_sec", "new_tasks_submitted", "request_count", "poll_count", "download_attempts"):
+            self.assertEqual(self.client.last_timing[key], 0)
+        self.assertFalse(self.client.last_timing["resumed_task"])
+
+    def test_failed_submission_retains_timing_without_retry_or_sensitive_details(self):
+        with patch.object(self.client.api, "open", side_effect=URLError("unit-test-secret")) as api:
+            with self.assertRaises(AI33Error):
+                self.client.synthesize("Private learner text.")
+        self.assertEqual(api.call_count, 1)
+        timing = self.client.last_timing
+        self.assertEqual(timing["new_tasks_submitted"], 1)
+        self.assertEqual(timing["request_count"], 1)
+        self.assertEqual(timing["poll_count"], 0)
+        self.assertGreaterEqual(timing["total_sec"], timing["submit_sec"])
+        self.assertGreaterEqual(timing["submit_sec"], 0)
+        self.assertNotIn("unit-test-secret", json.dumps(timing))
+        self.assertNotIn("Private learner", json.dumps(timing))
+        self.assertIsNone(self.client._timing)
+
+    def test_timing_distinguishes_task_polls_from_retried_api_attempts(self):
+        unavailable = HTTPError("https://api.ai33.pro/v1/task/existing", 503, "private", {}, None)
+        with patch.object(self.client.api, "open", side_effect=[
+                Response(b'{"task_id":"existing"}'), unavailable,
+                Response(b'{"status":"done","audio_url":"https://cdn.example/a.wav"}')]), \
+                patch.object(self.client.downloads, "open", return_value=self.audio_response()), \
+                patch("scripts.ai33_tts.time.sleep"):
+            self.assertTrue(self.client.synthesize("Hello.").exists())
+        self.assertEqual(self.client.last_timing['poll_count'], 1)
+        self.assertEqual(self.client.last_timing['request_count'], 3)
+        self.assertEqual(self.client.last_timing['new_tasks_submitted'], 1)
 
     def test_poll_failure_resumes_without_second_submission(self):
         done = {"data": {"status": "completed", "audio_url": "https://cdn.example/a.wav"}}
@@ -109,6 +235,11 @@ class AI33Tests(unittest.TestCase):
                 patch.object(self.client.downloads, "open", return_value=self.audio_response()):
             self.assertTrue(self.client.resume("Hello.").exists())
             self.assertEqual([call.args[0] for call in request.call_args_list], ["GET"])
+        self.assertTrue(self.client.last_timing["resumed_task"])
+        self.assertFalse(self.client.last_timing["cache_hit"])
+        self.assertEqual(self.client.last_timing["new_tasks_submitted"], 0)
+        self.assertEqual(self.client.last_timing["submit_sec"], 0)
+        self.assertEqual(self.client.last_timing["poll_count"], 1)
 
     def test_transient_task_get_retries_but_authentication_failure_does_not(self):
         transient = HTTPError("https://api.ai33.pro/v1/task/existing", 503, "secret", {}, None)

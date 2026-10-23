@@ -1,0 +1,258 @@
+{
+  "captured_at_bangkok": "2026-10-23T09:45:11.479996+07:00",
+  "method": "Read local code/metadata and GET config only; no audio, inference, training, TTS or state mutation.",
+  "sources": [
+    {
+      "path": "src/mdd/demo.py",
+      "bytes": 35573,
+      "sha256": "2e020fdf8e0d602f96aa7df020fe03bc76fe5d52c5b0b2b8f09471ea119f5276"
+    },
+    {
+      "path": "src/mdd/demo_chat.py",
+      "bytes": 44855,
+      "sha256": "31fcd75474c08a3c6e4c61bce957e204a52167ef9ea6840774e7ae7b3e5e52f9"
+    },
+    {
+      "path": "src/mdd/demo_model_registry.py",
+      "bytes": 1922,
+      "sha256": "841cba1f517ddb376c8603142d6ccbc9c45dacca02c985faa1f121849f21d10b"
+    },
+    {
+      "path": "src/mdd/chat_runtime.py",
+      "bytes": 1642,
+      "sha256": "b93967de1d9746843c2cd6bb806916cc5847128fd585dda453af63848d504c0a"
+    },
+    {
+      "path": "src/mdd/demo_inference.py",
+      "bytes": 17108,
+      "sha256": "99c3f89b84f5dd795b162ca47ab168b4e99fea43b349deba24de623c25966243"
+    },
+    {
+      "path": "src/mdd/demo_reference.py",
+      "bytes": 2279,
+      "sha256": "cb0c7639d65ec8ce4796680984e55f872bf6093c3cf6c9ce1c379947b205c242"
+    },
+    {
+      "path": "src/mdd/demo_realtime.py",
+      "bytes": 4789,
+      "sha256": "c2760ac61ed8b75cb4bb91e57832550cfbc33477fc03f28af27777ab6a7d05a5"
+    },
+    {
+      "path": "src/mdd/demo_feedback.py",
+      "bytes": 20109,
+      "sha256": "62fc5dd61f43d4f1ac018779f236704d27cbbf9c710c0bbd8475f9c82bfdbac6"
+    },
+    {
+      "path": "src/mdd/chat_assessment.py",
+      "bytes": 8814,
+      "sha256": "11a58aee7bf97c47a7d5b959904aef057274a9c522b180411757ab1e82d2b706"
+    },
+    {
+      "path": "src/mdd/pronunciation_assessment.py",
+      "bytes": 20226,
+      "sha256": "ce00d0d4a83ca5171bc280732509ae6d6b34b82d34174307b8c6e5f5a8c9c944"
+    },
+    {
+      "path": "src/mdd/chat_pronunciation.py",
+      "bytes": 3206,
+      "sha256": "65cd33a23a1489677a2c5d41bbb37ad8090d704462ba642bf46f25f835ddfb9a"
+    },
+    {
+      "path": "src/mdd/chat_reference.py",
+      "bytes": 11509,
+      "sha256": "f8f5a3e8dd06f933633e76942f94336baf1a9652e0eeb68484bb96fe80ce90a5"
+    },
+    {
+      "path": "src/mdd/chat_diagnostics.py",
+      "bytes": 4823,
+      "sha256": "1a895f18808be01863ffc108ce5fd5a54aedaac73fb085e5adc359db664c65b7"
+    },
+    {
+      "path": "src/mdd/phonetic_candidates.py",
+      "bytes": 5622,
+      "sha256": "a14859866dcd80fe638a24d7e4c4e23912a07aafb86a9297fc7a0f3e0ce3c41c"
+    },
+    {
+      "path": "src/mdd/acoustic_evidence.py",
+      "bytes": 3697,
+      "sha256": "22a820572ebc8a04ae7f78b1b05067f17c2ed71057db6644b3aab4e0a4f7353d"
+    },
+    {
+      "path": "src/mdd/speech_topics.py",
+      "bytes": 8073,
+      "sha256": "fe5e5bfe75cb902d43c0f25a4fe63209f664536203ac39fed0775eaec319ab08"
+    },
+    {
+      "path": "src/mdd/chat_voices.py",
+      "bytes": 2147,
+      "sha256": "51f3fd14f2a1df74916ef307f6a9ec0aca23c665d31a076d0a8a7198b16544ef"
+    },
+    {
+      "path": "scripts/serve_demo.py",
+      "bytes": 2140,
+      "sha256": "a1c373e4453c0dedd4eb72ebe0d075fb81091a2a620c48eb28728d23ab5ad574"
+    },
+    {
+      "path": "scripts/local_chat_process.py",
+      "bytes": 6336,
+      "sha256": "a055e780311cd467bf70d11ec1ac42c664a647678086b813b4ca162267d98bd1"
+    },
+    {
+      "path": "scripts/local_chat_worker.py",
+      "bytes": 12044,
+      "sha256": "6eba885479c3b603e62ae5697acc351b0098d0185b6d029a2b42e4d6db1e87f3"
+    },
+    {
+      "path": "scripts/local_speech_engine.py",
+      "bytes": 32739,
+      "sha256": "7214f127b6f16b31f2a9e645b09512df635793da864418ac50e684e59065b0cc"
+    },
+    {
+      "path": "scripts/grammar_inference.py",
+      "bytes": 3642,
+      "sha256": "8b6dba591782583a647417a64ed0c3a409b3189b9a8b2d46fe4adc2485488608"
+    },
+    {
+      "path": "scripts/transcript_normalization.py",
+      "bytes": 6962,
+      "sha256": "052cbdf0abc0753412f22ad7abab63aef162159412f81c476af120dd9eca8103"
+    },
+    {
+      "path": "scripts/conversation_context.py",
+      "bytes": 3014,
+      "sha256": "a1344ea457bd1552cc75b14904186ef04960ffe7559f64c188193a00a93dd164"
+    },
+    {
+      "path": "scripts/conversation_reply.py",
+      "bytes": 16561,
+      "sha256": "d88f073555e04af3ccd364070770134a78fc2fea9e66b3bf16fba9adec8b4166"
+    },
+    {
+      "path": "scripts/conversation_policy.py",
+      "bytes": 7260,
+      "sha256": "a04976f0cb0f1f46de1cb6708f311e1fef0639c228beb734abc659f5b59431e7"
+    },
+    {
+      "path": "scripts/conversation_state.py",
+      "bytes": 14799,
+      "sha256": "4644ba15204f63bd69de69606aea2a8f7e2ce8e43753b098616b1f7e33940ec1"
+    },
+    {
+      "path": "scripts/sentence_rewrite.py",
+      "bytes": 25064,
+      "sha256": "a59867419dea76b5ff9f64719a50e00364aaede956bbeeebd2d6a4ad58795528"
+    },
+    {
+      "path": "scripts/sentence_correction.py",
+      "bytes": 10104,
+      "sha256": "561dff694492da5142ba21b59b604329310697cbc3271fe7ce53aa173c4412ea"
+    },
+    {
+      "path": "scripts/cascade_bridge.py",
+      "bytes": 5359,
+      "sha256": "77c3016d080cd91d558bd78441e9101722be30ab57631f1c24f9c109a8efe39a"
+    },
+    {
+      "path": "scripts/ai33_tts.py",
+      "bytes": 18833,
+      "sha256": "a84ff65837a6759919868d2eeab0bc6411a15f1c1ea11c5558b9cc434e70d8d5"
+    },
+    {
+      "path": "scripts/llm_client.py",
+      "bytes": 15351,
+      "sha256": "93ed6445056f9ebff8eca5baaf2f37ba9f80657ae49ea3a85a7be6950375f032"
+    },
+    {
+      "path": "demo/index.html",
+      "bytes": 26998,
+      "sha256": "ecb401d2230d770db231ca91353d8b2bb704f2e9fe129dea942b5b9f613eaab1"
+    },
+    {
+      "path": "demo/chat.js",
+      "bytes": 106262,
+      "sha256": "187a9e5a76fab452c1d3b519e1669170a06daa897db0dabf1b3527d307454767"
+    },
+    {
+      "path": "demo/app.js",
+      "bytes": 76821,
+      "sha256": "1ec423851688f359119d81b2e6b56a95c6b795a4cb9e900dc4a20b8de2c8183f"
+    },
+    {
+      "path": "demo/recorder-worklet.js",
+      "bytes": 957,
+      "sha256": "9758caffdc47c2769d5c25feb4045f40abf5acf70b2b308b86f0c331964ab74d"
+    },
+    {
+      "path": "runs/asr-vietnamese-english-v1/training_provenance.json",
+      "bytes": 4384,
+      "sha256": "fef809715849f3c90681efec10946a083cdae290b7e194e622ffa111730ffa53"
+    },
+    {
+      "path": "runs/cascade-l2arctic-plus-seed42/B/completed.json",
+      "bytes": 447,
+      "sha256": "dbd9f9aaf518ea76e4cb5c7264d7de0d196be09b05a08c8c50ca7e554f0f8a64"
+    },
+    {
+      "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/metadata.json",
+      "bytes": 10492,
+      "sha256": "c53b581c721a926866d934ce1e2b64c996bdbe4c061db1ab7ba5d8a46572b8a4"
+    },
+    {
+      "path": "runs/cascade-l2arctic-plus-seed42/Q/training_provenance.json",
+      "bytes": 7172,
+      "sha256": "9108496a0beda8abb57afa95a6c228288052106f68b1c3c12032b633a0e96e73"
+    },
+    {
+      "path": "runs/grammar-qwen3-06b-wi-jfleg-v1/training_provenance.json",
+      "bytes": 10363,
+      "sha256": "fb8aa8d00c7921c677489e3d18dbd91deb77e32fe8988b52df87a8b9df028e48"
+    },
+    {
+      "path": "runs/grammar-qwen3-06b-wi-jfleg-v1/demo_validation.json",
+      "bytes": 477,
+      "sha256": "64c12707f2957ae0b39b7cc53598142d2a104e6a9296509b7716729f01aa490d"
+    },
+    {
+      "path": "data/generated/pronunciation-calibration-v1/full-validation/calibration.json",
+      "bytes": 4471,
+      "sha256": "338065ffa80dca6f17bb39257f00aea517d00cd0215437925a8884478ff2bcb3"
+    }
+  ],
+  "runtime_config": {
+    "default_model_id": "qwen-base",
+    "models": [
+      {
+        "id": "qwen-base",
+        "label": "Qwen3-0.6B · Bản gốc",
+        "ready": true,
+        "description": "Mô hình gốc cho hội thoại văn bản."
+      },
+      {
+        "id": "qwen-trained",
+        "label": "Qwen3-0.6B · Sau train",
+        "ready": true,
+        "description": "LoRA đã học hướng dẫn phát âm; chất lượng chat tự do cần kiểm chứng."
+      }
+    ],
+    "device": "auto",
+    "acoustic_device": "cpu",
+    "asr_model_id": "wav2vec2-vi-en-v1",
+    "grammar_model_id": "qwen-grammar",
+    "reply_model_id": "qwen-base",
+    "sentence_mode": "grammar_and_natural",
+    "rewrite_mode": "grammar_and_natural",
+    "dialogue_policy": "natural_conversation",
+    "pronunciation_method": "ctc_variant_posterior_margin_v1",
+    "pronunciation_uncertainty": true,
+    "voice_content": "reply_only",
+    "reference_confirmation": true,
+    "reference_regenerates_reply": true,
+    "reference_regenerates_only_on_change": true,
+    "pronunciation_review": "immediate_provisional",
+    "max_audio_seconds": 30,
+    "speech_ready": true,
+    "ai33_available": true,
+    "default_voice_provider": "ai33"
+  },
+  "runtime_config_status": "GET completed"
+}

@@ -1,0 +1,2304 @@
+{
+  "scope": "Rà soát Qwen/Projector trong MDD để tổng hợp PDF tiếng Việt. Chỉ đọc notebook/code/artifact; không train hoặc đánh giá lại.",
+  "generated_at_Bangkok": "2026-10-23T09:06:54.230066+07:00",
+  "date_note": "Dùng ngày báo cáo 23/10/2026 theo context người dùng; timestamps run trong provenance là UTC và đã chuyển +07:00 khi trình bày.",
+  "source_precedence": [
+    "training_provenance + checkpoint trainer_state/training_args + immutable evaluation metadata/rows",
+    "report summary đã kiểm thử checkpoint hiện có",
+    "notebook outputs là snapshot lúc chạy",
+    "config là recipe; README/TRAINING text có thể cũ"
+  ],
+  "executive_findings_vi": [
+    "Đã train xong adapter Qwen3-0.6B phát âm theo cascade: 3 epochs, 846 optimizer updates, best validation loss 0.378810 tại checkpoint-800.",
+    "Đã train xong adapter Qwen3-0.6B ngữ pháp/cách nói tự nhiên riêng: 2 epochs, 3564 updates, best validation loss 0.184105 tại checkpoint-3500.",
+    "Projector đã hoàn tất stage 1 alignment, 282 updates/1 epoch. Stage 2 feedback/P1 chưa train; không gọi cascade-adapter-transfer là P1.",
+    "Qwen2-Audio-7B-Instruct chỉ có metadata/manifest. weights_downloaded=false; không có bằng chứng run/checkpoint train Qwen2-Audio.",
+    "Kết quả feedback Qwen hiện có là pilot 12 utterances, còn transcript generation là pilot 30. 900-row full test chỉ có audio A/B và transcript teacher-forced NLL.",
+    "Bộ 300 bản nháp tiếng Việt chưa duyệt chỉ phục vụ review/smoke; không phải dữ liệu đã dùng cho lượt train khoa học cascade tiếng Anh.",
+    "Các notebook train có trạng thái/output cũ. Báo cáo phải ghi rõ snapshot và đối chiếu runs, không kết luận model chưa train dựa cell cũ."
+  ],
+  "models": {
+    "Qwen3": {
+      "name": "Qwen3-0.6B",
+      "role": "Text causal LM cho coaching/corrected text; nhận audio chỉ thông qua projector được ghép ngoài, không phải Qwen2-Audio",
+      "config_source": "models/pretrained/Qwen3-0.6B/config.json",
+      "model_card_source": "models/pretrained/Qwen3-0.6B/README.md:30",
+      "config": {
+        "architectures": [
+          "Qwen3ForCausalLM"
+        ],
+        "attention_bias": false,
+        "attention_dropout": 0.0,
+        "bos_token_id": 151643,
+        "eos_token_id": 151645,
+        "head_dim": 128,
+        "hidden_act": "silu",
+        "hidden_size": 1024,
+        "initializer_range": 0.02,
+        "intermediate_size": 3072,
+        "max_position_embeddings": 40960,
+        "max_window_layers": 28,
+        "model_type": "qwen3",
+        "num_attention_heads": 16,
+        "num_hidden_layers": 28,
+        "num_key_value_heads": 8,
+        "rms_norm_eps": 1e-06,
+        "rope_scaling": null,
+        "rope_theta": 1000000,
+        "sliding_window": null,
+        "tie_word_embeddings": true,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.51.0",
+        "use_cache": true,
+        "use_sliding_window": false,
+        "vocab_size": 151936
+      },
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+      "trainable_LoRA_parameters": 1146880,
+      "parameter_count_note": "Tên/model card là 0.6B. Không cộng mù header safetensors: file có cả lm_head và embed_tokens mặc dù tie_word_embeddings=true; cộng cả hai sẽ đếm trùng embedding."
+    },
+    "Qwen2Audio": {
+      "name": "Qwen2-Audio-7B-Instruct",
+      "manifest_source": "models/pretrained/Qwen2-Audio-7B-Instruct/source_manifest.json",
+      "manifest": {
+        "model_id": "Qwen/Qwen2-Audio-7B-Instruct",
+        "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
+        "files": {
+          "config.json": {
+            "sha256": "ab122e112e2450f10cec59216185bd519ccd7529c79d4c1c00255d43b97a037d",
+            "bytes": 853
+          },
+          "preprocessor_config.json": {
+            "sha256": "4cd7c6c061fe79244c57b0c320b2873f3ee5acce2277f7cc3aced042725680f2",
+            "bytes": 342
+          },
+          "tokenizer_config.json": {
+            "sha256": "c738158e70eeecf25736a6c4d8e5f34cfce683079980757edfb0665a7b2457ed",
+            "bytes": 638335
+          },
+          "model.safetensors.index.json": {
+            "sha256": "b6cc05302d1bd25fbab6915e3a033603c524416b984f661d213f9a1f8e3b3895",
+            "bytes": 78989
+          }
+        },
+        "weights": [
+          {
+            "filename": "model-00001-of-00005.safetensors",
+            "sha256": "383de5b5b06f7e7f276850a065d9164641c93009f79a377352a7c949d17c1d7a",
+            "bytes": 3911340848
+          },
+          {
+            "filename": "model-00002-of-00005.safetensors",
+            "sha256": "610e59a23cdf1f78d7e3b42e69f2e1a08578f29726391a1772aecac95db3c59c",
+            "bytes": 3980786080
+          },
+          {
+            "filename": "model-00003-of-00005.safetensors",
+            "sha256": "b9ea76e97226524a12b6acc5e896bebf01a01018fbcad20a72eb13c7950f6916",
+            "bytes": 3980819456
+          },
+          {
+            "filename": "model-00004-of-00005.safetensors",
+            "sha256": "d68dee591619e26e3d0af23a07e181c70134fbc3aa33e24d872224607aae2c62",
+            "bytes": 3643135696
+          },
+          {
+            "filename": "model-00005-of-00005.safetensors",
+            "sha256": "a447dab3e72f9debd37a0c4ae0b9179a1bad2b06357092a77c066a0405bbc7d2",
+            "bytes": 1278214288
+          }
+        ],
+        "weights_downloaded": false
+      },
+      "config": {
+        "architectures": [
+          "Qwen2AudioForConditionalGeneration"
+        ],
+        "audio_config": {
+          "model_type": "qwen2_audio_encoder",
+          "num_mel_bins": 128,
+          "encoder_layers": 32,
+          "encoder_attention_heads": 20,
+          "encoder_ffn_dim": 5120,
+          "d_model": 1280,
+          "activation_function": "gelu",
+          "scale_embedding": false,
+          "max_source_positions": 1500
+        },
+        "audio_token_index": 151646,
+        "ignore_index": -100,
+        "model_type": "qwen2_audio",
+        "text_config": {
+          "bos_token_id": 151643,
+          "eos_token_id": 151645,
+          "intermediate_size": 11008,
+          "max_position_embeddings": 8192,
+          "model_type": "qwen2",
+          "rope_theta": 10000,
+          "rms_norm_eps": 1e-05,
+          "sliding_window": 32768,
+          "torch_dtype": "bfloat16",
+          "use_mrope": false,
+          "vocab_size": 156032
+        },
+        "transformers_version": "4.38.1",
+        "vocab_size": 156032
+      },
+      "local_files": [
+        "config.json",
+        "download_revision.txt",
+        "model.safetensors.index.json",
+        "preprocessor_config.json",
+        "source_manifest.json",
+        "tokenizer_config.json"
+      ],
+      "status": "Metadata only; no weight shards and no local training run found",
+      "notebook_explicit_exclusion": {
+        "file": "notebooks/mdd_cascade_training_comparison.ipynb",
+        "cell0": 0,
+        "cell1": 1,
+        "text": "Model âm thanh và Qwen được train riêng, chạy lần lượt trên GPU. Không dùng Qwen2-Audio."
+      }
+    }
+  },
+  "environment": {
+    "source": "notebooks/mdd_cascade_training_comparison.ipynb cell0=3/cell1=4 outputs",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "vram_GiB": 4.0,
+    "packages": {
+      "torch": "2.7.1+cu126",
+      "transformers": "4.57.6",
+      "peft": "0.17.1",
+      "accelerate": "1.10.1",
+      "bitsandbytes": "0.48.1",
+      "sacrebleu": "2.5.1",
+      "rouge-score": "0.1.2"
+    }
+  },
+  "common_split": {
+    "sources": [
+      "data/processed/feedback-cascade-en-v1/manifest.json",
+      "data/protocol/l2arctic-plus-cascade-v1/protocol.json",
+      "data/generated/cascade-l2arctic-plus-seed42/data_readiness.json"
+    ],
+    "counts": {
+      "train": 2249,
+      "validation": 450,
+      "test": 900
+    },
+    "speakers": {
+      "train": [
+        "ABA",
+        "ASI",
+        "BWC",
+        "EBVS",
+        "ERMS",
+        "HKK",
+        "HQTV",
+        "MBMPS",
+        "NCC",
+        "RRBI",
+        "SKA",
+        "SVBI",
+        "THV",
+        "YBAA",
+        "YDCK"
+      ],
+      "validation": [
+        "HJK",
+        "LXC",
+        "PNV"
+      ],
+      "test": [
+        "NJS",
+        "TLV",
+        "TNI",
+        "TXHC",
+        "YKWK",
+        "ZHAA"
+      ]
+    },
+    "label_provenance": {
+      "phone_labels": "L2-ARCTIC manual annotations",
+      "train_feedback": "GPT-4o-generated; paper section 6.1 explicitly states no human verification",
+      "test_feedback": "GPT-4o-generated and checked by three annotators; paper section 3.2",
+      "original_feedback_language": "en",
+      "vietnamese_translation_included": false
+    },
+    "source_commit": "e8c7684c545d94f2419fc4621e745236c192a353",
+    "source_hashes": {
+      "README.md": "e4cbc2c6f7c2313231e8f0d722e4544ec0c728b948414f89422fc99a14db7e17",
+      "LICENSE": "7402a974fba78d3b2c876c65aec7cd40318bdb87f9206614bde42fd423607a6d",
+      "data/L2-Arctic-plus/train_data.json": "35b2176964cfbd0ff29d2b80e2dab9f180e066d8680bbe52f1a4652fd60149c6",
+      "data/L2-Arctic-plus/test_data.json": "b922df6605ce16e3ca550122d19ccf99e190af0d671d8a419a53bf730025b041"
+    },
+    "protocol_sha256": "8692ddd427c5d99829c1997f255dd424ce455a8d63edec19004a09da9125f575",
+    "readiness": {
+      "protocol_id": "l2arctic-plus-cascade-v1",
+      "source_commit": "e8c7684c545d94f2419fc4621e745236c192a353",
+      "joint_counts": {
+        "train": 2249,
+        "validation": 450,
+        "test": 900
+      },
+      "audio_source_train": 1949,
+      "audio_source_validation": 300,
+      "audio_target_counts": {
+        "train": 300,
+        "validation": 150,
+        "test": 150
+      },
+      "test_train_overlap": 0,
+      "test_validation_overlap": 0,
+      "audio_hashes_verified": true,
+      "qwen_token_exclusions": [],
+      "old_source_train_overlap_with_new_test": 750,
+      "old_checkpoints_eligible": false,
+      "training_started_by_prepare": false
+    },
+    "notes_vi": [
+      "Speaker/utterance holdout, không phải unseen-prompt: source audit ghi 300 normalized prompts trùng official train/test.",
+      "Official test gồm 6 speaker × 150 = 900, được giữ nguyên.",
+      "Train feedback là output GPT-4o do tác giả công bố, không human-verified từng dòng. Test là GPT-4o được 3 annotator tác giả kiểm tra.",
+      "Không đổi thành tiếng Việt trong lượt cascade khoa học; giữ nhãn tiếng Anh.",
+      "Checkpoint A/B protocol cũ không hợp lệ cho split mới vì source train cũ có 750 utterances trong test mới."
+    ]
+  },
+  "cascade_Qwen": {
+    "task": "annotated_phones_to_english_feedback",
+    "pipeline_vi": "Audio → wav2vec2 A/B CTC → alignment với canonical phones → annotation_info dự đoán → Qwen → word→[{issue,suggestion}] JSON tiếng Anh. Oracle dùng nhãn âm gold chỉ để chẩn đoán, tách khỏi cascade dự đoán.",
+    "trained_parameters_vi": "Chỉ LoRA Qwen q_proj/v_proj, base đóng băng; wav2vec2 không được load hay train trong Qwen trainer.",
+    "provenance_source": "runs/cascade-l2arctic-plus-seed42/Q/training_provenance.json",
+    "provenance": {
+      "effective_config": {
+        "dataset_kind": "published_l2arctic_plus",
+        "task": "annotated_phones_to_english_feedback",
+        "model_path": "models/pretrained/Qwen3-0.6B",
+        "dataset_dir": "data/processed/feedback-cascade-en-v1",
+        "output_dir": "runs/cascade-l2arctic-plus-seed42/Q",
+        "source_dir": "data/external/l2arctic-plus/e8c7684c545d94f2419fc4621e745236c192a353",
+        "validation_speakers": [
+          "HJK",
+          "LXC",
+          "PNV"
+        ],
+        "max_length": 3072,
+        "loss_projection_chunk_size": 128,
+        "epochs": 3,
+        "eval_steps": 100,
+        "learning_rate": 0.0001,
+        "gradient_accumulation_steps": 8,
+        "lora_rank": 8,
+        "lora_alpha": 16,
+        "lora_dropout": 0.05,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ],
+        "min_train_examples": 100,
+        "min_validation_examples": 20,
+        "seed": 42,
+        "cascade_protocol_dir": "data/protocol/l2arctic-plus-cascade-v1"
+      },
+      "base_model_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "base_weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+      "trainable_parameters": 1146880,
+      "supervision": "assistant feedback tokens only; prompt labels masked with -100",
+      "logit_projection": "supervised next-token positions only; full prompt and unchanged causal loss",
+      "test_used_for_training": false,
+      "status": "completed",
+      "started_at_utc": "2026-10-21T06:22:11.421062+00:00",
+      "resume_from_checkpoint": null,
+      "purpose": "scientific_training",
+      "samples_used": {
+        "train": 2249,
+        "validation": 450
+      },
+      "loss_projection_chunk_size": 128,
+      "metrics": {
+        "train_runtime": 7748.3695,
+        "train_samples_per_second": 0.871,
+        "train_steps_per_second": 0.109,
+        "total_flos": 1.1804836093820928e+16,
+        "train_loss": 0.5605184127252998,
+        "epoch": 3.0
+      },
+      "global_step": 846,
+      "best_validation_loss": 0.3788103461265564,
+      "best_checkpoint": "D:\\NCC\\MDD\\runs\\cascade-l2arctic-plus-seed42\\Q\\checkpoint-800",
+      "adapter_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4",
+      "peak_allocated_bytes": 1963060224,
+      "finished_at_utc": "2026-10-21T08:31:20.337472+00:00"
+    },
+    "local_times": {
+      "started_at_Bangkok": "2026-10-21T13:22:11.421062+07:00",
+      "finished_at_Bangkok": "2026-10-21T15:31:20.337472+07:00"
+    },
+    "training_args": {
+      "source": "runs/cascade-l2arctic-plus-seed42/Q/checkpoint-846/training_args.bin",
+      "values": {
+        "num_train_epochs": 3,
+        "per_device_train_batch_size": 1,
+        "per_device_eval_batch_size": 1,
+        "gradient_accumulation_steps": 8,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "warmup_ratio": 0.05,
+        "lr_scheduler_type": "SchedulerType.LINEAR",
+        "bf16": true,
+        "fp16": false,
+        "optim": "OptimizerNames.ADAMW_TORCH",
+        "gradient_checkpointing": true,
+        "max_grad_norm": 1.0,
+        "seed": 42,
+        "dataloader_num_workers": 0,
+        "logging_steps": 10,
+        "eval_steps": 100,
+        "save_steps": 100,
+        "save_total_limit": 2,
+        "load_best_model_at_end": true,
+        "metric_for_best_model": "eval_loss",
+        "greater_is_better": false
+      }
+    },
+    "adapter_config_source": "runs/cascade-l2arctic-plus-seed42/Q/adapter/adapter_config.json",
+    "adapter_config": {
+      "alpha_pattern": {},
+      "auto_mapping": null,
+      "base_model_name_or_path": "D:\\NCC\\MDD\\models\\pretrained\\Qwen3-0.6B",
+      "bias": "none",
+      "corda_config": null,
+      "eva_config": null,
+      "exclude_modules": null,
+      "fan_in_fan_out": false,
+      "inference_mode": true,
+      "init_lora_weights": true,
+      "layer_replication": null,
+      "layers_pattern": null,
+      "layers_to_transform": null,
+      "loftq_config": {},
+      "lora_alpha": 16,
+      "lora_bias": false,
+      "lora_dropout": 0.05,
+      "megatron_config": null,
+      "megatron_core": "megatron.core",
+      "modules_to_save": null,
+      "peft_type": "LORA",
+      "qalora_group_size": 16,
+      "r": 8,
+      "rank_pattern": {},
+      "revision": null,
+      "target_modules": [
+        "v_proj",
+        "q_proj"
+      ],
+      "target_parameters": null,
+      "task_type": "CAUSAL_LM",
+      "trainable_token_indices": null,
+      "use_dora": false,
+      "use_qalora": false,
+      "use_rslora": false
+    },
+    "logs": {
+      "source": "runs/cascade-l2arctic-plus-seed42/Q/training_history.jsonl",
+      "rows": 93,
+      "first": {
+        "step": 10,
+        "at_utc": "2026-10-21T06:23:27.098184+00:00",
+        "loss": 1.7909,
+        "grad_norm": 2.2841293811798096,
+        "learning_rate": 2.0930232558139536e-05,
+        "epoch": 0.035571365051133834
+      },
+      "last": {
+        "step": 846,
+        "at_utc": "2026-10-21T08:31:20.073535+00:00",
+        "train_runtime": 7748.3695,
+        "train_samples_per_second": 0.871,
+        "train_steps_per_second": 0.109,
+        "total_flos": 1.1804836093820928e+16,
+        "train_loss": 0.5605184127252998,
+        "epoch": 3.0
+      },
+      "evaluations": [
+        {
+          "step": 100,
+          "at_utc": "2026-10-21T06:37:33.243476+00:00",
+          "eval_loss": 0.6793149709701538,
+          "eval_runtime": 133.6789,
+          "eval_samples_per_second": 3.366,
+          "eval_steps_per_second": 3.366,
+          "epoch": 0.35571365051133835
+        },
+        {
+          "step": 200,
+          "at_utc": "2026-10-21T06:53:01.748584+00:00",
+          "eval_loss": 0.48377469182014465,
+          "eval_runtime": 132.9607,
+          "eval_samples_per_second": 3.384,
+          "eval_steps_per_second": 3.384,
+          "epoch": 0.7114273010226767
+        },
+        {
+          "step": 300,
+          "at_utc": "2026-10-21T07:08:06.738126+00:00",
+          "eval_loss": 0.43410271406173706,
+          "eval_runtime": 133.6526,
+          "eval_samples_per_second": 3.367,
+          "eval_steps_per_second": 3.367,
+          "epoch": 1.0640284570920409
+        },
+        {
+          "step": 400,
+          "at_utc": "2026-10-21T07:23:38.222977+00:00",
+          "eval_loss": 0.414108008146286,
+          "eval_runtime": 133.0621,
+          "eval_samples_per_second": 3.382,
+          "eval_steps_per_second": 3.382,
+          "epoch": 1.4197421076033794
+        },
+        {
+          "step": 500,
+          "at_utc": "2026-10-21T07:39:13.249502+00:00",
+          "eval_loss": 0.3972792327404022,
+          "eval_runtime": 134.0174,
+          "eval_samples_per_second": 3.358,
+          "eval_steps_per_second": 3.358,
+          "epoch": 1.7754557581147177
+        },
+        {
+          "step": 600,
+          "at_utc": "2026-10-21T07:54:41.111861+00:00",
+          "eval_loss": 0.39025968313217163,
+          "eval_runtime": 132.6503,
+          "eval_samples_per_second": 3.392,
+          "eval_steps_per_second": 3.392,
+          "epoch": 2.1280569141840817
+        },
+        {
+          "step": 700,
+          "at_utc": "2026-10-21T08:10:06.066883+00:00",
+          "eval_loss": 0.38280540704727173,
+          "eval_runtime": 134.8685,
+          "eval_samples_per_second": 3.337,
+          "eval_steps_per_second": 3.337,
+          "epoch": 2.48377056469542
+        },
+        {
+          "step": 800,
+          "at_utc": "2026-10-21T08:25:18.158794+00:00",
+          "eval_loss": 0.3788103461265564,
+          "eval_runtime": 133.2198,
+          "eval_samples_per_second": 3.378,
+          "eval_steps_per_second": 3.378,
+          "epoch": 2.8394842152067588
+        }
+      ]
+    },
+    "artifacts": {
+      "adapter": "runs/cascade-l2arctic-plus-seed42/Q/adapter/adapter_model.safetensors",
+      "best_checkpoint": "runs/cascade-l2arctic-plus-seed42/Q/checkpoint-800",
+      "last_checkpoint": "runs/cascade-l2arctic-plus-seed42/Q/checkpoint-846"
+    },
+    "derived": {
+      "runtime_hours": 2.152324861111111,
+      "peak_allocated_GiB": 1.828242301940918,
+      "effective_batch_full_update": 8
+    },
+    "loss_vi": "Assistant-only next-token cross entropy: prompt labels=-100; giữ full prompt. Bounded vocabulary projection chia chunk128 và checkpoint loss để giảm VRAM, không thay objective.",
+    "recipe_sources": [
+      "configs/cascade_feedback_qlora.json",
+      "scripts/train_feedback_model.py:159",
+      "scripts/train_feedback_model.py:175",
+      "scripts/train_feedback_model.py:195"
+    ],
+    "evaluation_note_vi": "Recipe cascade full benchmark max_new_tokens1536/context4096 là kế hoạch; pilot validation thực tế dùng feedback_max_new_tokens512. Không gán pilot này cho cấu hình full 1536.",
+    "exported_adapter_verification": {
+      "adapter_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4",
+      "best_checkpoint_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4",
+      "same_as_selected_best": true
+    }
+  },
+  "grammar_Qwen": {
+    "task": "published_english_grammar_and_fluency",
+    "pipeline_vi": "Text source + task-specific prompt → Qwen3 adapter riêng → một JSON field grammar_corrected (W&I) hoặc natural (JFLEG). Không nạp/cập nhật wav2vec2/projector hay ghi đè LoRA phát âm.",
+    "provenance_source": "runs/grammar-qwen3-06b-wi-jfleg-v1/training_provenance.json",
+    "provenance": {
+      "effective_config": {
+        "dataset_kind": "published_grammar_fluency",
+        "task": "published_english_grammar_and_fluency",
+        "model_path": "models/pretrained/Qwen3-0.6B",
+        "dataset_dir": "data/processed/grammar-wi-jfleg-v1",
+        "output_dir": "runs/grammar-qwen3-06b-wi-jfleg-v1",
+        "max_length": 768,
+        "epochs": 2,
+        "eval_steps": 250,
+        "learning_rate": 0.0001,
+        "gradient_accumulation_steps": 16,
+        "lora_rank": 8,
+        "lora_alpha": 16,
+        "lora_dropout": 0.05,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ],
+        "loss_projection_chunk_size": 64,
+        "logging_steps": 10,
+        "min_train_examples": 100,
+        "min_validation_examples": 20,
+        "seed": 42,
+        "purpose": "separate_grammar_fluency_adapter_noncommercial_research"
+      },
+      "base_model_revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "base_weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+      "trainable_parameters": 1146880,
+      "supervision": "assistant feedback tokens only; prompt labels masked with -100",
+      "logit_projection": "supervised next-token positions only; full prompt and unchanged causal loss",
+      "test_used_for_training": false,
+      "status": "completed",
+      "started_at_utc": "2026-10-22T07:03:06.083886+00:00",
+      "resume_from_checkpoint": null,
+      "purpose": "separate_grammar_fluency_adapter_noncommercial_research",
+      "samples_used": {
+        "train": 28501,
+        "validation": 4292
+      },
+      "loss_projection_chunk_size": 64,
+      "metrics": {
+        "train_runtime": 38422.2173,
+        "train_samples_per_second": 1.484,
+        "train_steps_per_second": 0.093,
+        "total_flos": 2.834321436966912e+16,
+        "train_loss": 0.2341579677313399,
+        "epoch": 2.0
+      },
+      "global_step": 3564,
+      "best_validation_loss": 0.18410517275333405,
+      "best_checkpoint": "D:\\NCC\\MDD\\runs\\grammar-qwen3-06b-wi-jfleg-v1\\checkpoint-3500",
+      "adapter_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "peak_allocated_bytes": 1161793024,
+      "finished_at_utc": "2026-10-22T17:43:29.025706+00:00"
+    },
+    "local_times": {
+      "started_at_Bangkok": "2026-10-22T14:03:06.083886+07:00",
+      "finished_at_Bangkok": "2026-10-23T00:43:29.025706+07:00"
+    },
+    "training_args": {
+      "source": "runs/grammar-qwen3-06b-wi-jfleg-v1/checkpoint-3564/training_args.bin",
+      "values": {
+        "num_train_epochs": 2,
+        "per_device_train_batch_size": 1,
+        "per_device_eval_batch_size": 1,
+        "gradient_accumulation_steps": 16,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "warmup_ratio": 0.05,
+        "lr_scheduler_type": "SchedulerType.LINEAR",
+        "bf16": true,
+        "fp16": false,
+        "optim": "OptimizerNames.ADAMW_TORCH",
+        "gradient_checkpointing": true,
+        "max_grad_norm": 1.0,
+        "seed": 42,
+        "dataloader_num_workers": 0,
+        "logging_steps": 10,
+        "eval_steps": 250,
+        "save_steps": 250,
+        "save_total_limit": 2,
+        "load_best_model_at_end": true,
+        "metric_for_best_model": "eval_loss",
+        "greater_is_better": false
+      }
+    },
+    "dataset_source": "data/processed/grammar-wi-jfleg-v1/manifest.json",
+    "dataset_stats": {
+      "train": {
+        "rows": 28501,
+        "source_sentences": 27126,
+        "groups": 2667,
+        "tasks": {
+          "grammar_corrected": 26534,
+          "natural": 1967
+        },
+        "corpora": {
+          "wi_locness": 26534,
+          "jfleg": 1967
+        },
+        "unchanged_rows": 8773,
+        "max_tokens": 607,
+        "p95_tokens": 230
+      },
+      "validation": {
+        "rows": 4292,
+        "source_sentences": 4292,
+        "groups": 503,
+        "tasks": {
+          "grammar_corrected": 4132,
+          "natural": 160
+        },
+        "corpora": {
+          "wi_locness": 4132,
+          "jfleg": 160
+        },
+        "unchanged_rows": 1470,
+        "max_tokens": 478,
+        "p95_tokens": 236
+      },
+      "test": {
+        "rows": 3746,
+        "source_sentences": 3746,
+        "groups": 990,
+        "tasks": {
+          "grammar_corrected": 2999,
+          "natural": 747
+        },
+        "corpora": {
+          "wi_locness": 2999,
+          "jfleg": 747
+        },
+        "unchanged_rows": 1058,
+        "max_tokens": 442,
+        "p95_tokens": 231
+      }
+    },
+    "leakage": {
+      "train/validation": {
+        "text_overlap": 0,
+        "group_overlap": 0
+      },
+      "train/test": {
+        "text_overlap": 0,
+        "group_overlap": 0
+      },
+      "validation/test": {
+        "text_overlap": 0,
+        "group_overlap": 0
+      }
+    },
+    "official_counts": {
+      "wi_locness:train": 34308,
+      "wi_locness:dev": 4384,
+      "jfleg:dev": 754,
+      "jfleg:test": 747
+    },
+    "split_policy": "W&I dev=validation; 10% of train authors reserved as internal grammar test. JFLEG dev=80/20 sentence groups train/validation; JFLEG test held out. Exclude dev authors from W&I train; reserve all source/reference text test>validation>train.",
+    "limitations": [
+      "Writing-domain data, not audio or spontaneous-conversation gold.",
+      "Two task-specific single-field JSON targets; no human explanation labels.",
+      "W&I targets also include lexical/orthographic corrections, not grammar alone.",
+      "JFLEG dev repurposed for training; do not report it as an independent benchmark.",
+      "Exact normalized text dedup is not semantic/near-duplicate dedup.",
+      "Published annotations are references, not guarantees every correction preserves intent."
+    ],
+    "license": "Non-commercial research/education only. W&I non-transferable licence; LOCNESS no third-party redistribution without permission; JFLEG CC BY-NC-SA 4.0. Dataset files stay local/ignored; use original source downloader on another machine.",
+    "logs": {
+      "source": "runs/grammar-qwen3-06b-wi-jfleg-v1/training_history.jsonl",
+      "rows": 371,
+      "first": {
+        "step": 10,
+        "at_utc": "2026-10-22T07:04:09.045107+00:00",
+        "loss": 1.2437,
+        "grad_norm": 7.10799503326416,
+        "learning_rate": 5.027932960893855e-06,
+        "epoch": 0.005613838110943476
+      },
+      "last": {
+        "step": 3564,
+        "at_utc": "2026-10-22T17:43:28.665065+00:00",
+        "train_runtime": 38422.2173,
+        "train_samples_per_second": 1.484,
+        "train_steps_per_second": 0.093,
+        "total_flos": 2.834321436966912e+16,
+        "train_loss": 0.2341579677313399,
+        "epoch": 2.0
+      },
+      "evaluations": [
+        {
+          "step": 250,
+          "at_utc": "2026-10-22T07:43:49.227957+00:00",
+          "eval_loss": 0.2176360785961151,
+          "eval_runtime": 614.0633,
+          "eval_samples_per_second": 6.99,
+          "eval_steps_per_second": 6.99,
+          "epoch": 0.14034595277358689
+        },
+        {
+          "step": 500,
+          "at_utc": "2026-10-22T08:31:06.388493+00:00",
+          "eval_loss": 0.20321637392044067,
+          "eval_runtime": 647.7868,
+          "eval_samples_per_second": 6.626,
+          "eval_steps_per_second": 6.626,
+          "epoch": 0.28069190554717377
+        },
+        {
+          "step": 750,
+          "at_utc": "2026-10-22T09:17:47.582566+00:00",
+          "eval_loss": 0.199442058801651,
+          "eval_runtime": 651.9944,
+          "eval_samples_per_second": 6.583,
+          "eval_steps_per_second": 6.583,
+          "epoch": 0.4210378583207607
+        },
+        {
+          "step": 1000,
+          "at_utc": "2026-10-22T10:04:32.718736+00:00",
+          "eval_loss": 0.19492706656455994,
+          "eval_runtime": 631.6588,
+          "eval_samples_per_second": 6.795,
+          "eval_steps_per_second": 6.795,
+          "epoch": 0.5613838110943475
+        },
+        {
+          "step": 1250,
+          "at_utc": "2026-10-22T10:50:05.962366+00:00",
+          "eval_loss": 0.1922374814748764,
+          "eval_runtime": 639.1916,
+          "eval_samples_per_second": 6.715,
+          "eval_steps_per_second": 6.715,
+          "epoch": 0.7017297638679345
+        },
+        {
+          "step": 1500,
+          "at_utc": "2026-10-22T11:41:00.017668+00:00",
+          "eval_loss": 0.19050301611423492,
+          "eval_runtime": 556.2326,
+          "eval_samples_per_second": 7.716,
+          "eval_steps_per_second": 7.716,
+          "epoch": 0.8420757166415214
+        },
+        {
+          "step": 1750,
+          "at_utc": "2026-10-22T12:20:55.356240+00:00",
+          "eval_loss": 0.18839898705482483,
+          "eval_runtime": 554.553,
+          "eval_samples_per_second": 7.74,
+          "eval_steps_per_second": 7.74,
+          "epoch": 0.9824216694151082
+        },
+        {
+          "step": 2000,
+          "at_utc": "2026-10-22T13:06:15.322449+00:00",
+          "eval_loss": 0.18749889731407166,
+          "eval_runtime": 690.5678,
+          "eval_samples_per_second": 6.215,
+          "eval_steps_per_second": 6.215,
+          "epoch": 1.1223816708185677
+        },
+        {
+          "step": 2250,
+          "at_utc": "2026-10-22T13:51:54.066166+00:00",
+          "eval_loss": 0.1865113526582718,
+          "eval_runtime": 582.7577,
+          "eval_samples_per_second": 7.365,
+          "eval_steps_per_second": 7.365,
+          "epoch": 1.2627276235921547
+        },
+        {
+          "step": 2500,
+          "at_utc": "2026-10-22T14:45:19.256729+00:00",
+          "eval_loss": 0.18546821177005768,
+          "eval_runtime": 787.2632,
+          "eval_samples_per_second": 5.452,
+          "eval_steps_per_second": 5.452,
+          "epoch": 1.4030735763657416
+        },
+        {
+          "step": 2750,
+          "at_utc": "2026-10-22T15:36:26.212747+00:00",
+          "eval_loss": 0.18509630858898163,
+          "eval_runtime": 631.1037,
+          "eval_samples_per_second": 6.801,
+          "eval_steps_per_second": 6.801,
+          "epoch": 1.5434195291393284
+        },
+        {
+          "step": 3000,
+          "at_utc": "2026-10-22T16:16:16.450818+00:00",
+          "eval_loss": 0.18452033400535583,
+          "eval_runtime": 551.5672,
+          "eval_samples_per_second": 7.781,
+          "eval_steps_per_second": 7.781,
+          "epoch": 1.6837654819129153
+        },
+        {
+          "step": 3250,
+          "at_utc": "2026-10-22T16:56:02.951613+00:00",
+          "eval_loss": 0.1846078783273697,
+          "eval_runtime": 550.1794,
+          "eval_samples_per_second": 7.801,
+          "eval_steps_per_second": 7.801,
+          "epoch": 1.8241114346865022
+        },
+        {
+          "step": 3500,
+          "at_utc": "2026-10-22T17:35:49.711429+00:00",
+          "eval_loss": 0.18410517275333405,
+          "eval_runtime": 559.1678,
+          "eval_samples_per_second": 7.676,
+          "eval_steps_per_second": 7.676,
+          "epoch": 1.9644573874600892
+        }
+      ]
+    },
+    "artifacts": {
+      "adapter": "runs/grammar-qwen3-06b-wi-jfleg-v1/adapter/adapter_model.safetensors",
+      "best_checkpoint": "runs/grammar-qwen3-06b-wi-jfleg-v1/checkpoint-3500",
+      "last_checkpoint": "runs/grammar-qwen3-06b-wi-jfleg-v1/checkpoint-3564"
+    },
+    "derived": {
+      "runtime_hours": 10.672838138888888,
+      "peak_allocated_GiB": 1.0820040702819824,
+      "effective_batch_full_update": 16
+    },
+    "split_notes_vi": [
+      "W&I dev làm validation; giữ 10% nhóm author train làm internal grammar test, không gọi official BEA test.",
+      "JFLEG dev chia80/20 nhóm câu train/validation; JFLEG test747 câu giữ lại; không gọi JFLEG dev benchmark độc lập.",
+      "Train28501 records/27126 câu nguồn; một câu JFLEG train có nhiều target khác nhau. Validation4292 và test3746 mỗi câu một record giữ nhiều reference.",
+      "Loại author train xuất hiện ở dev, unknown/empty target, exact overlap source/reference. Text/group overlap0 sau chuẩn hóa; chưa chứng minh hết semantic duplicate hay base-model pretraining leakage.",
+      "Task labels là sửa của người công bố; không có explanation gold. Context768, max train tokens607, không cắt target."
+    ],
+    "development_probe_source": "data/generated/grammar-adapter-demo-v1/comparison.json",
+    "development_probe": {
+      "identity": {
+        "dataset_manifest_sha256": "84d7a4249a509de4b92b563f9efbb83c65e7952989ae415b7fbd0bf8f4b42d56",
+        "split": "validation",
+        "ordered_ids": [
+          "wi:B:dev:869:a0",
+          "jfleg:dev:269:a0",
+          "wi:A:dev:858:a0",
+          "jfleg:dev:223:a0",
+          "wi:N:dev:716:a0",
+          "jfleg:dev:314:a0",
+          "wi:A:dev:402:a0",
+          "jfleg:dev:716:a0",
+          "wi:A:dev:59:a0",
+          "jfleg:dev:695:a0",
+          "wi:N:dev:135:a0",
+          "jfleg:dev:425:a0",
+          "wi:A:dev:477:a0",
+          "jfleg:dev:658:a0",
+          "wi:C:dev:351:a0",
+          "jfleg:dev:638:a0"
+        ],
+        "development_probe": true,
+        "base_weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "prompt_sha256": "b1a17120708dbf94ebbc3ba6213c3197856b39a8d1a2d91c719482512f02481b",
+        "device": "cpu",
+        "precision": "float32",
+        "generation": {
+          "do_sample": false,
+          "max_new_tokens": 512
+        },
+        "seed": 42,
+        "packages": {
+          "torch": "2.7.1+cu126",
+          "transformers": "4.57.6",
+          "peft": "0.17.1",
+          "bitsandbytes": "0.48.1",
+          "sacrebleu": "2.5.1"
+        },
+        "compute_dtype": "float32",
+        "hardware": "cpu",
+        "evaluator_sha256": "5345c78e7fb7d82cf75d087104dba554f4eeb2988c4051098824963c37a72297"
+      },
+      "before": {
+        "tasks": {
+          "grammar_corrected": {
+            "rows": 8,
+            "valid_json_rate": 0.0,
+            "exact_reference_match": 0.0,
+            "chrf": 0.0,
+            "chrf_signature": "nrefs:1|case:mixed|eff:yes|nc:6|nw:0|space:no|version:2.5.1",
+            "reference_supported_unchanged_controls": 4,
+            "unchanged_preservation_rate": 0.0,
+            "mean_generation_seconds": 4.840333225001814
+          },
+          "natural": {
+            "rows": 8,
+            "valid_json_rate": 0.0,
+            "exact_reference_match": 0.0,
+            "chrf": 0.0,
+            "chrf_signature": "nrefs:4|case:mixed|eff:yes|nc:6|nw:0|space:no|version:2.5.1",
+            "reference_supported_unchanged_controls": 4,
+            "unchanged_preservation_rate": 0.0,
+            "mean_generation_seconds": 3.5589714874986385
+          }
+        },
+        "metric_scope": "Text-reference diagnostics only. Not official ERRANT F0.5, JFLEG GLEU, semantic faithfulness, or human grammar/naturalness accuracy."
+      },
+      "after": {
+        "tasks": {
+          "grammar_corrected": {
+            "rows": 8,
+            "valid_json_rate": 1.0,
+            "exact_reference_match": 0.5,
+            "chrf": 86.95177106919235,
+            "chrf_signature": "nrefs:1|case:mixed|eff:yes|nc:6|nw:0|space:no|version:2.5.1",
+            "reference_supported_unchanged_controls": 4,
+            "unchanged_preservation_rate": 1.0,
+            "mean_generation_seconds": 4.25147315000504
+          },
+          "natural": {
+            "rows": 8,
+            "valid_json_rate": 1.0,
+            "exact_reference_match": 0.25,
+            "chrf": 93.7784810522068,
+            "chrf_signature": "nrefs:4|case:mixed|eff:yes|nc:6|nw:0|space:no|version:2.5.1",
+            "reference_supported_unchanged_controls": 4,
+            "unchanged_preservation_rate": 0.25,
+            "mean_generation_seconds": 3.3645202624975354
+          }
+        },
+        "metric_scope": "Text-reference diagnostics only. Not official ERRANT F0.5, JFLEG GLEU, semantic faithfulness, or human grammar/naturalness accuracy."
+      },
+      "automatic_promotion": false
+    },
+    "demo_validation": {
+      "status": "passed",
+      "adapter_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "comparison": "D:\\NCC\\MDD\\data\\generated\\grammar-adapter-demo-v1\\comparison.json",
+      "scope": "16-row held-out validation development probe; output contract and unchanged grammar controls, not grammar accuracy.",
+      "checks": {
+        "valid_task_json_rate": 1.0,
+        "grammar_unchanged_controls_preserved": true
+      },
+      "conversation_adapter": false
+    },
+    "probe_interpretation_vi": "Chỉ16 câu validation phát triển (8 grammar+8 natural), CPU FP32, greedy,max_new_tokens512; không có full grammar test benchmark. Base đều sai contract JSON nên được0 metric, adapter JSON100%. Sau train grammar exact50%/chrF86.95; natural exact25%/chrF93.78. Unchanged preservation grammar100% (4 controls) nhưng natural25% (4 controls). Không gọi là accuracy ngữ pháp hay ERRANT F0.5/JFLEG GLEU.",
+    "recipe_sources": [
+      "configs/grammar_qwen3_06b_qlora.json",
+      "scripts/train_grammar_model.py:32",
+      "scripts/train_feedback_model.py:159"
+    ],
+    "exported_adapter_verification": {
+      "adapter_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "best_checkpoint_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "same_as_selected_best": true
+    }
+  },
+  "projector": {
+    "architecture_vi": "Audio16kHz → frozen wav2vec2 B last_hidden_state dim768 → Linear(768,1024) → GELU → Linear(1024,1024) → Qwen3 text embeddings. Ghép prefix | projected audio frames | suffix | assistant target. Loss mask prompt/audio=-100.",
+    "sources": [
+      "notebooks/mdd_projector_training_comparison.ipynb cell0=0,6,7",
+      "scripts/projector_model.py:11",
+      "scripts/projector_model.py:28",
+      "scripts/train_projector.py:92"
+    ],
+    "stage1_vi": "Audio + yêu cầu transcribe không reference; target transcript. Chỉ projector1,837,056 params học; encoder/Qwen đều frozen. Train NF4 double-quant Qwen, base BF16 compute nếu CUDA hỗ trợ.",
+    "stage2_vi": "Recipe dự kiến: audio + reference sentence → feedback JSON; train projector + LoRA Qwen (r8 q_proj/v_proj)3epochs lr1e-4. Chưa có stage feedback/P1 checkpoint.",
+    "provenance_source": "runs/projector-l2arctic-plus-seed42/alignment/training_provenance.json",
+    "provenance": {
+      "purpose": "scientific_training",
+      "stage": "alignment",
+      "status": "completed",
+      "started_at_utc": "2026-10-21T08:56:37.963277+00:00",
+      "optimizer_steps": 282,
+      "best_validation_loss": 3.4641105742525093,
+      "best_weights": {
+        "projector.safetensors": "38236301dd1bfd7bac22ec65cc3d81471d96f0204e0986bb74e04d11e42c0849"
+      },
+      "parameter_counts": {
+        "projector_trainable": 1837056,
+        "llm_trainable": 0,
+        "encoder_trainable": 0
+      },
+      "peak_allocated_bytes": 1305250816,
+      "elapsed_sec": 1160.4060000000027
+    },
+    "identity_config": {
+      "experiment": "wav2vec2-B-projector-Qwen3-0.6B-v1",
+      "cascade_config": "configs/cascade_l2arctic_plus.json",
+      "encoder_checkpoint": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint",
+      "model_path": "models/pretrained/Qwen3-0.6B",
+      "dataset_dir": "data/processed/feedback-projector-en-v1",
+      "feature_dir": "data/generated/projector-l2arctic-plus-seed42/features",
+      "run_root": "runs/projector-l2arctic-plus-seed42",
+      "report_root": "data/generated/projector-l2arctic-plus-seed42",
+      "seed": 42,
+      "cpu_threads": 2,
+      "audio_hidden_size": 768,
+      "text_hidden_size": 1024,
+      "projector_hidden_size": 1024,
+      "feature_stride": 1,
+      "max_length": 3072,
+      "gradient_accumulation_steps": 8,
+      "loss_chunk_size": 128,
+      "eval_steps": 100,
+      "alignment": {
+        "epochs": 1,
+        "learning_rate": 0.001
+      },
+      "feedback": {
+        "epochs": 3,
+        "learning_rate": 0.0001
+      },
+      "lora": {
+        "rank": 8,
+        "alpha": 16,
+        "dropout": 0.05,
+        "target_modules": [
+          "q_proj",
+          "v_proj"
+        ]
+      },
+      "generation": {
+        "do_sample": false,
+        "num_beams": 1,
+        "max_new_tokens": 1536
+      },
+      "bootstrap_repetitions": 2000
+    },
+    "dataset_manifest": {
+      "protocol_sha256": "8692ddd427c5d99829c1997f255dd424ce455a8d63edec19004a09da9125f575",
+      "native_manifest_sha256": "28cd961d40892177168093c0d8a03bc5e254a51bcf93dfa7d46ee02d5566cd31",
+      "source_commit": "e8c7684c545d94f2419fc4621e745236c192a353",
+      "sha256": {
+        "train": "9fc2a0a5b3b86c0ef67b39fe6fedf379cdb17bad18530fdc309f40070a7fd792",
+        "validation": "710159bf8f4278511f8dac3565468b8f5a17862da9bc806f9b9adf2be7ae2ec9",
+        "test": "d7102165632d7d46019c53a20f060d62835ddf0c1e5bdf028aa078800b65d200"
+      },
+      "counts": {
+        "train": 2249,
+        "validation": 450,
+        "test": 900
+      },
+      "feedback_prompt_sha256": "31448aedc2b95a9994b1edb96cbc4535861d989991c47ee88881f448ced313e1",
+      "scope": "Same 2249/450/900 speaker holdout as cascade. Stage 1 uses training audio/transcripts only, not the paper's 200k CommonVoice alignment set.",
+      "label_limitations": "Training feedback is authors' GPT-4o supervision, not individually human-verified; test references human checked. Repeated word keys collapse in published labels."
+    },
+    "feature_manifest_sha256": "01f1e109e37dfc50f48b702570749909ceb0adb22e174948f1456dd07ae489b7",
+    "logs": {
+      "source": "runs/projector-l2arctic-plus-seed42/alignment/training_history.jsonl",
+      "rows": 282,
+      "first": {
+        "step": 1,
+        "total_steps": 282,
+        "epoch": 0.0035571365051133837,
+        "loss": 8.12700068950653,
+        "gradient_norm": 136.601806640625,
+        "learning_rate": 7.142857142857142e-05,
+        "elapsed_sec": 4.0460000000020955,
+        "peak_allocated_bytes": 1259827200
+      },
+      "last": {
+        "step": 282,
+        "total_steps": 282,
+        "epoch": 1.0,
+        "loss": 4.381195545196533,
+        "gradient_norm": 4.07939338684082,
+        "learning_rate": 0.0,
+        "elapsed_sec": 1101.75,
+        "peak_allocated_bytes": 1305250816,
+        "validation_loss": 3.4641105742525093
+      },
+      "evaluations": [
+        {
+          "step": 100,
+          "total_steps": 282,
+          "epoch": 0.35571365051133835,
+          "loss": 3.910903751850128,
+          "gradient_norm": 1.693459391593933,
+          "learning_rate": 0.0007667246368117851,
+          "elapsed_sec": 339.57799999999406,
+          "peak_allocated_bytes": 1303239680,
+          "validation_loss": 4.019370886029178
+        },
+        {
+          "step": 200,
+          "total_steps": 282,
+          "epoch": 0.7114273010226767,
+          "loss": 3.6882887482643127,
+          "gradient_norm": 1.6195429563522339,
+          "learning_rate": 0.00021374549136396416,
+          "elapsed_sec": 747.4529999999941,
+          "peak_allocated_bytes": 1305250816,
+          "validation_loss": 3.6030275651076105
+        },
+        {
+          "step": 282,
+          "total_steps": 282,
+          "epoch": 1.0,
+          "loss": 4.381195545196533,
+          "gradient_norm": 4.07939338684082,
+          "learning_rate": 0.0,
+          "elapsed_sec": 1101.75,
+          "peak_allocated_bytes": 1305250816,
+          "validation_loss": 3.4641105742525093
+        }
+      ]
+    },
+    "training_details": {
+      "optimizer": "AdamW",
+      "weight_decay": 0.01,
+      "scheduler": "cosine",
+      "warmup_steps": 14,
+      "warmup_rule": "int(0.05*282)",
+      "physical_batch": 1,
+      "gradient_accumulation": 8,
+      "seed": 42,
+      "lr_alignment": 0.001,
+      "epochs_alignment": 1,
+      "updates": 282,
+      "eval_every_updates": 100,
+      "loss_projection_chunk": 128,
+      "max_length_combined_tokens": 3072,
+      "feature_stride": 1,
+      "feature_dim": 768,
+      "text_dim": 1024
+    },
+    "derived": {
+      "elapsed_minutes": 19.340100000000046,
+      "peak_allocated_GiB": 1.2156095504760742
+    },
+    "best_weights": "runs/projector-l2arctic-plus-seed42/alignment/best/projector.safetensors",
+    "resume_weights": "runs/projector-l2arctic-plus-seed42/alignment/checkpoint/projector.safetensors",
+    "P1_status": "not_trained",
+    "transfer_status": "Zero-shot ghép aligned projector với LoRA cascade đã train; không huấn luyện thêm và KHÔNG phải P1."
+  },
+  "available_validation": {
+    "source": "data/generated/projector-validation-v1/report/summary.json",
+    "summary": {
+      "status": "completed_available_checkpoint_validation",
+      "split_counts": {
+        "train": 2249,
+        "validation": 450,
+        "test": 900
+      },
+      "test_speakers": {
+        "NJS": 150,
+        "TLV": 150,
+        "TNI": 150,
+        "TXHC": 150,
+        "YKWK": 150,
+        "ZHAA": 150
+      },
+      "feedback_projector_stage": "not_trained",
+      "test_used_for_checkpoint_selection": false,
+      "transcript_metric": "Unicode words; casefold, normalize curly apostrophes, remove punctuation; score immutable raw text; WER can exceed 100%",
+      "report_code_sha256": "846db85749510a71f852cf034619698543d4bbe4c6a9bb641bd75660846978e6",
+      "transcript_metric_code_sha256": "03192d8d9808e190792d3b47946f75ddf9c3e1ca89a561e1425f0a15c7479b3d",
+      "limitations": [
+        "Projector has transcript alignment only; no P1 feedback-stage weights exist.",
+        "Random baseline uses a reproducible new initialization, not an exact saved step-0 checkpoint.",
+        "Transcript NLL is teacher forced and is not a transcription accuracy score.",
+        "Generation metrics are balanced pilots, not a full 900-row generation benchmark.",
+        "Word-key F1 and lexical ROUGE measure agreement with published feedback, not phone F1 or pedagogical correctness.",
+        "Oracle Qwen uses gold phone labels and is diagnostic only, not a deployable audio pipeline.",
+        "Speaker holdout allows shared read prompts; one training seed; 6 held-out speakers.",
+        "Training feedback is authors' GPT-4o supervision; test feedback is authors' human-checked reference.",
+        "All feedback pilot samples have reference errors; this pilot does not measure false alarms on fully correct speech."
+      ],
+      "audio_full_test": [
+        {
+          "case": "A",
+          "rows": 900,
+          "precision_percent": 47.683440478829525,
+          "recall_percent": 49.08717480602465,
+          "f1_percent": 48.37512650399191,
+          "far_percent": 50.91282519397535,
+          "frr_percent": 9.099321406539174,
+          "der_percent": 33.788878416588126,
+          "per_percent": 16.849451645064807,
+          "word_precision_percent": 64.69120399251403,
+          "word_recall_percent": 60.25566531086578,
+          "word_f1_percent": 62.394705174488564
+        },
+        {
+          "case": "B",
+          "rows": 900,
+          "precision_percent": 48.771773112996875,
+          "recall_percent": 49.84025559105431,
+          "f1_percent": 49.30022573363431,
+          "far_percent": 50.159744408945684,
+          "frr_percent": 8.838714648994376,
+          "der_percent": 35.81395348837209,
+          "per_percent": 16.705057242066903,
+          "word_precision_percent": 65.07639538509511,
+          "word_recall_percent": 60.63335270191749,
+          "word_f1_percent": 62.77635734696947
+        }
+      ],
+      "transcript_full_nll": [
+        {
+          "case": "transcript_nll_random",
+          "rows": 900,
+          "target_tokens": 9911,
+          "target_token_nll": 7.225565302685909,
+          "perplexity": 1374.1151871155607
+        },
+        {
+          "case": "transcript_nll_aligned",
+          "rows": 900,
+          "target_tokens": 9911,
+          "target_token_nll": 3.677307709529823,
+          "perplexity": 39.53979802178779
+        },
+        {
+          "case": "transcript_nll_muted",
+          "rows": 900,
+          "target_tokens": 9911,
+          "target_token_nll": 6.458483792616661,
+          "perplexity": 638.0928416699521
+        }
+      ],
+      "alignment_delta": {
+        "delta_nll_after_minus_before": -3.5482575931560856,
+        "ci95": [
+          -3.5834792827299635,
+          -3.511515277789582
+        ],
+        "clusters": 6,
+        "resampling_unit": "speaker"
+      },
+      "audio_ablation_delta": {
+        "delta_nll_after_minus_before": -2.781176083086838,
+        "ci95": [
+          -2.795881182069661,
+          -2.7650031885212214
+        ],
+        "clusters": 6,
+        "resampling_unit": "speaker"
+      },
+      "transcript_generation_pilot": [
+        {
+          "case": "transcript_generation_random",
+          "rows": 30,
+          "reference_words": 268,
+          "wer_percent": 161.56716417910448,
+          "exact_sentence_percent": 0.0,
+          "eos_percent": 76.66666666666667,
+          "mean_generation_sec": 2.1814436633314473
+        },
+        {
+          "case": "transcript_generation_aligned",
+          "rows": 30,
+          "reference_words": 268,
+          "wer_percent": 97.38805970149254,
+          "exact_sentence_percent": 0.0,
+          "eos_percent": 100.0,
+          "mean_generation_sec": 0.49281179333338515
+        },
+        {
+          "case": "transcript_generation_muted",
+          "rows": 30,
+          "reference_words": 268,
+          "wer_percent": 727.2388059701492,
+          "exact_sentence_percent": 0.0,
+          "eos_percent": 0.0,
+          "mean_generation_sec": 7.185337996666688
+        }
+      ],
+      "feedback_generation_pilot": [
+        {
+          "case": "feedback_projector_P0",
+          "rows": 12,
+          "reference_error_rows": 12,
+          "json_valid_percent": 16.666666666666668,
+          "grounded_json_percent": 0.0,
+          "feedback_word_precision_percent": 0.0,
+          "feedback_word_recall_percent": 0.0,
+          "feedback_word_f1_percent": 0.0,
+          "suggestion_bleu2": 2.742194085577239e-20,
+          "bleu_signature": "nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.5.1",
+          "suggestion_rougeL_on_reference_error_rows": 1.7998866213151925,
+          "correct_empty_feedback_percent": null,
+          "target_token_nll": 2.0417889781450542,
+          "target_perplexity": 7.704379844677454,
+          "nll_rows": 12,
+          "nll_target_tokens": 2994,
+          "latency_median_sec": 3.4945033000039984,
+          "latency_p95_sec": 28.97146783500284,
+          "generation_tokens_per_sec": 18.281581413326236
+        },
+        {
+          "case": "feedback_cascade_B_Q0",
+          "rows": 12,
+          "reference_error_rows": 12,
+          "json_valid_percent": 0.0,
+          "grounded_json_percent": 0.0,
+          "feedback_word_precision_percent": 0.0,
+          "feedback_word_recall_percent": 0.0,
+          "feedback_word_f1_percent": 0.0,
+          "suggestion_bleu2": 0.0,
+          "bleu_signature": "nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.5.1",
+          "suggestion_rougeL_on_reference_error_rows": 0.0,
+          "correct_empty_feedback_percent": null,
+          "target_token_nll": 2.0556092281768876,
+          "target_perplexity": 7.811595467323519,
+          "nll_rows": 12,
+          "nll_target_tokens": 2812,
+          "latency_median_sec": 13.596323899997515,
+          "latency_p95_sec": 25.100587445004926,
+          "generation_tokens_per_sec": 17.62306768030289
+        },
+        {
+          "case": "feedback_cascade_B_Q1",
+          "rows": 12,
+          "reference_error_rows": 12,
+          "json_valid_percent": 100.0,
+          "grounded_json_percent": 100.0,
+          "feedback_word_precision_percent": 65.0,
+          "feedback_word_recall_percent": 60.46511627906977,
+          "feedback_word_f1_percent": 62.65060240963855,
+          "suggestion_bleu2": 37.50981261789754,
+          "bleu_signature": "nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.5.1",
+          "suggestion_rougeL_on_reference_error_rows": 22.657360803176278,
+          "correct_empty_feedback_percent": null,
+          "target_token_nll": 0.8643156325028597,
+          "target_perplexity": 2.3733812650570885,
+          "nll_rows": 12,
+          "nll_target_tokens": 2812,
+          "latency_median_sec": 14.32074504999764,
+          "latency_p95_sec": 25.304427320002283,
+          "generation_tokens_per_sec": 14.274783081339832
+        },
+        {
+          "case": "feedback_oracle_Q1",
+          "rows": 12,
+          "reference_error_rows": 12,
+          "json_valid_percent": 83.33333333333333,
+          "grounded_json_percent": 75.0,
+          "feedback_word_precision_percent": 91.89189189189189,
+          "feedback_word_recall_percent": 79.06976744186046,
+          "feedback_word_f1_percent": 85.0,
+          "suggestion_bleu2": 47.42482170352066,
+          "bleu_signature": "nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.5.1",
+          "suggestion_rougeL_on_reference_error_rows": 36.624659705096754,
+          "correct_empty_feedback_percent": null,
+          "target_token_nll": 0.5962153148981789,
+          "target_perplexity": 1.8152356879355531,
+          "nll_rows": 12,
+          "nll_target_tokens": 2812,
+          "latency_median_sec": 18.089009250004892,
+          "latency_p95_sec": 28.664588504996935,
+          "generation_tokens_per_sec": 14.714875494008737
+        },
+        {
+          "case": "feedback_projector_cascade_adapter_transfer",
+          "rows": 12,
+          "reference_error_rows": 12,
+          "json_valid_percent": 25.0,
+          "grounded_json_percent": 25.0,
+          "feedback_word_precision_percent": 0.0,
+          "feedback_word_recall_percent": 0.0,
+          "feedback_word_f1_percent": 0.0,
+          "suggestion_bleu2": 0.0,
+          "bleu_signature": "nrefs:1|case:mixed|eff:yes|tok:13a|smooth:exp|version:2.5.1",
+          "suggestion_rougeL_on_reference_error_rows": 0.0,
+          "correct_empty_feedback_percent": null,
+          "target_token_nll": 1.2043717047454678,
+          "target_perplexity": 3.3346632666362805,
+          "nll_rows": 12,
+          "nll_target_tokens": 2994,
+          "latency_median_sec": 2.1469570999979624,
+          "latency_p95_sec": 18.40799070000137,
+          "generation_tokens_per_sec": 15.626981368643019
+        }
+      ],
+      "feedback_failure_diagnostics": [
+        {
+          "case": "feedback_projector_P0",
+          "rows": 12,
+          "invalid_json_or_schema": 10,
+          "generation_without_eos": 4,
+          "markdown_fences_in_raw": 3,
+          "valid_but_unlisted_word_keys": 2
+        },
+        {
+          "case": "feedback_cascade_B_Q0",
+          "rows": 12,
+          "invalid_json_or_schema": 12,
+          "generation_without_eos": 0,
+          "markdown_fences_in_raw": 12,
+          "valid_but_unlisted_word_keys": 0
+        },
+        {
+          "case": "feedback_cascade_B_Q1",
+          "rows": 12,
+          "invalid_json_or_schema": 0,
+          "generation_without_eos": 0,
+          "markdown_fences_in_raw": 0,
+          "valid_but_unlisted_word_keys": 0
+        },
+        {
+          "case": "feedback_oracle_Q1",
+          "rows": 12,
+          "invalid_json_or_schema": 2,
+          "generation_without_eos": 0,
+          "markdown_fences_in_raw": 0,
+          "valid_but_unlisted_word_keys": 1
+        },
+        {
+          "case": "feedback_projector_cascade_adapter_transfer",
+          "rows": 12,
+          "invalid_json_or_schema": 9,
+          "generation_without_eos": 1,
+          "markdown_fences_in_raw": 0,
+          "valid_but_unlisted_word_keys": 0
+        }
+      ],
+      "cascade_qwen_pilot_delta": {
+        "metric": "suggestion_rougeL_on_reference_error_rows",
+        "unit": "percentage_points_after_minus_before",
+        "delta": 22.657360803176278,
+        "ci95": [
+          14.427070698336818,
+          30.73586899390787
+        ],
+        "resampling_unit": "speaker",
+        "clusters": 6,
+        "repetitions": 2000,
+        "seed": 42,
+        "scope": "Paired held-out sample uncertainty for this training seed; not variation across training seeds"
+      },
+      "raw_audio_parity": {
+        "rows": 6,
+        "all_exact_match": true
+      },
+      "execution": {
+        "status": "completed",
+        "peak_allocated_bytes": 1379619328,
+        "full_transcript_nll_rows": 900,
+        "transcript_generation_rows": 30,
+        "feedback_generation_rows": 12,
+        "raw_audio_checks": 6,
+        "feedback_projector_stage": "alignment_only",
+        "training_started": false
+      },
+      "projector_cascade_adapter_transfer": {
+        "status": "completed",
+        "rows": 12,
+        "training_started": false,
+        "peak_allocated_bytes": 1374610432,
+        "scope": "Zero-shot composition of aligned projector and cascade LoRA; NOT P1 task-specific projector tuning"
+      },
+      "conclusions_vi": [
+        "Đã hoàn tất alignment, chưa có checkpoint task tuning P1. Không có lượt train mới trong pipeline kiểm thử.",
+        "Có thử ghép Projector đã alignment với LoRA Qwen cascade đã train. Đây là chuyển giao sang đầu vào audio mới, không phải checkpoint P1 được train trên audio + feedback.",
+        "Cùng 900 test: F1 âm vị A 48.38%, B 49.30%. A/B đều đã train; các điểm này khác phép đo trên tập test cũ.",
+        "NLL transcript: random 7.226, aligned 3.677, muted 6.458. Alignment đã học dùng âm thanh, nhưng NLL không đo trực tiếp khả năng bắt lỗi.",
+        "Sinh transcript trên 30 mẫu: WER 97.39%, câu khớp hoàn toàn 0.00%. Nếu còn cao, chưa thể coi acoustic alignment là ổn định dù loss giảm.",
+        "Phản hồi được thử trên cùng 12 mẫu cân bằng speaker. JSON đúng cấu trúc chưa bảo đảm chẩn đoán đúng âm hoặc lời khuyên đúng; xem raw output và nhãn cạnh nhau.",
+        "So sánh Qwen gốc/LoRA gồm cả khả năng tuân thủ schema: output sai schema bị chấm 0. Mức tăng feedback F1 không có nghĩa wav2vec2 nhận âm chính xác hơn."
+      ],
+      "next_manual_step": "Chưa chứng minh nhánh Projector sửa phát âm tốt. Người dùng có thể tự chạy stage feedback, sau đó benchmark P0/P1 đủ 900 mẫu; không chọn checkpoint hoặc tinh chỉnh bằng test này."
+    },
+    "metadata_source": "data/generated/projector-validation-v1/feedback_cascade_B_Q1/metadata.json",
+    "settings": {
+      "projector_config": "configs/projector_l2arctic_plus.json",
+      "output_dir": "data/generated/projector-validation-v1",
+      "seed": 42,
+      "transcription_per_speaker": 5,
+      "feedback_per_speaker": 2,
+      "transcription_max_new_tokens": 128,
+      "feedback_max_new_tokens": 512,
+      "selection": "sha256(seed,task,utterance_id), lowest per speaker, restored to frozen test order",
+      "scope": "Full 900-row phone test and transcript teacher-forced NLL; balanced pilot generation. No test-based checkpoint selection."
+    },
+    "scope_vi": "900 audio utterances và900 transcript teacher-forced NLL; generation chỉ30 transcript (5/speaker) và12 feedback (2/speaker). Test không chọn checkpoint. Seed42; selected hash(seed,task,id) nhỏ nhất mỗi speaker, khôi phục thứ tự test đóng băng.",
+    "metric_interpretation_vi": [
+      "Phone F1 của wav2vec2 khác word-key F1 của feedback; không đưa hai metric vào cùng một thang so sánh model.",
+      "Grounded JSON chỉ kiểm key từ có nằm trong câu reference, không chứng minh issue/suggestion đúng ngữ âm.",
+      "Invalid JSON/schema giữ trong denominator; không repair markdown hay fallback template. B_Q0 có12/12 output markdown fences khiến strict JSON fail.",
+      "ROUGE-L/BLEU2 đo độ trùng từ với nhãn tiếng Anh; không chứng minh tính sư phạm, giữ ý hay cải thiện người học.",
+      "Teacher-forced NLL và perplexity không phải WER hoặc accuracy. NLL giảm nhưng transcript WER97.39%,exact0% trên30 mẫu.",
+      "Cả12 mẫu feedback đều có reference errors; chưa đo false alarms trên fully-correct speech.",
+      "Random projector là khởi tạo mới có seed, không phải exact saved step0; muted zero audio cùng aligned checkpoint.",
+      "Một training seed; bootstrap2000 theo6speaker chỉ mô tả bất định mẫu holdout, không độ biến thiên giữa nhiều lần train."
+    ]
+  },
+  "historical_Vietnamese_review": {
+    "source": "data/feedback/drafts-20261021-cef406b.manifest.json",
+    "manifest": {
+      "status": "unreviewed_drafts_only",
+      "created_at_utc": "2026-10-21T03:47:53.012952+00:00",
+      "git_commit": "cef406bccd893ba96329f4f321ef60708899947a",
+      "drafts": 300,
+      "approved": 0,
+      "unique_prompt_groups": 190,
+      "seed": 42,
+      "max_per_prompt": 2,
+      "max_length": 3072,
+      "token_lengths": {
+        "min": 894,
+        "max": 2308
+      },
+      "candidate_rejections": {
+        "unavailable_word_mapping": 9
+      },
+      "sources": [
+        {
+          "path": "runs/windows-notebook-seed42-B-fold1/predictions_validation_best.jsonl",
+          "sha256": "c85605d7bc236e19db4acabfbd89fed98108f053e2895eab355bce6df0b5d20d",
+          "records": 150,
+          "checkpoint_weight_sha256": "c21392580481a0adcedc98dbfb336e74f2bf3357bbe9f5fe1cfcc395ad0c8a41"
+        },
+        {
+          "path": "runs/windows-notebook-seed42-A/predictions_validation_best.jsonl",
+          "sha256": "cf94992d7d0ea9eee345aa6381278571c03bc761c17d86f99fe9308361e335f0",
+          "records": 750,
+          "checkpoint_weight_sha256": "97fa041bedbeba20eb45db2b630558bc09923b072dcde70d5285079900ca158c"
+        }
+      ],
+      "annotations_sha256": "698044c9a8663fa10b91bd264dcfafe8203533270af142f849951bae87617343",
+      "drafts_sha256": "1f1de47a4dcd9c9ab5fd28a677431b0002e6c0deedeed6e96d49bea7c8beeac8",
+      "feedback_method": "offline template, no provider calls; human correction required",
+      "prospective_split_if_every_draft_is_approved": {
+        "train": 242,
+        "validation": 29,
+        "test": 29
+      },
+      "training_started": false
+    },
+    "reviewed_file_exists": false,
+    "main_run_exists": false,
+    "recipe": {
+      "model_path": "models/pretrained/Qwen3-0.6B",
+      "dataset_dir": "data/processed/feedback-v1",
+      "output_dir": "runs/feedback-qwen3-06b-v1",
+      "max_length": 3072,
+      "epochs": 3,
+      "learning_rate": 0.0001,
+      "gradient_accumulation_steps": 8,
+      "lora_rank": 8,
+      "lora_alpha": 16,
+      "lora_dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "v_proj"
+      ],
+      "min_train_examples": 100,
+      "min_validation_examples": 20,
+      "seed": 42
+    },
+    "notes_vi": [
+      "300 bản nháp offline template từ validation A/B cũ,190 nhóm prompt,0 đã duyệt; prospective split242/29/29 chỉ giả định mọi draft được duyệt.",
+      "Không gọi các draft này là nhãn chuyên gia/LLM, không gọi smoke1update là train khoa học feedback chính.",
+      "Review_context chứa manual annotations hỗ trợ người duyệt, không đưa gold này vào prompt train reviewed-feedback.",
+      "3smoke local thật đều1update nhưng test tensor3072 chứa2308 token thật+padding; loss/speed/VRAM này không phải quality benchmark.",
+      "Smoke đầu full projection ghi peak6.66GiB allocated dù GPU4GiB; không trình bày nó là recipe4GB đã vừa. Bản efficient/trainer giảm còn2.10/2.12GiB allocated."
+    ],
+    "smoke_reports": {
+      "feedback-qlora-20261021-cef406b": {
+        "purpose": "technical_smoke_only",
+        "status": "passed",
+        "started_at_utc": "2026-10-21T03:49:30.142116+00:00",
+        "optimizer_updates": 1,
+        "approved_training_dataset": false,
+        "production_adapter_enabled": false,
+        "packages": {
+          "torch": "2.7.1+cu126",
+          "transformers": "4.57.6",
+          "peft": "0.17.1",
+          "accelerate": "1.10.1",
+          "bitsandbytes": "0.48.1"
+        },
+        "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+        "total_vram_bytes": 4294508544,
+        "sample_id": "windows-notebook-seed42-B-fold1:PNV/arctic_b0140",
+        "sample_review_approved": false,
+        "sample_actual_tokens": 2308,
+        "tested_sequence_length": 3072,
+        "target_tokens": 386,
+        "source_drafts_sha256": "1f1de47a4dcd9c9ab5fd28a677431b0002e6c0deedeed6e96d49bea7c8beeac8",
+        "base_weight_sha256_before": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "compute_dtype": "torch.bfloat16",
+        "trainable_parameters": 1146880,
+        "loss": 1.1555042266845703,
+        "gradient_norm_before_clip": 1.6148407459259033,
+        "changed_lora_tensors": 112,
+        "peak_allocated_bytes": 7153584640,
+        "peak_reserved_bytes": 8193572864,
+        "base_weight_sha256_after": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "base_weight_file_unchanged": true,
+        "elapsed_seconds": 19.81199999999808,
+        "finished_at_utc": "2026-10-21T03:49:49.961618+00:00"
+      },
+      "feedback-qlora-20261021-efficient": {
+        "purpose": "technical_smoke_only",
+        "status": "passed",
+        "started_at_utc": "2026-10-21T03:51:26.125386+00:00",
+        "optimizer_updates": 1,
+        "approved_training_dataset": false,
+        "production_adapter_enabled": false,
+        "packages": {
+          "torch": "2.7.1+cu126",
+          "transformers": "4.57.6",
+          "peft": "0.17.1",
+          "accelerate": "1.10.1",
+          "bitsandbytes": "0.48.1"
+        },
+        "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+        "total_vram_bytes": 4294508544,
+        "sample_id": "windows-notebook-seed42-B-fold1:PNV/arctic_b0140",
+        "sample_review_approved": false,
+        "sample_actual_tokens": 2308,
+        "tested_sequence_length": 3072,
+        "target_tokens": 386,
+        "source_drafts_sha256": "1f1de47a4dcd9c9ab5fd28a677431b0002e6c0deedeed6e96d49bea7c8beeac8",
+        "base_weight_sha256_before": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "compute_dtype": "torch.bfloat16",
+        "trainable_parameters": 1146880,
+        "logit_projection": "supervised_next_token_positions_only",
+        "loss": 1.1555042266845703,
+        "gradient_norm_before_clip": 1.6148056983947754,
+        "changed_lora_tensors": 112,
+        "peak_allocated_bytes": 2257266176,
+        "peak_reserved_bytes": 2474639360,
+        "base_weight_sha256_after": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "base_weight_file_unchanged": true,
+        "elapsed_seconds": 22.531000000002678,
+        "finished_at_utc": "2026-10-21T03:51:48.656056+00:00"
+      },
+      "feedback-qlora-20261021-trainer": {
+        "purpose": "technical_smoke_only",
+        "status": "passed",
+        "started_at_utc": "2026-10-21T03:57:16.466069+00:00",
+        "optimizer_updates": 1,
+        "approved_training_dataset": false,
+        "production_adapter_enabled": false,
+        "packages": {
+          "torch": "2.7.1+cu126",
+          "transformers": "4.57.6",
+          "peft": "0.17.1",
+          "accelerate": "1.10.1",
+          "bitsandbytes": "0.48.1"
+        },
+        "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+        "total_vram_bytes": 4294508544,
+        "sample_id": "windows-notebook-seed42-B-fold1:PNV/arctic_b0140",
+        "sample_review_approved": false,
+        "sample_actual_tokens": 2308,
+        "tested_sequence_length": 3072,
+        "target_tokens": 386,
+        "source_drafts_sha256": "1f1de47a4dcd9c9ab5fd28a677431b0002e6c0deedeed6e96d49bea7c8beeac8",
+        "base_weight_sha256_before": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "compute_dtype": "torch.bfloat16",
+        "trainable_parameters": 1146880,
+        "logit_projection": "supervised_next_token_positions_only",
+        "trainer_global_step": 1,
+        "trainer_gradient_accumulation_steps": 8,
+        "trainer_best_validation_loss": 1.1117758750915527,
+        "trainer_checkpoint_saved": true,
+        "loss": 1.1555042266845703,
+        "gradient_norm_before_clip": 1.593695878982544,
+        "changed_lora_tensors": 56,
+        "peak_allocated_bytes": 2271648256,
+        "peak_reserved_bytes": 2596274176,
+        "base_weight_sha256_after": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+        "base_weight_file_unchanged": true,
+        "elapsed_seconds": 48.8440000000046,
+        "finished_at_utc": "2026-10-21T03:58:05.318582+00:00"
+      }
+    }
+  },
+  "notebook_sources": [
+    {
+      "file": "notebooks/feedback_review_and_training.ipynb",
+      "sha256": "da2e82869c4f9560d59046fd90ab1dc534d2050b6a6b81780c4802fdbaa59fbb",
+      "cells": 15,
+      "topics": {
+        "overview": [
+          {
+            "cell0": 0,
+            "cell1": 1
+          },
+          {
+            "cell0": 1,
+            "cell1": 2
+          }
+        ],
+        "gpu_smoke": [
+          {
+            "cell0": 3,
+            "cell1": 4
+          },
+          {
+            "cell0": 4,
+            "cell1": 5
+          }
+        ],
+        "draft_data": [
+          {
+            "cell0": 5,
+            "cell1": 6
+          },
+          {
+            "cell0": 6,
+            "cell1": 7
+          }
+        ],
+        "review_tools": [
+          {
+            "cell0": 7,
+            "cell1": 8
+          },
+          {
+            "cell0": 8,
+            "cell1": 9
+          },
+          {
+            "cell0": 9,
+            "cell1": 10
+          },
+          {
+            "cell0": 10,
+            "cell1": 11
+          }
+        ],
+        "approval_status": [
+          {
+            "cell0": 11,
+            "cell1": 12
+          },
+          {
+            "cell0": 12,
+            "cell1": 13
+          }
+        ],
+        "recipe": [
+          {
+            "cell0": 13,
+            "cell1": 14
+          },
+          {
+            "cell0": 14,
+            "cell1": 15
+          }
+        ]
+      },
+      "embedded_pngs": [
+        {
+          "cell0": 6,
+          "cell1": 7,
+          "output0": 2,
+          "execution_count": 3,
+          "source_excerpt": "frame = pd.DataFrame([{\"id\":r[\"assessment\"][\"utterance_id\"], \"model\":r[\"assessment\"][\"model_id\"],\n    \"speaker\":r[\"provenance\"][\"speaker_id\"], \"language\":r[\"provenance\"].get(\"nativ"
+        }
+      ]
+    },
+    {
+      "file": "notebooks/mdd_cascade_training_comparison.ipynb",
+      "sha256": "6e4dcf2754d43c741f37ebf3b94ff500d0a5ecb86aaa2bb1cf7d303a8f69a9e5",
+      "cells": 21,
+      "topics": {
+        "overview": [
+          {
+            "cell0": 0,
+            "cell1": 1
+          }
+        ],
+        "hardware": [
+          {
+            "cell0": 2,
+            "cell1": 3
+          },
+          {
+            "cell0": 3,
+            "cell1": 4
+          }
+        ],
+        "split": [
+          {
+            "cell0": 4,
+            "cell1": 5
+          },
+          {
+            "cell0": 5,
+            "cell1": 6
+          }
+        ],
+        "dataset_figures": [
+          {
+            "cell0": 6,
+            "cell1": 7
+          },
+          {
+            "cell0": 7,
+            "cell1": 8
+          },
+          {
+            "cell0": 8,
+            "cell1": 9
+          }
+        ],
+        "training_example": [
+          {
+            "cell0": 9,
+            "cell1": 10
+          },
+          {
+            "cell0": 10,
+            "cell1": 11
+          }
+        ],
+        "cases_and_hyperparameters": [
+          {
+            "cell0": 11,
+            "cell1": 12
+          },
+          {
+            "cell0": 12,
+            "cell1": 13
+          }
+        ],
+        "technical_smoke": [
+          {
+            "cell0": 13,
+            "cell1": 14
+          },
+          {
+            "cell0": 14,
+            "cell1": 15
+          }
+        ],
+        "run_commands": [
+          {
+            "cell0": 15,
+            "cell1": 16
+          },
+          {
+            "cell0": 16,
+            "cell1": 17
+          }
+        ],
+        "snapshot_status": [
+          {
+            "cell0": 17,
+            "cell1": 18
+          },
+          {
+            "cell0": 18,
+            "cell1": 19
+          }
+        ],
+        "snapshot_results": [
+          {
+            "cell0": 19,
+            "cell1": 20
+          },
+          {
+            "cell0": 20,
+            "cell1": 21
+          }
+        ]
+      },
+      "embedded_pngs": [
+        {
+          "cell0": 7,
+          "cell1": 8,
+          "output0": 1,
+          "execution_count": 4,
+          "source_excerpt": "annotations={r['utterance_id']:r for r in (json.loads(line) for line in (ROOT/config['processed_dir']/'annotations.jsonl').read_text(encoding='utf-8').splitlines() if line.strip())"
+        },
+        {
+          "cell0": 8,
+          "cell1": 9,
+          "output0": 0,
+          "execution_count": 5,
+          "source_excerpt": "fig,axes=plt.subplots(1,2,figsize=(12,3.5))\nframe.groupby('speaker')['id'].count().plot.bar(ax=axes[0],color='#278391')\nerror_counts={split:{} for split in ['train','validation','t"
+        },
+        {
+          "cell0": 20,
+          "cell1": 21,
+          "output0": 2,
+          "execution_count": 10,
+          "source_excerpt": "run_script('scripts/report_cascade.py')\nsummary=json.loads((REPORTS/'report/comparison.json').read_text(encoding='utf-8'))\nprint('Trạng thái:',summary['status'])\nprint('Còn chờ:',s"
+        }
+      ]
+    },
+    {
+      "file": "notebooks/mdd_projector_training_comparison.ipynb",
+      "sha256": "fb46e4a32ea36e0a27d38279e4aad835fe16ff6be1cd85b6d2f8e3286058d75c",
+      "cells": 16,
+      "topics": {
+        "architecture": [
+          {
+            "cell0": 0,
+            "cell1": 1
+          },
+          {
+            "cell0": 6,
+            "cell1": 7
+          },
+          {
+            "cell0": 7,
+            "cell1": 8
+          }
+        ],
+        "dataset": [
+          {
+            "cell0": 2,
+            "cell1": 3
+          },
+          {
+            "cell0": 3,
+            "cell1": 4
+          }
+        ],
+        "audio_example": [
+          {
+            "cell0": 4,
+            "cell1": 5
+          },
+          {
+            "cell0": 5,
+            "cell1": 6
+          }
+        ],
+        "commands": [
+          {
+            "cell0": 8,
+            "cell1": 9
+          },
+          {
+            "cell0": 9,
+            "cell1": 10
+          },
+          {
+            "cell0": 10,
+            "cell1": 11
+          }
+        ],
+        "snapshot_status": [
+          {
+            "cell0": 11,
+            "cell1": 12
+          },
+          {
+            "cell0": 12,
+            "cell1": 13
+          }
+        ],
+        "snapshot_results": [
+          {
+            "cell0": 13,
+            "cell1": 14
+          },
+          {
+            "cell0": 14,
+            "cell1": 15
+          }
+        ]
+      },
+      "embedded_pngs": [
+        {
+          "cell0": 3,
+          "cell1": 4,
+          "output0": 1,
+          "execution_count": 2,
+          "source_excerpt": "frames = {role: pd.DataFrame(rows) for role, rows in parts.items()}\ndisplay(pd.DataFrame([{'split': role, 'utterances': len(frame), 'speakers': frame.speaker_id.nunique(),\n        "
+        },
+        {
+          "cell0": 5,
+          "cell1": 6,
+          "output0": 3,
+          "execution_count": 3,
+          "source_excerpt": "import soundfile as sf\nexample = parts['train'][0]\nwave, rate = sf.read(ROOT/example['audio_path'])\nprint(example['utterance_id'], '—', example['reference_text'])\nprint('Nguồn:', e"
+        },
+        {
+          "cell0": 14,
+          "cell1": 15,
+          "output0": 1,
+          "execution_count": 7,
+          "source_excerpt": "from scripts.report_projector import report\nsummary = report(config)\ndisplay(summary)\ndisplay(Image(filename=str(REPORT/'report/training_curves.png')))\ncsv = REPORT/'report/compari"
+        }
+      ]
+    },
+    {
+      "file": "notebooks/mdd_projector_validation.ipynb",
+      "sha256": "b4d62c3b82c45dc0a242cffee3b991ce5c4b3d01cafe455583d4ec2758aab632",
+      "cells": 18,
+      "topics": {
+        "architecture": [
+          {
+            "cell0": 0,
+            "cell1": 1
+          }
+        ],
+        "data_and_actual_training": [
+          {
+            "cell0": 2,
+            "cell1": 3
+          },
+          {
+            "cell0": 3,
+            "cell1": 4
+          }
+        ],
+        "audio_full_900": [
+          {
+            "cell0": 4,
+            "cell1": 5
+          },
+          {
+            "cell0": 5,
+            "cell1": 6
+          }
+        ],
+        "nll_full_900_and_transcript_pilot30": [
+          {
+            "cell0": 6,
+            "cell1": 7
+          },
+          {
+            "cell0": 7,
+            "cell1": 8
+          }
+        ],
+        "feedback_pilot12": [
+          {
+            "cell0": 8,
+            "cell1": 9
+          },
+          {
+            "cell0": 9,
+            "cell1": 10
+          }
+        ],
+        "raw_audio_examples": [
+          {
+            "cell0": 10,
+            "cell1": 11
+          },
+          {
+            "cell0": 11,
+            "cell1": 12
+          }
+        ],
+        "limitations": [
+          {
+            "cell0": 12,
+            "cell1": 13
+          },
+          {
+            "cell0": 13,
+            "cell1": 14
+          }
+        ],
+        "rerun_commands": [
+          {
+            "cell0": 14,
+            "cell1": 15
+          },
+          {
+            "cell0": 15,
+            "cell1": 16
+          }
+        ],
+        "wav_cli": [
+          {
+            "cell0": 16,
+            "cell1": 17
+          },
+          {
+            "cell0": 17,
+            "cell1": 18
+          }
+        ]
+      },
+      "embedded_pngs": [
+        {
+          "cell0": 3,
+          "cell1": 4,
+          "output0": 3,
+          "execution_count": 2,
+          "source_excerpt": "display(pd.read_csv(REPORT/'dataset_counts.csv'))\nprovenance = summary['projector_alignment']\ndisplay(pd.DataFrame([{\n    'stage': provenance['stage'], 'status': provenance['status"
+        },
+        {
+          "cell0": 5,
+          "cell1": 6,
+          "output0": 1,
+          "execution_count": 3,
+          "source_excerpt": "display(pd.DataFrame(summary['audio_full_test']))\ndisplay(Image(filename=str(REPORT/'audio_by_speaker.png')))"
+        },
+        {
+          "cell0": 7,
+          "cell1": 8,
+          "output0": 4,
+          "execution_count": 4,
+          "source_excerpt": "display(pd.DataFrame(summary['transcript_full_nll']))\ndisplay(summary.get('alignment_delta', {}))\ndisplay(summary.get('audio_ablation_delta', {}))\ndisplay(pd.DataFrame(summary['tra"
+        },
+        {
+          "cell0": 9,
+          "cell1": 10,
+          "output0": 2,
+          "execution_count": 5,
+          "source_excerpt": "display(pd.DataFrame(summary['feedback_generation_pilot']))\ndisplay(summary.get('cascade_qwen_pilot_delta', {}))\nif (REPORT/'feedback_pilot.png').exists():\n    display(Image(filena"
+        }
+      ]
+    },
+    {
+      "file": "notebooks/qwen_grammar_training.ipynb",
+      "sha256": "e4ae5db563a0b76610bcb160a5408920b44c55f6eac58e8033bcd9da0b2fb0e9",
+      "cells": 18,
+      "topics": {
+        "overview": [
+          {
+            "cell0": 0,
+            "cell1": 1
+          }
+        ],
+        "data_rules": [
+          {
+            "cell0": 2,
+            "cell1": 3
+          },
+          {
+            "cell0": 3,
+            "cell1": 4
+          }
+        ],
+        "dataset_plots": [
+          {
+            "cell0": 4,
+            "cell1": 5
+          },
+          {
+            "cell0": 5,
+            "cell1": 6
+          },
+          {
+            "cell0": 6,
+            "cell1": 7
+          }
+        ],
+        "labels": [
+          {
+            "cell0": 7,
+            "cell1": 8
+          },
+          {
+            "cell0": 8,
+            "cell1": 9
+          }
+        ],
+        "prepare_commands": [
+          {
+            "cell0": 9,
+            "cell1": 10
+          },
+          {
+            "cell0": 10,
+            "cell1": 11
+          }
+        ],
+        "before_commands": [
+          {
+            "cell0": 11,
+            "cell1": 12
+          },
+          {
+            "cell0": 12,
+            "cell1": 13
+          }
+        ],
+        "training_recipe": [
+          {
+            "cell0": 13,
+            "cell1": 14
+          },
+          {
+            "cell0": 14,
+            "cell1": 15
+          }
+        ],
+        "evaluation_commands_and_stale_results": [
+          {
+            "cell0": 15,
+            "cell1": 16
+          },
+          {
+            "cell0": 16,
+            "cell1": 17
+          },
+          {
+            "cell0": 17,
+            "cell1": 18
+          }
+        ]
+      },
+      "embedded_pngs": [
+        {
+          "cell0": 5,
+          "cell1": 6,
+          "output0": 0,
+          "execution_count": 3,
+          "source_excerpt": "fig, axes = plt.subplots(1, 3, figsize=(15, 4))\npd.DataFrame({s: manifest['stats'][s]['tasks'] for s in parts}).T.plot.bar(stacked=True, ax=axes[0], rot=0)\naxes[0].set(title='Train"
+        },
+        {
+          "cell0": 6,
+          "cell1": 7,
+          "output0": 0,
+          "execution_count": 4,
+          "source_excerpt": "errors = Counter(e['type'] for row in parts['train'] if row['corpus']=='wi_locness' for e in row['edits'] if e['type']!='noop')\npd.Series(errors).sort_values().tail(14).plot.barh(f"
+        }
+      ]
+    }
+  ],
+  "stale_or_missing_artifacts": [
+    {
+      "file": "notebooks/qwen_grammar_training.ipynb",
+      "cell0": 13,
+      "cell1": 14,
+      "issue": "Markdown nói chưa xác nhận VRAM; cell17 output nói chưa có log. Thực tế provenance completed22/10UTC với3564steps; dùng bảng run cho current state."
+    },
+    {
+      "file": "notebooks/qwen_grammar_training.ipynb",
+      "cell0": 17,
+      "cell1": 18,
+      "issue": "Tìm comparison ở grammar-benchmark-v1, chưa có. Probe thật nằm grammar-adapter-demo-v1/comparison.json;16validation không được đổi thành full benchmark."
+    },
+    {
+      "file": "notebooks/mdd_cascade_training_comparison.ipynb",
+      "cell0": 18,
+      "cell1": 19,
+      "issue": "Output status đang train_A step35 từ21/10 04:57UTC, là snapshot cũ; hiện Q đã completed."
+    },
+    {
+      "file": "data/generated/cascade-l2arctic-plus-seed42/report/comparison.json",
+      "issue": "Generated21/10 04:57UTC, awaiting_evaluations/missing_audio A/B đã stale so với metrics audio thật và validation mới. Full feedback900 vẫn chưa có."
+    },
+    {
+      "file": "notebooks/mdd_projector_training_comparison.ipynb",
+      "cell0": 12,
+      "cell1": 13,
+      "issue": "Snapshot waiting_for_encoder_B và alignment chưa train là cũ; stage provenance alignment completed282updates có thực."
+    },
+    {
+      "file": "data/generated/projector-l2arctic-plus-seed42/pipeline_status.json",
+      "issue": "Dừng cache theo user21/10 06:27UTC; note No projector training has started không còn đại diện trạng thái alignment sau đó."
+    },
+    {
+      "file": "data/generated/projector-l2arctic-plus-seed42/report/summary.json",
+      "issue": "awaiting_evaluations/completed_cases[] là report P0/P1 cũ; validation hiện có riêng ở projector-validation-v1. P1 vẫn chưa train."
+    },
+    {
+      "file": "TRAINING.md:286",
+      "issue": "Nội dung Chưa chạy train và Chưa có kết quả sau train ởline320 đã cũ so với grammar completed +16rowprobe. Không sao chép làm trạng thái hiện tại."
+    },
+    {
+      "file": "configs/feedback_l2arctic_plus_qlora.json",
+      "issue": "Recipe standalone có validation HJK,LXC,SKA và output runs/feedback-l2arctic-plus-en-v1, không phải config actual cascade (HJK,LXC,PNV). Không trộn hai recipe."
+    },
+    {
+      "file": "models/pretrained/Qwen2-Audio-7B-Instruct/source_manifest.json",
+      "issue": "weights_downloaded=false; không có weight shard. Không có test quality hoặc train Qwen2-Audio local được xác nhận."
+    }
+  ],
+  "reproduction_commands_for_document_only": [
+    ".venv/Scripts/python.exe -X utf8 scripts/train_feedback_model.py --config configs/cascade_feedback_qlora.json --check-data-only",
+    ".venv/Scripts/python.exe -X utf8 scripts/train_feedback_model.py --config configs/cascade_feedback_qlora.json",
+    ".venv/Scripts/python.exe -X utf8 scripts/train_feedback_model.py --config configs/cascade_feedback_qlora.json --resume",
+    ".venv/Scripts/python.exe -X utf8 scripts/grammar_data.py prepare --download",
+    ".venv/Scripts/python.exe -X utf8 scripts/train_grammar_model.py --check-data-only",
+    ".venv/Scripts/python.exe -X utf8 scripts/train_grammar_model.py --run",
+    ".venv/Scripts/python.exe -X utf8 scripts/train_grammar_model.py --run --resume",
+    ".venv/Scripts/python.exe -X utf8 scripts/run_projector_training.py --phase status",
+    ".venv/Scripts/python.exe -X utf8 scripts/run_projector_validation.py --phase all"
+  ],
+  "reproduction_note": "Các lệnh chỉ ghi trong tài liệu, chưa thực thi. Không tự chạy train/evaluation khi user chỉ yêu cầu tổng hợp PDF."
+}

@@ -1,0 +1,9 @@
+# Isolated local TTS runtime; do not install into the MDD training environment.
+# CPU/base dependencies. Use setup_kokoro.py --device cuda for a GPU setup;
+# installing this file directly over a GPU environment would reintroduce CPU ORT.
+kokoro-onnx==0.6.1
+onnxruntime>=1.20.1,<2
+espeakng-loader==0.2.4
+phonemizer>=3.4,<4
+numpy>=2.0.2,<3
+soundfile>=0.13,<0.14

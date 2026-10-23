@@ -58,7 +58,8 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(self.service.submit(self.payload())["id"], first["id"])
         self.assertEqual(len(self.calls), 1)
         messages, config, tokens = self.calls[0]
-        self.assertEqual(config["device"], "cpu")
+        from mdd.chat_runtime import requested_device
+        self.assertEqual(config["device"], requested_device())
         self.assertEqual(config["threads"], 2)
         self.assertIsNone(config["adapter"])
         self.assertIn("text only", messages[0]["content"])
@@ -231,8 +232,8 @@ class ChatTests(unittest.TestCase):
             job.sentence_voice = {'status': 'not_requested'}
             job.sentence_voice_text = None
         release.set()
-        self.assertTrue(self.service._voice_slot.acquire(timeout=2))
-        self.service._voice_slot.release()
+        self.assertTrue(self.service._sentence_voice_slot.acquire(timeout=2))
+        self.service._sentence_voice_slot.release()
         self.assertEqual(job.sentence_voice, {'status': 'not_requested'})
         self.assertEqual(self.service._voices, {})
 

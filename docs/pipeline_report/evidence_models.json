@@ -1,0 +1,558 @@
+{
+  "title_vi": "Bằng chứng model routing, vai trò và workflow hiện tại của MDD",
+  "snapshot_at_Bangkok": "2026-10-23T09:36:59.095211+07:00",
+  "scope_vi": "Read-only source audit và kiểm registry/artifact nhẹ. Không load torch/model, không inference, train, gọi LLM API hay TTS. Chỉ tạo evidence_models.json.",
+  "source_sha256": {
+    "src/mdd/demo_model_registry.py": "841cba1f517ddb376c8603142d6ccbc9c45dacca02c985faa1f121849f21d10b",
+    "src/mdd/chat_runtime.py": "b93967de1d9746843c2cd6bb806916cc5847128fd585dda453af63848d504c0a",
+    "src/mdd/demo_chat.py": "a7d2624f18e6b76a3ecbf7f8bb76991d38229988fd2b4fb5c84f738cfe70ed80",
+    "src/mdd/chat_assessment.py": "11a58aee7bf97c47a7d5b959904aef057274a9c522b180411757ab1e82d2b706",
+    "scripts/local_chat_worker.py": "6eba885479c3b603e62ae5697acc351b0098d0185b6d029a2b42e4d6db1e87f3",
+    "scripts/local_chat_process.py": "a055e780311cd467bf70d11ec1ac42c664a647678086b813b4ca162267d98bd1",
+    "scripts/local_speech_engine.py": "7214f127b6f16b31f2a9e645b09512df635793da864418ac50e684e59065b0cc",
+    "scripts/grammar_inference.py": "af1dfa9d3d7b036c9030d449b2df05a6c3bc539704aeb88a426201609dc8548e",
+    "scripts/conversation_reply.py": "d88f073555e04af3ccd364070770134a78fc2fea9e66b3bf16fba9adec8b4166",
+    "scripts/conversation_policy.py": "a04976f0cb0f1f46de1cb6708f311e1fef0639c228beb734abc659f5b59431e7",
+    "scripts/conversation_context.py": "a1344ea457bd1552cc75b14904186ef04960ffe7559f64c188193a00a93dd164",
+    "scripts/sentence_rewrite.py": "a59867419dea76b5ff9f64719a50e00364aaede956bbeeebd2d6a4ad58795528",
+    "scripts/sentence_correction.py": "561dff694492da5142ba21b59b604329310697cbc3271fe7ce53aa173c4412ea",
+    "scripts/transcript_normalization.py": "052cbdf0abc0753412f22ad7abab63aef162159412f81c476af120dd9eca8103",
+    "scripts/grammar_data.py": "ffd52130402d221489d903fb197d602c03a652ea3d32e4e6301ab7ebf233e42c",
+    "scripts/evaluate_grammar_model.py": "5345c78e7fb7d82cf75d087104dba554f4eeb2988c4051098824963c37a72297",
+    "demo/chat.js": "9e3d429d350f75f6ea8a3263875306ff0ceca1570ba3f21796384031e4d56d09"
+  },
+  "high_priority_findings_vi": [
+    "MDD voice là pipeline nhiều model/chức năng tách biệt: ASR chữ → phoneme/posterior B → chuẩn hóa văn bản → base-Qwen trả lời hội thoại → grammar adapter gợi ý hai task. Không phải một Qwen nghe và chấm trực tiếp audio.",
+    "Dialogue của lượt nói LUÔN qwen-base, bất kể dropdown qwen-base/qwen-trained. qwen-trained là LoRA phát âm, không phải adapter được dùng để tạo reply tự nhiên của speech.",
+    "RẤT QUAN TRỌNG: current analyze luôn trả key assessment; legacy coach branch chỉ chạy nếu assessment không tồn tại. Vì vậy path speech hiện tại bỏ qua lời gọi LoRA coaching, trả coaching unavailable. Metadata coaching_model_id là lựa chọn, không chứng minh adapter đã thực sự sinh feedback.",
+    "Grammar adapter hiện đã active qua registry ready=true: gọi hai lượt riêng grammar_corrected rồi natural, đúng single-field contract lúc train; không dùng LoRA coach và không dùng legacycompletion cho luồng UI hiện tại.",
+    "Training NF4/QLoRA không đồng nghĩa runtime NF4. local_chat_worker load base regular float32CPU hoặc BF16/FP16CUDA, kèm PEFT adapters inference; không có BitsAndBytes/4-bit quantization trong worker.",
+    "Server config công bố default_model_id=qwen-base. Frontend khởi tạo state.model=qwen-trained và khôi phục sessionStorage; nó không áp default_model_id. Fresh UI với trained ready sẽ chọn trained, nhưng speech reply vẫnbase.",
+    "Một Qwen base trong worker được cache và chuyển adapter chat/grammar. Request base dùng disable_adapter. Không có ba bản Qwen riêng chạy song song.",
+    "Readiness là kiểm file/provenance/checksum/contract probe, không bảo đảm chất lượng từng câu. Grammar readiness dựa development probe16validation, không phải benchmark accuracy.",
+    "Acoustic ASR+B luônCPU; Qwen auto quyết định một lần khi load worker: CUDA nếu có và free>=2GiB, ngược lạiCPU. Auto fallbackCPU chỉ được cài cho OOM khi load base, không bao phủ mọi lỗi sinh hay loadadapter."
+  ],
+  "lightweight_registry_snapshot": {
+    "method": "Import registry/ChatService nhẹ; không import torch hoặc tạo worker. Chỉ đọc metadata, stat và SHA adapter nhỏ.",
+    "asr_selection": {
+      "id": "wav2vec2-vi-en-v1",
+      "path": "D:\\NCC\\MDD\\runs\\asr-vietnamese-english-v1\\best_checkpoint",
+      "sha256": "bc37e9b27f704767cb0aa4b5484e8e36d6fcc2c6a2fb152b2ad76ac18dbb9f7b",
+      "trained": true,
+      "selection": "validation_wer_improved"
+    },
+    "grammar_selection": {
+      "id": "qwen-grammar",
+      "ready": true,
+      "adapter": "D:\\NCC\\MDD\\runs\\grammar-qwen3-06b-wi-jfleg-v1\\adapter",
+      "sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "validation": "16-row held-out validation development probe; output contract and unchanged grammar controls, not grammar accuracy."
+    },
+    "models": {
+      "qwen-base": {
+        "id": "qwen-base",
+        "label": "Qwen3-0.6B · Bản gốc",
+        "ready": true,
+        "description": "Mô hình gốc cho hội thoại văn bản.",
+        "adapter": null
+      },
+      "qwen-trained": {
+        "id": "qwen-trained",
+        "label": "Qwen3-0.6B · Sau train",
+        "ready": true,
+        "description": "LoRA đã học hướng dẫn phát âm; chất lượng chat tự do cần kiểm chứng.",
+        "adapter": "D:\\NCC\\MDD\\runs\\cascade-l2arctic-plus-seed42\\Q\\adapter",
+        "expected_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4"
+      }
+    },
+    "server_config_subset": {
+      "default_model_id": "qwen-base",
+      "device": "auto",
+      "threads": 2,
+      "acoustic_device": "cpu",
+      "asr_model_id": "wav2vec2-vi-en-v1",
+      "grammar_model_id": "qwen-grammar",
+      "speech_ready": true,
+      "reply_model_id": "qwen-base",
+      "sentence_mode": "grammar_and_natural",
+      "rewrite_mode": "grammar_and_natural",
+      "dialogue_policy": "natural_conversation",
+      "pronunciation_method": "ctc_variant_posterior_margin_v1",
+      "pronunciation_uncertainty": true,
+      "pronunciation_feedback": "collapsed",
+      "voice_content": "reply_only",
+      "reference_confirmation": true,
+      "transcript_normalization": "lexical_preserving_v1",
+      "reference_regenerates_reply": true,
+      "reference_regenerates_only_on_change": true,
+      "pronunciation_review": "immediate_provisional"
+    },
+    "shell_requested_device_policy": "auto",
+    "device_note_vi": "auto là policy từ shell hiện tại; chưa đo device thực tế của một server/worker đang chạy. Device thực tế ghi qwen_runtime metadata sau generation.",
+    "adapter_checksums": {
+      "coach": {
+        "path": "runs/cascade-l2arctic-plus-seed42/Q/adapter/adapter_model.safetensors",
+        "exists": true,
+        "actual_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4",
+        "expected_sha256": "a320c4c0af69e4aa929673da68eb31f0a79ab940d3d5f85a9d80038c3fd998e4",
+        "match": true
+      },
+      "grammar": {
+        "path": "runs/grammar-qwen3-06b-wi-jfleg-v1/adapter/adapter_model.safetensors",
+        "exists": true,
+        "actual_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+        "expected_sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+        "match": true
+      }
+    },
+    "calibration": {
+      "status": "ineligible",
+      "eligible": false,
+      "verified": false,
+      "accept_threshold": null,
+      "error_threshold": null
+    }
+  },
+  "model_roles": [
+    {
+      "id": "wav2vec2-vi-en-v1",
+      "family": "wav2vec2-base-960h + CTC ký tự đã fine-tune",
+      "path": "runs/asr-vietnamese-english-v1/best_checkpoint",
+      "input": "audio waveform mono16kHz",
+      "output": "Transcript chữ tiếng Anh và CTC word intervals",
+      "device": "CPU",
+      "readiness_vi": "Registry cần training_provenance statuscompleted, results.validation_improved=true, trained_sha256string và weight file; inference kiểm SHA thực tế. Nếu registry không đạt, chọn pretrained wav2vec2-base-960h.",
+      "fallback_path": "models/pretrained/wav2vec2-base-960h",
+      "sources": [
+        {
+          "file": "src/mdd/demo_model_registry.py",
+          "line1": 9,
+          "function": "asr_selection",
+          "claim_vi": "Chọn trained nếu cải thiện validation; otherwise pretrained"
+        },
+        {
+          "file": "scripts/local_speech_engine.py",
+          "line1": 129,
+          "function": "transcribe",
+          "claim_vi": "Hash weights, disable specaugment, load CPU/eval/no_grad, greedyargmax, formattext/wordintervals"
+        }
+      ]
+    },
+    {
+      "id": "cascade-B",
+      "family": "wav2vec2 phoneme MDD B",
+      "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint",
+      "input": "audio16kHz",
+      "output": "phonemes + posterior evidence cho assessment",
+      "device": "CPU",
+      "independent_vi": "Không dùng head ký tự ASR để chấm phone. Hiện cần B completed; không auto thay A nếu B chưa hoàn tất.",
+      "sources": [
+        {
+          "file": "scripts/local_speech_engine.py",
+          "line1": 181,
+          "function": "analyze",
+          "claim_vi": "Checkpoint B cố định; completedcheck; posterior_evidence"
+        },
+        {
+          "file": "scripts/local_speech_engine.py",
+          "line1": 194,
+          "function": "analyze",
+          "claim_vi": "Assessment dùng posterior+canonical; evidence lưu private"
+        }
+      ]
+    },
+    {
+      "id": "qwen-base",
+      "family": "Qwen3-0.6B",
+      "path": "models/pretrained/Qwen3-0.6B",
+      "roles_vi": [
+        "Speech dialogue trả lời nội dung bằng tiếng Anh",
+        "Chuẩn hóa ASR dấu câu/case/format bảo toàn lexical trước dialogue",
+        "Base fallback cho grammar3fields khi grammar adapter chưa ready",
+        "Legacycompletion khi caller tắt rewrite",
+        "Text chat nếu người dùng chọn base"
+      ],
+      "device": "Qwen shared runtimeauto/cpu/cuda",
+      "not_audio_model_vi": "Nhận text/messages; không nhận raw audio. Qwen2-Audio và trained Projector không nằm trong worker/chat route này.",
+      "sources": [
+        {
+          "file": "scripts/local_speech_engine.py",
+          "line1": 49,
+          "function": "dialogue_request",
+          "claim_vi": "Ép model_id=qwen-base và generation_profileconversation"
+        },
+        {
+          "file": "scripts/transcript_normalization.py",
+          "line1": 103,
+          "function": "normalization_request",
+          "claim_vi": "Base structured request max192 timeout35"
+        },
+        {
+          "file": "scripts/local_chat_worker.py",
+          "line1": 160,
+          "function": "generate",
+          "claim_vi": "Tắt PEFT adapter khi model_idbase"
+        }
+      ]
+    },
+    {
+      "id": "qwen-trained",
+      "adapter_name_in_worker": "chat",
+      "family": "Qwen3-0.6B + LoRA feedback pronunciation",
+      "base_path": "models/pretrained/Qwen3-0.6B",
+      "adapter_path": "runs/cascade-l2arctic-plus-seed42/Q/adapter",
+      "intended_role_vi": "Coach word→issue/suggestion JSON từ nhãn phone dự đoán, dùng khi legacy acoustic condition cho phép; text chat endpoint cũng có thể chạy adapter này nếu chọn dropdowntrained.",
+      "current_speech_caveat_vi": "Không được gọi trong ordinary current speech path vì analyze luôn có assessment còn coachguard yêu cầu không có assessment. Dropdown/metadata không thể dùng làm bằng chứng model này đã chạy.",
+      "readiness_vi": "ChatService cần base config/tokenizer/weights, provenance completed và purpose scientific_training, adapter config/weights. Submit speech/text kiểm actual SHA so với expected; worker kiểm lại SHA khi tuple file mtime/size/expected thay đổi.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_chat.py",
+          "line1": 93,
+          "function": "_models",
+          "claim_vi": "Models visibletoUI và readiness coach"
+        },
+        {
+          "file": "scripts/local_chat_worker.py",
+          "line1": 113,
+          "function": "load",
+          "claim_vi": "Adapterchatpath/provenance/sha"
+        },
+        {
+          "file": "scripts/local_speech_engine.py",
+          "line1": 452,
+          "function": "_respond",
+          "claim_vi": "Guard legacy coaching bắt buộc không có assessment"
+        },
+        {
+          "file": "src/mdd/chat_assessment.py",
+          "line1": 149,
+          "function": "assessment_fields",
+          "claim_vi": "Luôn trả assessmentkey"
+        }
+      ]
+    },
+    {
+      "id": "qwen-grammar",
+      "adapter_name_in_worker": "grammar",
+      "family": "Qwen3-0.6B + LoRA grammar/fluency riêng",
+      "base_path": "models/pretrained/Qwen3-0.6B",
+      "adapter_path": "runs/grammar-qwen3-06b-wi-jfleg-v1/adapter",
+      "input": "Text effective dialogue_text; hai task messages độc lập",
+      "output": "grammar_corrected rồi natural; guard và merge thành optional rewrite UI",
+      "not_dropdown_vi": "ID nội bộ do server grammar_selection chọn; public modelsdropdown chỉ base/trained.",
+      "readiness_vi": "Registry cần completed, dataset_kind published_grammar_fluency, demo_validation passed và adapter SHA khớp, weight file tồn tại. Worker kiểm actual checksum. Probe 16 câu validation chứng minh contract/unchanged grammar controls, không phải full accuracy.",
+      "sources": [
+        {
+          "file": "src/mdd/demo_model_registry.py",
+          "line1": 25,
+          "function": "grammar_selection",
+          "claim_vi": "Gated registry/fallbackbase"
+        },
+        {
+          "file": "scripts/grammar_inference.py",
+          "line1": 7,
+          "function": "rewrite",
+          "claim_vi": "Hai requests, strictsinglefieldparse, fallbackfailuremasked"
+        },
+        {
+          "file": "scripts/local_chat_worker.py",
+          "line1": 107,
+          "function": "load",
+          "claim_vi": "Validated grammar adapter namedgrammar"
+        }
+      ]
+    }
+  ],
+  "routing_defaults": {
+    "server_default": "qwen-base",
+    "server_source": "src/mdd/demo_chat.py:117 ChatService.config",
+    "frontend_initial": "qwen-trained",
+    "frontend_sources": [
+      "demo/chat.js:127 state",
+      "demo/chat.js:191 restore",
+      "demo/chat.js:1254 initialize"
+    ],
+    "frontend_logic_vi": "SessionStorage am-chat-selection-v1 khôi phục base/trained nếu hợp lệ. Sau khi đọc config, lựa chọn chưa ready sẽ fallback base. Frontend không dùng default_model_id để thay state.model.",
+    "speech_model_override": "reply_request.model_id=qwen-base luôn trong dialogue_request; selectedmodel chỉ truyền vào legacy coach và metadata.",
+    "text_endpoint_vi": "ChatService.submit sử dụng đúng model đã chọn, nên không khái quát rằng mọi endpoint chat luôn dùng base. _generate không truyền profile conversation, do đó ordinary text endpoint dùng greedy mặc định.",
+    "sources": [
+      {
+        "file": "src/mdd/demo_chat.py",
+        "line1": 465,
+        "function": "_generate",
+        "claim_vi": "settings theo adapterđãchọn;384tokens/120sec"
+      },
+      {
+        "file": "scripts/local_chat_process.py",
+        "line1": 87,
+        "function": "complete",
+        "claim_vi": "adapterpresent→qwen-trained,elsebase"
+      }
+    ]
+  },
+  "workflow_voice_current": [
+    {
+      "order": 1,
+      "name_vi": "Nhận và kiểm lượt nói",
+      "detail_vi": "POST speech kiểmmodelid/history/topic/practice, strictWAV16kHzmonoPCM0.25–30sec, requestidempotency, modelready/adapterhash. BoundedSemaphore1 từ chối409chat_busy nếu đang xử lý lượt khác. Server đặt rewrite_enabled=true, normalization_enabled=true và chọn grammar_model_id từ registry.",
+      "sources": [
+        "src/mdd/demo_chat.py:249 submit_speech",
+        "src/mdd/demo_chat.py:278 WAVvalidation",
+        "src/mdd/demo_chat.py:300 readiness",
+        "src/mdd/demo_chat.py:305 generation_slot",
+        "src/mdd/demo_chat.py:314 request"
+      ]
+    },
+    {
+      "order": 2,
+      "name_vi": "Audio → transcript và sound evidence",
+      "detail_vi": "Worker speech.run phát transcribing; analyze decodeaudio rồi ASRCPU; xây reference CMU/canonical từ readingprompt hoặc rawtranscript; chạy BCPU lấy posterior; assessment/candidates/refresolution. Không có Qwen/projector nhận audio.",
+      "sources": [
+        "scripts/local_speech_engine.py:219 run",
+        "scripts/local_speech_engine.py:161 analyze"
+      ]
+    },
+    {
+      "order": 3,
+      "name_vi": "Chuẩn hóa ASR bảo toàn từ",
+      "detail_vi": "Nếu không có explicitreference, gọi baseQwen max192/35sec để sửa format. Guard chỉ case/punctuation/closedapostrophes/compounds; không sửagrammar/thêmword/guessOOV. SaiJSON,budget/error→format_rules fallback. Giữ nguyên rawtranscript/audio/evidence/reference gốc.",
+      "sources": [
+        "scripts/local_speech_engine.py:224 run",
+        "scripts/transcript_normalization.py:86 normalization_request",
+        "scripts/transcript_normalization.py:106 parse_normalization",
+        "scripts/transcript_normalization.py:128 normalize"
+      ]
+    },
+    {
+      "order": 4,
+      "name_vi": "Chuẩn bị dialogue view và độ rõ",
+      "detail_vi": "Chọn userconfirmed text hoặc guardednormalized ASR cho conversation; reference/prompt và audioevidence tách riêng. ASROOVmissing>=2 và>=25% từ thì needs_clarification. Grammarrewrite chưa chạy, không dùng câu đã sửagrammar để trả lời thay lời gốc.",
+      "sources": [
+        "scripts/local_speech_engine.py:252 _respond",
+        "scripts/conversation_context.py:22 prepare_dialogue_context"
+      ]
+    },
+    {
+      "order": 5,
+      "name_vi": "Base Qwen sinh reply trước",
+      "detail_vi": "Speech dialogue luônbase, profileconversation sampling(.7temperature,.8top_p,top_k20,min_p0), thinkingoff. General160tokens/75sec; cafestate96/45sec; retry96/35sec. Dùng lịch sử thật; topicopening là textcatalog, không generationmới.",
+      "sources": [
+        "scripts/local_speech_engine.py:49 dialogue_request",
+        "scripts/local_chat_worker.py:19 generation_options",
+        "src/mdd/demo_chat.py:224 start_topic"
+      ]
+    },
+    {
+      "order": 6,
+      "name_vi": "Lọc echo/policy trước khi stream và TTS",
+      "detail_vi": "ReplyWithoutEcho bỏ exactlexicalecho,personshift/replayedhistoryquestion; không semanticjudge. GroundedReply chặn greet/stockpraise-only cho substantive turn, unresolvedtranscript phảiclarify,cafestate chỉ hỏi nextdetail. Có1retry nếu echo-only/policyneedsretry. Nếu vẫn rỗng sau lọc: clarificationfallback khi nghechưarõ, hoặc conversation_unavailable; không bịa nội dung thay learner.",
+      "sources": [
+        "scripts/local_speech_engine.py:301 _respond",
+        "scripts/local_speech_engine.py:335 _respond",
+        "scripts/local_speech_engine.py:375 _respond",
+        "scripts/conversation_reply.py:176 ReplyWithoutEcho",
+        "scripts/conversation_policy.py:58 GroundedReply"
+      ]
+    },
+    {
+      "order": 7,
+      "name_vi": "Công bố reply bất biến",
+      "detail_vi": "Gán spoken_response/reply_ready=true và emit trước optionalfeedback. Voiceđọc replyonly; UI/TTS có thể tiếp tục trong lúc grammar/optionalcoaching dùng cùng worker. Không tự đọc soundestimates hoặc grammarfeedback.",
+      "sources": [
+        "scripts/local_speech_engine.py:392 _respond",
+        "src/mdd/demo_chat.py:544 voice"
+      ]
+    },
+    {
+      "order": 8,
+      "name_vi": "Grammar/natural optional sau reply",
+      "detail_vi": "Luồng UI hiện rewrite=true, khôngreadingreference: nếu grammarready gọi qwen-grammar hai lượt tuần tự320tokens/45sec mỗi task, strictsinglefieldJSON, rồi lexicalguard. Nếu registrybase fallback→base3fields rewrite320/45sec. Không tự chuyển sangbase nếu selectedgrammar generationlỗi; taskfailures sẽ đánh unavailable.",
+      "sources": [
+        "scripts/local_speech_engine.py:421 _respond",
+        "scripts/grammar_inference.py:7 rewrite",
+        "scripts/sentence_rewrite.py:36 rewrite_request",
+        "scripts/sentence_rewrite.py:400 parse_rewrite"
+      ]
+    },
+    {
+      "order": 9,
+      "name_vi": "Legacy coach tùy điều kiện, hiện không hoạt động trong ordinarypath",
+      "detail_vi": "Sau grammar đặt coachingunavailable; chỉ nếu comparisondifference+referenceexists+KHÔNGassessment mới tạo predictedcondition và gọi selectedqwen512/110sec, strictJSON+EOS+keysphảitrùngflaggedacousticwords. Current analyze luônassessment nên nhánh này bịskip. Không báo trainedcoach đã sinh trong currentdemo chỉ vì metadata coaching_model_id.",
+      "sources": [
+        "scripts/local_speech_engine.py:445 _respond",
+        "scripts/local_speech_engine.py:452 _respond",
+        "scripts/local_speech_engine.py:27 grounded_coaching",
+        "src/mdd/chat_assessment.py:149 assessment_fields"
+      ]
+    },
+    {
+      "order": 10,
+      "name_vi": "Hoàn tất metadata và trạng thái",
+      "detail_vi": "Emitfinalspeech; metadata replybase/rewriteid/selectedcoachid/latencies/feedback_orderreply_first. Server statusready khi có replytext; lỗiworker được map speech_failed. Modeljobkhôngkhởiđộngtraining.",
+      "sources": [
+        "scripts/local_speech_engine.py:474 _respond",
+        "src/mdd/demo_chat.py:414 _generate_speech"
+      ]
+    }
+  ],
+  "grammar_vs_legacy": {
+    "grammar_active_adapter": {
+      "source": "scripts/grammar_inference.py:7 rewrite",
+      "tasks": [
+        "grammar_corrected",
+        "natural"
+      ],
+      "per_task_max_tokens": 320,
+      "per_task_timeout_sec": 45,
+      "prompt_source": "scripts/grammar_data.py:23 SYSTEM;:63 messages",
+      "contract": "Đúng một requested task field dạng string, không có explanation gold. Prompt task chỉ gồm transcript hiện tại; history được truyền tới parse_rewrite nhưng parser này hiện không đọc history để cấp phép thêm nội dung.",
+      "failure_vi": "Mỗi taskfail bắt exception hoặc parseerror; tạm transcript nội bộ chỉ đểmerge/guard, sau đó xóaoutputfailed và đánhunavailable. Cả2fail→globalunavailable. Không coi failedtask là successfulunchangedcorrection."
+    },
+    "base_fallback_rewrite": {
+      "source": "scripts/sentence_rewrite.py:36 rewrite_request",
+      "model_id": "qwen-base",
+      "contract": "3 stringfields grammar_corrected,natural,explanation",
+      "max_tokens": 320,
+      "timeout_sec": 45,
+      "greedy": true,
+      "guard_vi": "RequireEOS/JSONschema/textlimits. Bảo toàn names,numbers,negation,modals,temporalwords; restrictedtense/wordorder/lexicalrules. Có thể chỉ1taskready. Không phải semantic-equivalenceproof hoặc grammarchecker.",
+      "explanation_vi": "UI summary tính từ actualedits; model_explanation giữaudit, không tin hoàn toàn lời model giải thích."
+    },
+    "legacy_completion": {
+      "source": "scripts/sentence_correction.py:36 correction_request;:137 parse_correction",
+      "model_id": "qwen-base",
+      "condition": "local_speech_engine.py:402: khôngreference và rewrite_enabled=false. Publicsubmit_speech luônrewrite=true nên không phải currentUIbranch.",
+      "max_tokens": 224,
+      "timeout_sec": 40,
+      "contract": "2stringfields corrected/explanation; completion_only",
+      "purpose_vi": "Giữ everyspokenword/order/grammar; chỉ thêm sentenceframe từcâuhỏirõ hoặc hoàn trailingfragment bằng exactpreviouslearnerturn. Không sửagrammar.",
+      "failure_vi": "Không completeđượcthìunavailable, giữwordinggốc. Chức năng compatibility còntrongcode không được mô tả thay cho grammaradapter hiện tại."
+    },
+    "immutability_vi": "Grammar/natural/completion đềuoptionaltextviews. Không overwrite rawASR, không thay audio pronunciationreference, không ghiđèactuallearnerhistory. Chỉ userconfirmedreferenceedit có workflowexplicit để reassess/rerenderreply."
+  },
+  "device_runtime": {
+    "sources": [
+      "src/mdd/chat_runtime.py:7 requested_device",
+      "src/mdd/chat_runtime.py:15 select_runtime",
+      "scripts/local_chat_worker.py:78 load",
+      "scripts/local_chat_process.py:22 _start"
+    ],
+    "allowed_policies": [
+      "auto",
+      "cpu",
+      "cuda"
+    ],
+    "default_policy": "auto",
+    "acoustic_device": "cpu",
+    "cpu": {
+      "dtype": "float32",
+      "attention": "eager",
+      "cuda_hidden_if_forced": true
+    },
+    "cuda": {
+      "dtype": "bfloat16 if supported else float16",
+      "attention": "sdpa",
+      "device": "cuda:0"
+    },
+    "auto_vi": "Khôngcuda→cpu; available nhưngfreememory<2048MiB→cpu; probeRuntimeError/OSError→cpu; otherwisecuda. Khi basefrom_pretrained OOM ởauto→gccollect/emptycache và loadCPUFP32. Explicitcuda lỗi sẽraise. Policy không thaytrain GPU, không killprocessngoài.",
+    "cache_vi": "Chọn placement lúc base được load lần đầu; reuse cùng model/worker cho requests tiếp theo. Nếu server đổi device policy, _request shutdown worker do ứng dụng sở hữu rồi spawn worker mới.",
+    "inference_not_train_quantization_vi": "Base được load bằng AutoModelForCausalLM với dtype thông thường; không có NF4/BitsAndBytes trong worker. PEFT adapters được nạp is_trainable=False; model eval, requires_grad=False và inference_mode.",
+    "important_limit_vi": "AutoOOMfallback chỉ nằmquanh base-model load. Không khẳngđịnh generationOOM hoặc adapterloadOOM sẽfallbackCPU.",
+    "actual_runtime_not_measured": true
+  },
+  "shared_worker_and_concurrency": {
+    "sources": [
+      "src/mdd/demo_chat.py:79 ChatService.__init__",
+      "src/mdd/demo_chat.py:305 submit_speech",
+      "scripts/local_chat_process.py:103 _request",
+      "scripts/local_chat_worker.py:192 main",
+      "scripts/local_chat_worker.py:218 main"
+    ],
+    "process_vi": "Webserver giữjobs/HTTP; nativeTorch chạy ởchildPython local_chat_worker qua JSONL stdin/stdout. ChildhiddenwindowWindows; HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE=1, noLLMAPI.",
+    "scheduling_vi": "ChatService BoundedSemaphore1 dùngchung text/speech, busy trả409; local_chat_process._LOCK serialize toàn request tới sharedprocess; workerQueue chạygeneration trênmainthread, readerthread chỉparse/cancel,eventlocks/outputlock. Không modelparallel.",
+    "model_cache_vi": "Một base Qwen được cache. Hai PEFT adapter names: chat cho pronunciation feedback, grammar cho grammar/fluency. Request adapter dùng set_adapter; request qwen-base dùng context disable_adapter. Kiểm mtime/size/expected SHA trước reload adapter.",
+    "tts_concurrency_vi": "Voice có semaphore riêng; reply_ready cho phép TTS khi job còncorrecting/coaching. Voice không làmQwengrammar song song với Qwenreply; nó đọc replyđãcôngbố.",
+    "cancel_timeout_vi": "cancel event gửi IPC, stoppingcriteria dừngmodelgenerate; requesttimeout+90sec có thểshutdown ownedworker; workercrash/EOF báoerror nhưng webservercònavailable. Shutdown chỉownedworker vàdescendants, không processngườikhác."
+  },
+  "regeneration_after_user_confirmed_text": {
+    "sources": [
+      "src/mdd/demo_chat.py:323 reference",
+      "src/mdd/demo_chat.py:345 reference",
+      "src/mdd/demo_chat.py:392 reference",
+      "scripts/local_speech_engine.py:235 regenerate",
+      "scripts/local_speech_engine.py:287 _respond"
+    ],
+    "unchanged_vi": "Nếu chỉ khác case, spacing hoặc punctuation thì spoken_text_key không đổi: cập nhật pronunciation provenance nhưng giữ reply/voice, không sinh Qwen thêm.",
+    "changed_vi": "Server ràng buộc confirmed edit với recording job/revision, reassess từ private posterior. Chỉ khi các từ thực nói thay đổi mới xóa reply/voices cũ, giữ revision audit và history trước lượt đang sửa. Worker regenerate không decode audio, không chạy ASR/B lại; dùng user-confirmed dialogue_text cho base reply và grammar tasks.",
+    "apology_vi": "Ứngdụng cungcấp fixed Sorry for the misunderstanding khi replyregen; model-copyapology/echođượclọc. Không quy authoredapology là nội dungmodel.",
+    "privacy_vi": "poll loại keys bắt đầu bằng dấu gạch dưới; private compressed evidence không đi vào public API response."
+  },
+  "error_and_fallback_matrix": [
+    {
+      "case_vi": "ASR registry thiếu/incomplete/validationkhôngimproved",
+      "behavior_vi": "Chọn pretrainedwav2vec2-base-960h; selectedmodel trướcinference vẫnphảikiểmSHA",
+      "source": "src/mdd/demo_model_registry.py:9"
+    },
+    {
+      "case_vi": "Grammar registry chưa ready",
+      "behavior_vi": "IDqwen-base; _respond base3fieldrewritefallback. Đâyselectionfallback trướcmodelgeneration.",
+      "source": "src/mdd/demo_model_registry.py:25"
+    },
+    {
+      "case_vi": "Selectedgrammar task sinh lỗi/saiJSON/tokenlimit",
+      "behavior_vi": "Taskunavailable; cả2fail→rewriteunavailable. Không tựswitchQwenbase đểche lỗi.",
+      "source": "scripts/grammar_inference.py:14"
+    },
+    {
+      "case_vi": "Rewrite lexicalguard không antoàn",
+      "behavior_vi": "Giữrawtranscript; bỏ1hoặc2suggestions, unavailable; khôngcho trởthànhaudioref.",
+      "source": "scripts/sentence_rewrite.py:400"
+    },
+    {
+      "case_vi": "Normalization đổi từ hoặc model khôngavailable",
+      "behavior_vi": "Reject/fallbackformatrules giữlexicalsignature; dialoguekhôngđượcdùngQwenguess đểthayaudioevidence.",
+      "source": "scripts/transcript_normalization.py:106"
+    },
+    {
+      "case_vi": "Dialogueecho/policyblock",
+      "behavior_vi": "Mộtretrycontextual; nếuvẫnrỗng thìclarificationfallback hoặcconversationunavailable; rawattemptsaudit.",
+      "source": "scripts/local_speech_engine.py:335"
+    },
+    {
+      "case_vi": "Model/adapter chưaavailable hoặc checksumtamper",
+      "behavior_vi": "503trướcsubmit hoặcworkererror; khôngsilentAPI/globaltemplatefallback.",
+      "source": "src/mdd/demo_chat.py:208;:300; scripts/local_chat_worker.py:119"
+    },
+    {
+      "case_vi": "Initialdialoguegenerate exception",
+      "behavior_vi": "Initialgenerate ởline323 khôngtrylocal; exception lênworker/service thànhspeech_failed. Fallbackreply ởline375 chỉ xửlý lọc rỗng/retryfailed, khôngbao phủ mọigenerationexception.",
+      "source": "scripts/local_speech_engine.py:323; src/mdd/demo_chat.py:447"
+    },
+    {
+      "case_vi": "Coachlegacy saiEOS/schema/wordgrounding",
+      "behavior_vi": "coachingunavailable/feedback{}; khôngtemplateđểtrôngnhưmodelthànhcông. Currentassessmentpath luônskipcoach.",
+      "source": "scripts/local_speech_engine.py:27;:452"
+    },
+    {
+      "case_vi": "Calibration ineligible",
+      "behavior_vi": "Posteriorassessment abstention; khôngép thànhlỗiphone. Legacycoach khôngđượccấp substitutionevidence từ experimentalworddetection.",
+      "source": "src/mdd/chat_assessment.py:102; scripts/local_speech_engine.py:449"
+    },
+    {
+      "case_vi": "Worker crash/timeout",
+      "behavior_vi": "Báolỗiownedjob, resetownedworker; webservervẫnsống; cóthểstartworkerrequestmới.",
+      "source": "scripts/local_chat_process.py:103"
+    }
+  ],
+  "claims_to_avoid_vi": [
+    "Không viết qwen-trained dropdown đã được dùng để dialoguevoice.",
+    "Không viết mọi lượt speech đều có LoRApronunciationfeedback: hiệncoachlegacyguardskip.",
+    "Không viết grammar3fieldprompt là prompt adaptergrammar: adapter dùng2singlefieldtasks.",
+    "Không gộp completion_only với grammar_corrected/natural.",
+    "Không viết inferenceQwen chạyNF4 vì trainQLoRA.",
+    "Không viết runtime hiện luônCPU hoặc luônGPU: policyauto, actualdevice chưađoởauditnày.",
+    "Không gọi modelready/contractprobe là khẳngđịnhaccuracygrammar/phátâm.",
+    "Không mô tả cachedgrammarsuggestions/normalizedtext là gold lờiđãphátra hoặc cho chúng overwritepronunciationreference.",
+    "Không viết topicopening/lờixinlỗifixed là replydoQwensinh."
+  ]
+}

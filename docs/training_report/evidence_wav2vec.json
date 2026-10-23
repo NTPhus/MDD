@@ -1,0 +1,3173 @@
+{
+  "topic": "Bằng chứng huấn luyện wav2vec2 trong MDD, rà soát ngày 23/10/2026",
+  "language": "vi",
+  "scope": "Tổng hợp chỉ từ repository và outputs notebook; không huấn luyện lại, không sửa nguồn và không gọi dịch vụ ngoài.",
+  "executive_findings": [
+    "Có ba thí nghiệm phải tách riêng: MDD phoneme A/B/C l2arctic-v1 (test HQTV); MDD cascade l2arctic-plus-cascade-v1 A/B (test chung 900 câu, người Việt TLV); ASR chữ wav2vec2-base-960h (111 test TLV).",
+    "A/B/C cũ hoàn thành thật: 2000/400/400 optimizer updates; test cùng 150 câu HQTV, seed 42. F1 A 66,366%, B 70,855%, C 65,199%; B hơn A 4,489 và hơn C 5,655 điểm phần trăm. PER B 19,253%. Chỉ một fold/người nói test đã có artifacts.",
+    "Cascade A/B mới hoàn thành thật: 2000/400 updates. Audio metrics hiện có trên 900 test: F1 A 48,375% → B 49,300%; PER 16,849% → 16,705%. Trên TLV riêng, F1 64,804% → 69,773%; trên ba speaker NJS/TNI/ZHAA F1 giảm. Không lấy kết quả HQTV cũ làm kết quả cascade.",
+    "Notebook cascade và report/comparison.json còn là snapshot từ khi mới bắt đầu A, ghi awaiting_evaluations. Đây là báo cáo cũ: artifacts audio/A và B đã có, Qwen training xong nhưng các lượt đánh giá feedback oracle/cascade chưa tìm thấy dưới report root. Không suy diễn điểm Qwen hay end-to-end chưa có.",
+    "External SpeechOcean762 chứng tỏ hạn chế cảnh báo nhầm của B cũ: phone detection precision 11,94%, recall 88,46%, F1 21,04%; trên 179 câu cả 5 chuyên gia đều chấm đúng, B vẫn cảnh báo 173/179 câu. Rubric này khác L2-ARCTIC, không so F1 trực tiếp.",
+    "ASR ký tự hoàn thành 1223 updates/2 epochs, best step 1050 do validation WER. Test WER 43,011% → 37,928%; CER 19,197% → 16,676%. ASR cải thiện transcript không chứng minh cải thiện phát âm."
+  ],
+  "architecture": {
+    "sources": [
+      {
+        "path": "models/pretrained/wav2vec2-base/config.json"
+      },
+      {
+        "path": "src/mdd/runtime.py"
+      },
+      {
+        "path": "data/processed/l2arctic-v1/normalization.json"
+      },
+      {
+        "path": "runs/windows-notebook-seed42-A/parameter_counts.json"
+      }
+    ],
+    "mdd_checkpoint": "facebook/wav2vec2-base (local models/pretrained/wav2vec2-base)",
+    "initialization": "Checkpoint backbone tự giám sát (architecture gốc Wav2Vec2ForPreTraining), chuyển Wav2Vec2ForCTC với phoneme head ngẫu nhiên mới. A đã train source mới là baseline MDD; BASE chưa có năng lực phoneme MDD để so accuracy trước A.",
+    "base_revision": "0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8",
+    "sample_rate_hz": 16000,
+    "feature_encoder_layers": 7,
+    "conv_channels": [
+      512,
+      512,
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "conv_kernel": [
+      10,
+      3,
+      3,
+      3,
+      3,
+      2,
+      2
+    ],
+    "conv_stride": [
+      5,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "transformer_layers": 12,
+    "hidden_size": 768,
+    "attention_heads": 12,
+    "intermediate_size": 3072,
+    "vocab_size": 83,
+    "vocab_policy": "40 phones ARPAbet + 40 variants có * + [PAD] CTC blank + [UNK] + err = 83; khai báo trước, không fit từ nhãn test.",
+    "total_parameters": 94435539,
+    "trainable_parameters": 90235091,
+    "frozen": "CNN feature encoder; Transformer và phone CTC head cập nhật.",
+    "objective": "CTC loss mean trên perceived_phones từ nhãn thủ công, không phải canonical phones. Không crop audio trong khi giữ target đầy đủ. Padding label -100.",
+    "decoder": "greedy CTC, gộp token liên tiếp và bỏ blank; không beam search hay language model.",
+    "normalization": "Bỏ silence/sp/spn, bỏ stress 0/1/2, giữ marker lệch âm *, giữ raw label để audit; explicit human s/d/a events vẫn được giữ sau normalize.",
+    "alignment": "Audio→phoneme dự đoán chỉ dùng audio. Sau decode, Levenshtein canonical→predicted tạo lỗi. Perceived/gold chỉ train/chấm; không dùng gold để decode."
+  },
+  "training_method": {
+    "sources": [
+      {
+        "path": "src/mdd/runtime.py"
+      },
+      {
+        "path": "scripts/train_mdd.py"
+      },
+      {
+        "path": "notebooks/train_mdd_colab.ipynb",
+        "cell_index_zero_based": 8,
+        "cell_number_one_based": 9
+      },
+      {
+        "path": "notebooks/mdd_local_demo_comparison.ipynb",
+        "cell_index_zero_based": 41,
+        "cell_number_one_based": 42
+      }
+    ],
+    "stages": {
+      "A": "Lấy backbone BASE và phone head mới, train source perceived phones, chọn checkpoint F1 cao nhất trên source validation.",
+      "B": "Khởi tạo weights từ best A đã train xong, optimizer mới; sample target train và source replay ngẫu nhiên với xác suất source 0,5. Chọn best bằng Vietnamese validation F1.",
+      "C": "Khởi tạo cùng weights best A và optimizer mới như B, chỉ source với cùng số updates/LR/batch; chọn bằng cùng Vietnamese validation như B. C cũ đã có, cascade C mới chỉ có config, không thấy run."
+    },
+    "optimizer": "torch.optim.AdamW, weight_decay 0,01; clip grad norm 1,0; hai nhóm LR backbone/head; LR hằng theo training_log, runtime không thêm scheduler/warmup cho phoneme MDD.",
+    "effective_batch": "batch vật lý 1 × gradient accumulation 4 = 4 mẫu/update. Lấy mẫu có hoàn lại; 8000 seen samples ở A không phải 8000 câu duy nhất và số bước không phải epochs.",
+    "memory": "CUDA fp16 với GradScaler; CNN freeze; gradient checkpointing use_reentrant=False; eager attention; train A/B/C lần lượt trên RTX 3050 Laptop 4 GiB.",
+    "selection": "Validation F1 chọn best_checkpoint; checkpoint cuối kèm optimizer/RNG dành cho resume. Best có thể xuất hiện trước update cuối.",
+    "overflow": "FP16 overflow được retry trên cùng sample/RNG, không tính là optimizer update thành công; log amp_overflows riêng.",
+    "artifacts": "config, environment, protocol/hash, initialization, parameter_counts, data_selection, training/validation log, checkpoint cuối/best, metrics và predictions từng câu.",
+    "reproducibility": "Seed 42, hash audio/model/protocol; cố định cuDNN. Không bảo đảm bitwise giữa hardware. Test không chọn checkpoint.",
+    "config_vs_runs": "Recipe source.json/adapt_vi.json/control.json là preset Colab (checkpoint 250/100/100); run Windows thực tế dùng windows_* và effective config checkpoint_every=50. Những giá trị weight_decay=0,01, max_grad_norm=1,0 do DEFAULTS nhập vào và xuất trong runs/*/config.json."
+  },
+  "old_mdd_experiment": {
+    "protocol": {
+      "protocol_id": "l2arctic-v1",
+      "dataset": "L2-ARCTIC v5.0 scripted manual annotations",
+      "manifest_sha256": "a67ebe69c64e3aa5c832129d7784c2fcda95fb07152bd374a4a2f485aed858f6",
+      "splits_sha256": "3a219f95615538fb2421102782c7d6fc0ad700ca30f43fb6a9ade2922025a8c6",
+      "utterance_count": 3599,
+      "vietnamese_utterance_count": 600,
+      "speaker_count": 24,
+      "counts_by_speaker": {
+        "ABA": 150,
+        "SKA": 150,
+        "YBAA": 149,
+        "ZHAA": 150,
+        "BWC": 150,
+        "LXC": 150,
+        "NCC": 150,
+        "TXHC": 150,
+        "ASI": 150,
+        "RRBI": 150,
+        "SVBI": 150,
+        "TNI": 150,
+        "HJK": 150,
+        "HKK": 150,
+        "YDCK": 150,
+        "YKWK": 150,
+        "EBVS": 150,
+        "ERMS": 150,
+        "MBMPS": 150,
+        "NJS": 150,
+        "HQTV": 150,
+        "PNV": 150,
+        "THV": 150,
+        "TLV": 150
+      },
+      "source_train_count": 2249,
+      "source_validation_count": 750,
+      "total_duration_hours": 3.66345853489544,
+      "scope": "Source labels and file hashes only; parsed phoneme targets and model predictions are not generated here."
+    },
+    "split_summary": {
+      "source_train": 2249,
+      "source_validation": 750,
+      "vi_train": 300,
+      "vi_validation": 150,
+      "vi_test": 150,
+      "fold1_train_speakers": [
+        "THV",
+        "TLV"
+      ],
+      "fold1_validation_speakers": [
+        "PNV"
+      ],
+      "fold1_test_speakers": [
+        "HQTV"
+      ]
+    },
+    "sources": [
+      {
+        "path": "data/protocol/l2arctic-v1/splits.json"
+      },
+      {
+        "path": "notebooks/mdd_local_demo_comparison.ipynb",
+        "cell_index_zero_based": 12,
+        "cell_number_one_based": 13
+      },
+      {
+        "path": "notebooks/mdd_local_demo_comparison.ipynb",
+        "cell_index_zero_based": 54,
+        "cell_number_one_based": 55
+      },
+      {
+        "path": "notebooks/mdd_local_demo_comparison.ipynb",
+        "cell_index_zero_based": 56,
+        "cell_number_one_based": 57
+      }
+    ],
+    "runs": {
+      "A": {
+        "run_dir": "runs/windows-notebook-seed42-A",
+        "config": {
+          "stage": "A",
+          "purpose": "scientific_training",
+          "seed": 42,
+          "model_path": "models/pretrained/wav2vec2-base",
+          "annotations": "data/processed/l2arctic-v1/annotations.jsonl",
+          "vocab": "data/processed/l2arctic-v1/vocab.json",
+          "normalization": "data/processed/l2arctic-v1/normalization.json",
+          "protocol_dir": "data/protocol/l2arctic-v1",
+          "device": "cuda",
+          "mixed_precision": "fp16",
+          "cpu_threads": 4,
+          "batch_size": 1,
+          "gradient_accumulation_steps": 4,
+          "max_steps": 2000,
+          "eval_every": 250,
+          "checkpoint_every": 50,
+          "backbone_learning_rate": 3e-05,
+          "head_learning_rate": 0.0003,
+          "weight_decay": 0.01,
+          "max_grad_norm": 1.0,
+          "freeze_feature_encoder": true,
+          "freeze_backbone": false,
+          "gradient_checkpointing": true,
+          "source_replay_fraction": 0.5,
+          "fold": 1,
+          "max_train_samples": null,
+          "max_eval_samples": null,
+          "max_audio_seconds": null,
+          "selection_metric": "f1",
+          "save_optimizer": true
+        },
+        "completed": {
+          "status": "completed",
+          "optimizer_steps": 2000,
+          "purpose": "scientific_training",
+          "best_validation_value": 0.4744174265450861,
+          "seen_samples": {
+            "source": 8000,
+            "target": 0
+          },
+          "seen_audio_seconds": {
+            "source": 29166.58793650783,
+            "target": 0.0
+          },
+          "elapsed_seconds_this_session": 1228.405999999999,
+          "test_evaluated": false,
+          "created_at": "2026-10-20T15:08:24.420024+00:00"
+        },
+        "parameter_counts": {
+          "total": 94435539,
+          "trainable": 90235091
+        },
+        "best_checkpoint": {
+          "stage": "A",
+          "step": 2000,
+          "best_validation_value": 0.4744174265450861,
+          "selection_metric": "f1",
+          "decoder": "greedy_ctc",
+          "sample_rate": 16000
+        },
+        "data_selection": {
+          "source_train": {
+            "requested_count": 2249,
+            "selected_count": 2249
+          },
+          "target_train": null,
+          "validation": {
+            "requested_count": 750,
+            "selected_count": 750
+          },
+          "test_used_for_training": false
+        },
+        "training_log.jsonl": {
+          "count": 2000,
+          "first": {
+            "step": 1,
+            "loss": 21.649828910827637,
+            "gradient_norm": 24.963396072387695,
+            "elapsed_seconds": 1.0939999999991414,
+            "seen_samples": {
+              "source": 4,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 15.523242630385486,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 3e-05,
+              "phone_head": 0.0003
+            },
+            "created_at": "2026-10-20T14:47:57.101572+00:00"
+          },
+          "last": {
+            "step": 2000,
+            "loss": 0.49650027602910995,
+            "gradient_norm": 5.218810081481934,
+            "elapsed_seconds": 1205.7969999999987,
+            "seen_samples": {
+              "source": 8000,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 29166.58793650783,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 3e-05,
+              "phone_head": 0.0003
+            },
+            "created_at": "2026-10-20T15:08:01.808196+00:00"
+          }
+        },
+        "validation_log.jsonl": {
+          "count": 8,
+          "first": {
+            "step": 250,
+            "metrics": {
+              "precision": 0.1338391992250565,
+              "recall": 0.9244494006133259,
+              "f1": 0.23382575891125762,
+              "far": 0.0755505993866741,
+              "frr": 1.0,
+              "der": 0.8785670916818458,
+              "per": 1.0,
+              "word_precision": 0.38728813559322034,
+              "word_recall": 1.0,
+              "word_f1": 0.5583384239462431
+            },
+            "best_value": 0.23382575891125762
+          },
+          "last": {
+            "step": 2000,
+            "metrics": {
+              "precision": 0.4346716175446739,
+              "recall": 0.522163367716755,
+              "f1": 0.4744174265450861,
+              "far": 0.4778366322832451,
+              "frr": 0.11175849887599211,
+              "der": 0.3720430107526882,
+              "per": 0.18493122895281372,
+              "word_precision": 0.6205266711681297,
+              "word_recall": 0.6703136396790663,
+              "word_f1": 0.6444600280504909
+            },
+            "best_value": 0.4744174265450861
+          },
+          "all": [
+            {
+              "step": 250,
+              "metrics": {
+                "precision": 0.1338391992250565,
+                "recall": 0.9244494006133259,
+                "f1": 0.23382575891125762,
+                "far": 0.0755505993866741,
+                "frr": 1.0,
+                "der": 0.8785670916818458,
+                "per": 1.0,
+                "word_precision": 0.38728813559322034,
+                "word_recall": 1.0,
+                "word_f1": 0.5583384239462431
+              },
+              "best_value": 0.23382575891125762
+            },
+            {
+              "step": 500,
+              "metrics": {
+                "precision": 0.22913521673495796,
+                "recall": 0.5924170616113744,
+                "f1": 0.33045641862996655,
+                "far": 0.4075829383886256,
+                "frr": 0.3314786479343441,
+                "der": 0.6619183285849952,
+                "per": 0.3892157260518522,
+                "word_precision": 0.45208208806535166,
+                "word_recall": 0.8274981765134938,
+                "word_f1": 0.584718464115449
+              },
+              "best_value": 0.33045641862996655
+            },
+            {
+              "step": 750,
+              "metrics": {
+                "precision": 0.3719698512935425,
+                "recall": 0.5090604962364093,
+                "f1": 0.42984934086629,
+                "far": 0.49093950376359075,
+                "frr": 0.14076982786174147,
+                "der": 0.3931529541689674,
+                "per": 0.21158761715421756,
+                "word_precision": 0.572106824925816,
+                "word_recall": 0.7031363967906638,
+                "word_f1": 0.6308900523560209
+              },
+              "best_value": 0.42984934086629
+            },
+            {
+              "step": 1000,
+              "metrics": {
+                "precision": 0.39909194097616346,
+                "recall": 0.4901031502648453,
+                "f1": 0.43993993993993996,
+                "far": 0.5098968497351547,
+                "frr": 0.12136634571297569,
+                "der": 0.4045845272206304,
+                "per": 0.19815799083052704,
+                "word_precision": 0.596980636691828,
+                "word_recall": 0.6633843909555069,
+                "word_f1": 0.6284332354465365
+              },
+              "best_value": 0.43993993993993996
+            },
+            {
+              "step": 1250,
+              "metrics": {
+                "precision": 0.40831530881999517,
+                "recall": 0.4736548647895177,
+                "f1": 0.4385647909137842,
+                "far": 0.5263451352104823,
+                "frr": 0.11290988305434534,
+                "der": 0.3973902728351127,
+                "per": 0.1904491418833935,
+                "word_precision": 0.6102761272282419,
+                "word_recall": 0.6367614879649891,
+                "word_f1": 0.6232375513117973
+              },
+              "best_value": 0.43993993993993996
+            },
+            {
+              "step": 1500,
+              "metrics": {
+                "precision": 0.4096633844744676,
+                "recall": 0.4987454697518818,
+                "f1": 0.44983656022127233,
+                "far": 0.5012545302481182,
+                "frr": 0.11802408094126264,
+                "der": 0.3704954954954955,
+                "per": 0.19138231833488864,
+                "word_precision": 0.6031375166889186,
+                "word_recall": 0.6590080233406272,
+                "word_f1": 0.6298361798536075
+              },
+              "best_value": 0.44983656022127233
+            },
+            {
+              "step": 1750,
+              "metrics": {
+                "precision": 0.40843621399176955,
+                "recall": 0.4427097853359353,
+                "f1": 0.4248829431438127,
+                "far": 0.5572902146640647,
+                "frr": 0.10500844633155275,
+                "der": 0.3519340519974635,
+                "per": 0.1846066458392502,
+                "word_precision": 0.613798275215598,
+                "word_recall": 0.5970094821298323,
+                "word_f1": 0.6052874838232576
+              },
+              "best_value": 0.44983656022127233
+            },
+            {
+              "step": 2000,
+              "metrics": {
+                "precision": 0.4346716175446739,
+                "recall": 0.522163367716755,
+                "f1": 0.4744174265450861,
+                "far": 0.4778366322832451,
+                "frr": 0.11175849887599211,
+                "der": 0.3720430107526882,
+                "per": 0.18493122895281372,
+                "word_precision": 0.6205266711681297,
+                "word_recall": 0.6703136396790663,
+                "word_f1": 0.6444600280504909
+              },
+              "best_value": 0.4744174265450861
+            }
+          ]
+        }
+      },
+      "B": {
+        "run_dir": "runs/windows-notebook-seed42-B-fold1",
+        "config": {
+          "stage": "B",
+          "purpose": "scientific_training",
+          "seed": 42,
+          "model_path": "models/pretrained/wav2vec2-base",
+          "annotations": "data/processed/l2arctic-v1/annotations.jsonl",
+          "vocab": "data/processed/l2arctic-v1/vocab.json",
+          "normalization": "data/processed/l2arctic-v1/normalization.json",
+          "protocol_dir": "data/protocol/l2arctic-v1",
+          "device": "cuda",
+          "mixed_precision": "fp16",
+          "cpu_threads": 4,
+          "batch_size": 1,
+          "gradient_accumulation_steps": 4,
+          "max_steps": 400,
+          "eval_every": 100,
+          "checkpoint_every": 50,
+          "backbone_learning_rate": 1e-05,
+          "head_learning_rate": 0.0001,
+          "weight_decay": 0.01,
+          "max_grad_norm": 1.0,
+          "freeze_feature_encoder": true,
+          "freeze_backbone": false,
+          "gradient_checkpointing": true,
+          "source_replay_fraction": 0.5,
+          "fold": 1,
+          "max_train_samples": null,
+          "max_eval_samples": null,
+          "max_audio_seconds": null,
+          "selection_metric": "f1",
+          "save_optimizer": true
+        },
+        "completed": {
+          "status": "completed",
+          "optimizer_steps": 400,
+          "purpose": "scientific_training",
+          "best_validation_value": 0.6072261072261073,
+          "seen_samples": {
+            "source": 781,
+            "target": 819
+          },
+          "seen_audio_seconds": {
+            "source": 2866.788571428569,
+            "target": 3258.805328798183
+          },
+          "elapsed_seconds_this_session": 244.98500000000058,
+          "test_evaluated": false,
+          "created_at": "2026-10-20T15:12:40.973248+00:00"
+        },
+        "parameter_counts": {
+          "total": 94435539,
+          "trainable": 90235091
+        },
+        "best_checkpoint": {
+          "stage": "B",
+          "step": 300,
+          "best_validation_value": 0.6072261072261073,
+          "selection_metric": "f1",
+          "decoder": "greedy_ctc",
+          "sample_rate": 16000
+        },
+        "data_selection": {
+          "source_train": {
+            "requested_count": 2249,
+            "selected_count": 2249
+          },
+          "target_train": {
+            "requested_count": 300,
+            "selected_count": 300
+          },
+          "validation": {
+            "requested_count": 150,
+            "selected_count": 150
+          },
+          "test_used_for_training": false
+        },
+        "training_log.jsonl": {
+          "count": 400,
+          "first": {
+            "step": 1,
+            "loss": 0.4784855470061302,
+            "gradient_norm": 4.46457576751709,
+            "elapsed_seconds": 1.110000000000582,
+            "seen_samples": {
+              "source": 4,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 18.281065759637187,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-20T15:08:37.110744+00:00"
+          },
+          "last": {
+            "step": 400,
+            "loss": 0.6895728334784508,
+            "gradient_norm": 8.196905136108398,
+            "elapsed_seconds": 238.71900000000096,
+            "seen_samples": {
+              "source": 781,
+              "target": 819
+            },
+            "seen_audio_seconds": {
+              "source": 2866.788571428569,
+              "target": 3258.805328798183
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-20T15:12:34.711302+00:00"
+          }
+        },
+        "validation_log.jsonl": {
+          "count": 4,
+          "first": {
+            "step": 100,
+            "metrics": {
+              "precision": 0.6058673469387755,
+              "recall": 0.5319148936170213,
+              "f1": 0.5664877757901013,
+              "far": 0.46808510638297873,
+              "frr": 0.07332700522069292,
+              "der": 0.2926315789473684,
+              "per": 0.166631951676734,
+              "word_precision": 0.7615780445969125,
+              "word_recall": 0.6558345642540621,
+              "word_f1": 0.7047619047619048
+            },
+            "best_value": 0.5664877757901013
+          },
+          "last": {
+            "step": 400,
+            "metrics": {
+              "precision": 0.6136950904392765,
+              "recall": 0.5319148936170213,
+              "f1": 0.5698860227954409,
+              "far": 0.46808510638297873,
+              "frr": 0.07098765432098765,
+              "der": 0.26526315789473687,
+              "per": 0.1628827327640075,
+              "word_precision": 0.773037542662116,
+              "word_recall": 0.6691285081240768,
+              "word_f1": 0.7173396674584323
+            },
+            "best_value": 0.6072261072261073
+          },
+          "all": [
+            {
+              "step": 100,
+              "metrics": {
+                "precision": 0.6058673469387755,
+                "recall": 0.5319148936170213,
+                "f1": 0.5664877757901013,
+                "far": 0.46808510638297873,
+                "frr": 0.07332700522069292,
+                "der": 0.2926315789473684,
+                "per": 0.166631951676734,
+                "word_precision": 0.7615780445969125,
+                "word_recall": 0.6558345642540621,
+                "word_f1": 0.7047619047619048
+              },
+              "best_value": 0.5664877757901013
+            },
+            {
+              "step": 200,
+              "metrics": {
+                "precision": 0.6296296296296297,
+                "recall": 0.5520716685330347,
+                "f1": 0.5883054892601431,
+                "far": 0.4479283314669653,
+                "frr": 0.06889997624138751,
+                "der": 0.2880324543610548,
+                "per": 0.15996667360966466,
+                "word_precision": 0.7781629116117851,
+                "word_recall": 0.6632200886262924,
+                "word_f1": 0.7161084529505582
+              },
+              "best_value": 0.5883054892601431
+            },
+            {
+              "step": 300,
+              "metrics": {
+                "precision": 0.6330498177399757,
+                "recall": 0.5834266517357223,
+                "f1": 0.6072261072261073,
+                "far": 0.4165733482642777,
+                "frr": 0.07204198473282443,
+                "der": 0.2783109404990403,
+                "per": 0.15746719433451364,
+                "word_precision": 0.760586319218241,
+                "word_recall": 0.689807976366322,
+                "word_f1": 0.7234701781564679
+              },
+              "best_value": 0.6072261072261073
+            },
+            {
+              "step": 400,
+              "metrics": {
+                "precision": 0.6136950904392765,
+                "recall": 0.5319148936170213,
+                "f1": 0.5698860227954409,
+                "far": 0.46808510638297873,
+                "frr": 0.07098765432098765,
+                "der": 0.26526315789473687,
+                "per": 0.1628827327640075,
+                "word_precision": 0.773037542662116,
+                "word_recall": 0.6691285081240768,
+                "word_f1": 0.7173396674584323
+              },
+              "best_value": 0.6072261072261073
+            }
+          ]
+        }
+      },
+      "C": {
+        "run_dir": "runs/windows-notebook-seed42-C-fold1",
+        "config": {
+          "stage": "C",
+          "purpose": "scientific_training",
+          "seed": 42,
+          "model_path": "models/pretrained/wav2vec2-base",
+          "annotations": "data/processed/l2arctic-v1/annotations.jsonl",
+          "vocab": "data/processed/l2arctic-v1/vocab.json",
+          "normalization": "data/processed/l2arctic-v1/normalization.json",
+          "protocol_dir": "data/protocol/l2arctic-v1",
+          "device": "cuda",
+          "mixed_precision": "fp16",
+          "cpu_threads": 4,
+          "batch_size": 1,
+          "gradient_accumulation_steps": 4,
+          "max_steps": 400,
+          "eval_every": 100,
+          "checkpoint_every": 50,
+          "backbone_learning_rate": 1e-05,
+          "head_learning_rate": 0.0001,
+          "weight_decay": 0.01,
+          "max_grad_norm": 1.0,
+          "freeze_feature_encoder": true,
+          "freeze_backbone": false,
+          "gradient_checkpointing": true,
+          "source_replay_fraction": 0.5,
+          "fold": 1,
+          "max_train_samples": null,
+          "max_eval_samples": null,
+          "max_audio_seconds": null,
+          "selection_metric": "f1",
+          "save_optimizer": true
+        },
+        "completed": {
+          "status": "completed",
+          "optimizer_steps": 400,
+          "purpose": "scientific_training",
+          "best_validation_value": 0.5132743362831859,
+          "seen_samples": {
+            "source": 1600,
+            "target": 0
+          },
+          "seen_audio_seconds": {
+            "source": 5818.485623582764,
+            "target": 0.0
+          },
+          "elapsed_seconds_this_session": 240.95299999999952,
+          "test_evaluated": false,
+          "created_at": "2026-10-20T15:16:50.779162+00:00"
+        },
+        "parameter_counts": {
+          "total": 94435539,
+          "trainable": 90235091
+        },
+        "best_checkpoint": {
+          "stage": "C",
+          "step": 300,
+          "best_validation_value": 0.5132743362831859,
+          "selection_metric": "f1",
+          "decoder": "greedy_ctc",
+          "sample_rate": 16000
+        },
+        "data_selection": {
+          "source_train": {
+            "requested_count": 2249,
+            "selected_count": 2249
+          },
+          "target_train": null,
+          "validation": {
+            "requested_count": 150,
+            "selected_count": 150
+          },
+          "test_used_for_training": false
+        },
+        "training_log.jsonl": {
+          "count": 400,
+          "first": {
+            "step": 1,
+            "loss": 0.4086071811616421,
+            "gradient_norm": 3.9633898735046387,
+            "elapsed_seconds": 1.2189999999991414,
+            "seen_samples": {
+              "source": 4,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 15.523242630385486,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-20T15:12:51.049362+00:00"
+          },
+          "last": {
+            "step": 400,
+            "loss": 0.5141952559351921,
+            "gradient_norm": 3.932878255844116,
+            "elapsed_seconds": 234.76599999999962,
+            "seen_samples": {
+              "source": 1600,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 5818.485623582764,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-20T15:16:44.592671+00:00"
+          }
+        },
+        "validation_log.jsonl": {
+          "count": 4,
+          "first": {
+            "step": 100,
+            "metrics": {
+              "precision": 0.5707692307692308,
+              "recall": 0.4154535274356103,
+              "f1": 0.48088139987038236,
+              "far": 0.5845464725643897,
+              "frr": 0.06608242539081004,
+              "der": 0.32075471698113206,
+              "per": 0.18017079775046865,
+              "word_precision": 0.7608247422680412,
+              "word_recall": 0.5450516986706057,
+              "word_f1": 0.6351118760757315
+            },
+            "best_value": 0.48088139987038236
+          },
+          "last": {
+            "step": 400,
+            "metrics": {
+              "precision": 0.5865102639296188,
+              "recall": 0.4479283314669653,
+              "f1": 0.5079365079365079,
+              "far": 0.5520716685330347,
+              "frr": 0.06701520912547529,
+              "der": 0.3025,
+              "per": 0.17433867944178297,
+              "word_precision": 0.7379576107899807,
+              "word_recall": 0.5657311669128509,
+              "word_f1": 0.6404682274247492
+            },
+            "best_value": 0.5132743362831859
+          },
+          "all": [
+            {
+              "step": 100,
+              "metrics": {
+                "precision": 0.5707692307692308,
+                "recall": 0.4154535274356103,
+                "f1": 0.48088139987038236,
+                "far": 0.5845464725643897,
+                "frr": 0.06608242539081004,
+                "der": 0.32075471698113206,
+                "per": 0.18017079775046865,
+                "word_precision": 0.7608247422680412,
+                "word_recall": 0.5450516986706057,
+                "word_f1": 0.6351118760757315
+              },
+              "best_value": 0.48088139987038236
+            },
+            {
+              "step": 200,
+              "metrics": {
+                "precision": 0.5694444444444444,
+                "recall": 0.45912653975363943,
+                "f1": 0.5083694978301302,
+                "far": 0.5408734602463606,
+                "frr": 0.07332071901608325,
+                "der": 0.3170731707317073,
+                "per": 0.179337637992085,
+                "word_precision": 0.7481203007518797,
+                "word_recall": 0.5878877400295421,
+                "word_f1": 0.6583953680727874
+              },
+              "best_value": 0.5083694978301302
+            },
+            {
+              "step": 300,
+              "metrics": {
+                "precision": 0.5892597968069666,
+                "recall": 0.45464725643896975,
+                "f1": 0.5132743362831859,
+                "far": 0.5453527435610303,
+                "frr": 0.06744518589132507,
+                "der": 0.3251231527093596,
+                "per": 0.17642157883774215,
+                "word_precision": 0.7461538461538462,
+                "word_recall": 0.5731166912850812,
+                "word_f1": 0.6482873851294904
+              },
+              "best_value": 0.5132743362831859
+            },
+            {
+              "step": 400,
+              "metrics": {
+                "precision": 0.5865102639296188,
+                "recall": 0.4479283314669653,
+                "f1": 0.5079365079365079,
+                "far": 0.5520716685330347,
+                "frr": 0.06701520912547529,
+                "der": 0.3025,
+                "per": 0.17433867944178297,
+                "word_precision": 0.7379576107899807,
+                "word_recall": 0.5657311669128509,
+                "word_f1": 0.6404682274247492
+              },
+              "best_value": 0.5132743362831859
+            }
+          ]
+        }
+      }
+    },
+    "test_results": {
+      "A": {
+        "source": "runs/windows-notebook-seed42-A-test-fold1/metrics.json",
+        "scoring_protocol": "canonical-phone-and-ordered-insertion-slots-v1",
+        "counts": {
+          "UTTERANCES": 150,
+          "TA": 3390,
+          "FR": 420,
+          "FA": 475,
+          "TR": 883,
+          "CD": 567,
+          "DE": 315,
+          "DIAG_EXCLUDED": 1,
+          "PER_S": 687,
+          "PER_D": 147,
+          "PER_I": 157,
+          "PER_N": 4633,
+          "WORD_TP": 703,
+          "WORD_FP": 117,
+          "WORD_FN": 213,
+          "WORD_TN": 390,
+          "WORD_SCORED_UTTERANCES": 150,
+          "WORD_UNMAPPED_EVENTS": 0
+        },
+        "metrics": {
+          "precision": 0.6776669224865695,
+          "recall": 0.6502209131075111,
+          "f1": 0.6636602780909433,
+          "far": 0.34977908689248893,
+          "frr": 0.11023622047244094,
+          "der": 0.35714285714285715,
+          "per": 0.2139002805957263,
+          "word_precision": 0.8573170731707317,
+          "word_recall": 0.767467248908297,
+          "word_f1": 0.8099078341013825
+        },
+        "model_step": 2000,
+        "utterance_count": 150,
+        "split": "test",
+        "fold": 1,
+        "stage": "A",
+        "speaker_macro_f1": 0.6636602780909433,
+        "limited_technical_subset": false,
+        "by_speaker": {
+          "HQTV": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3390,
+              "FR": 420,
+              "FA": 475,
+              "TR": 883,
+              "CD": 567,
+              "DE": 315,
+              "DIAG_EXCLUDED": 1,
+              "PER_S": 687,
+              "PER_D": 147,
+              "PER_I": 157,
+              "PER_N": 4633,
+              "WORD_TP": 703,
+              "WORD_FP": 117,
+              "WORD_FN": 213,
+              "WORD_TN": 390,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.6776669224865695,
+              "recall": 0.6502209131075111,
+              "f1": 0.6636602780909433,
+              "far": 0.34977908689248893,
+              "frr": 0.11023622047244094,
+              "der": 0.35714285714285715,
+              "per": 0.2139002805957263,
+              "word_precision": 0.8573170731707317,
+              "word_recall": 0.767467248908297,
+              "word_f1": 0.8099078341013825
+            }
+          }
+        }
+      },
+      "B": {
+        "source": "runs/windows-notebook-seed42-B-fold1-test-fold1/metrics.json",
+        "scoring_protocol": "canonical-phone-and-ordered-insertion-slots-v1",
+        "counts": {
+          "UTTERANCES": 150,
+          "TA": 3391,
+          "FR": 410,
+          "FA": 388,
+          "TR": 970,
+          "CD": 632,
+          "DE": 337,
+          "DIAG_EXCLUDED": 1,
+          "PER_S": 617,
+          "PER_D": 164,
+          "PER_I": 111,
+          "PER_N": 4633,
+          "WORD_TP": 760,
+          "WORD_FP": 116,
+          "WORD_FN": 156,
+          "WORD_TN": 391,
+          "WORD_SCORED_UTTERANCES": 150,
+          "WORD_UNMAPPED_EVENTS": 0
+        },
+        "metrics": {
+          "precision": 0.7028985507246377,
+          "recall": 0.7142857142857143,
+          "f1": 0.7085463842220598,
+          "far": 0.2857142857142857,
+          "frr": 0.10786635096027361,
+          "der": 0.347781217750258,
+          "per": 0.192531836822793,
+          "word_precision": 0.867579908675799,
+          "word_recall": 0.8296943231441049,
+          "word_f1": 0.8482142857142857
+        },
+        "model_step": 300,
+        "utterance_count": 150,
+        "split": "test",
+        "fold": 1,
+        "stage": "B",
+        "speaker_macro_f1": 0.7085463842220598,
+        "limited_technical_subset": false,
+        "by_speaker": {
+          "HQTV": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3391,
+              "FR": 410,
+              "FA": 388,
+              "TR": 970,
+              "CD": 632,
+              "DE": 337,
+              "DIAG_EXCLUDED": 1,
+              "PER_S": 617,
+              "PER_D": 164,
+              "PER_I": 111,
+              "PER_N": 4633,
+              "WORD_TP": 760,
+              "WORD_FP": 116,
+              "WORD_FN": 156,
+              "WORD_TN": 391,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.7028985507246377,
+              "recall": 0.7142857142857143,
+              "f1": 0.7085463842220598,
+              "far": 0.2857142857142857,
+              "frr": 0.10786635096027361,
+              "der": 0.347781217750258,
+              "per": 0.192531836822793,
+              "word_precision": 0.867579908675799,
+              "word_recall": 0.8296943231441049,
+              "word_f1": 0.8482142857142857
+            }
+          }
+        }
+      },
+      "C": {
+        "source": "runs/windows-notebook-seed42-C-fold1-test-fold1/metrics.json",
+        "scoring_protocol": "canonical-phone-and-ordered-insertion-slots-v1",
+        "counts": {
+          "UTTERANCES": 150,
+          "TA": 3379,
+          "FR": 418,
+          "FA": 499,
+          "TR": 859,
+          "CD": 533,
+          "DE": 325,
+          "DIAG_EXCLUDED": 1,
+          "PER_S": 692,
+          "PER_D": 177,
+          "PER_I": 150,
+          "PER_N": 4633,
+          "WORD_TP": 681,
+          "WORD_FP": 109,
+          "WORD_FN": 235,
+          "WORD_TN": 398,
+          "WORD_SCORED_UTTERANCES": 150,
+          "WORD_UNMAPPED_EVENTS": 0
+        },
+        "metrics": {
+          "precision": 0.6726703210649961,
+          "recall": 0.6325478645066274,
+          "f1": 0.6519924098671727,
+          "far": 0.36745213549337263,
+          "frr": 0.11008691071898867,
+          "der": 0.3787878787878788,
+          "per": 0.21994388085473776,
+          "word_precision": 0.8620253164556962,
+          "word_recall": 0.7434497816593887,
+          "word_f1": 0.798358733880422
+        },
+        "model_step": 300,
+        "utterance_count": 150,
+        "split": "test",
+        "fold": 1,
+        "stage": "C",
+        "speaker_macro_f1": 0.6519924098671727,
+        "limited_technical_subset": false,
+        "by_speaker": {
+          "HQTV": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3379,
+              "FR": 418,
+              "FA": 499,
+              "TR": 859,
+              "CD": 533,
+              "DE": 325,
+              "DIAG_EXCLUDED": 1,
+              "PER_S": 692,
+              "PER_D": 177,
+              "PER_I": 150,
+              "PER_N": 4633,
+              "WORD_TP": 681,
+              "WORD_FP": 109,
+              "WORD_FN": 235,
+              "WORD_TN": 398,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.6726703210649961,
+              "recall": 0.6325478645066274,
+              "f1": 0.6519924098671727,
+              "far": 0.36745213549337263,
+              "frr": 0.11008691071898867,
+              "der": 0.3787878787878788,
+              "per": 0.21994388085473776,
+              "word_precision": 0.8620253164556962,
+              "word_recall": 0.7434497816593887,
+              "word_f1": 0.798358733880422
+            }
+          }
+        }
+      }
+    },
+    "caveats": [
+      "Test là 150 câu của HQTV trong fold 1, không phải trung bình 4 folds. Không thấy scientific B/C fold 2–4 run hoàn tất trong runs.",
+      "3.599 câu có manual labels thuộc 24 speakers, 6 native languages; 600 câu người Việt. Speaker/audio disjoint nhưng câu đọc trùng giữa speakers. Kết luận cho người nói mới trong miền câu đã học.",
+      "F1 validation source của A 47,44% và validation Việt của B 60,72% có tập chấm khác nhau; không coi đó là trực tiếp trước/sau trên cùng tập. Dùng test chung để so A/B/C."
+    ]
+  },
+  "cascade_mdd_experiment": {
+    "sources": [
+      {
+        "path": "notebooks/mdd_cascade_training_comparison.ipynb",
+        "cell_index_zero_based": 4,
+        "cell_number_one_based": 5
+      },
+      {
+        "path": "notebooks/mdd_cascade_training_comparison.ipynb",
+        "cell_index_zero_based": 5,
+        "cell_number_one_based": 6
+      },
+      {
+        "path": "notebooks/mdd_cascade_training_comparison.ipynb",
+        "cell_index_zero_based": 12,
+        "cell_number_one_based": 13
+      },
+      {
+        "path": "data/generated/cascade-l2arctic-plus-seed42/data_readiness.json"
+      }
+    ],
+    "protocol": {
+      "protocol_id": "l2arctic-plus-cascade-v1",
+      "dataset": "L2-ARCTIC v5.0 scripted manual annotations",
+      "manifest_sha256": "a67ebe69c64e3aa5c832129d7784c2fcda95fb07152bd374a4a2f485aed858f6",
+      "splits_sha256": "a30deae1afdee02e103408d5e724617e1d3d26e0a642d4e0771a1849b0840fdf",
+      "utterance_count": 3599,
+      "vietnamese_utterance_count": 600,
+      "speaker_count": 24,
+      "counts_by_speaker": {
+        "ABA": 150,
+        "SKA": 150,
+        "YBAA": 149,
+        "ZHAA": 150,
+        "BWC": 150,
+        "LXC": 150,
+        "NCC": 150,
+        "TXHC": 150,
+        "ASI": 150,
+        "RRBI": 150,
+        "SVBI": 150,
+        "TNI": 150,
+        "HJK": 150,
+        "HKK": 150,
+        "YDCK": 150,
+        "YKWK": 150,
+        "EBVS": 150,
+        "ERMS": 150,
+        "MBMPS": 150,
+        "NJS": 150,
+        "HQTV": 150,
+        "PNV": 150,
+        "THV": 150,
+        "TLV": 150
+      },
+      "source_train_count": 1949,
+      "source_validation_count": 300,
+      "total_duration_hours": 3.66345853489544,
+      "scope": "Shared speaker/utterance holdout for wav2vec2 and Qwen; shared read prompts follow published setting; old A/B checkpoints excluded",
+      "source_commit": "e8c7684c545d94f2419fc4621e745236c192a353",
+      "joint_counts": {
+        "train": 2249,
+        "validation": 450,
+        "test": 900
+      }
+    },
+    "split_summary": {
+      "source_train": 1949,
+      "source_validation": 300,
+      "target_train": 300,
+      "target_validation": 150,
+      "target_test": 150,
+      "joint_train": 2249,
+      "joint_validation": 450,
+      "joint_test": 900,
+      "target_train_speakers": [
+        "HQTV",
+        "THV"
+      ],
+      "target_validation_speakers": [
+        "PNV"
+      ],
+      "target_test_speakers": [
+        "TLV"
+      ],
+      "joint_test_speakers": [
+        "NJS",
+        "TLV",
+        "TNI",
+        "TXHC",
+        "YKWK",
+        "ZHAA"
+      ]
+    },
+    "leakage_change": "750/900 câu test chung từng nằm trong source train của A/B/C cũ, vì vậy checkpoint cũ không hợp lệ cho cascade test mới. A cascade train lại từ BASE; B cascade khởi tạo best A mới. Overlap train-test và validation-test của protocol mới = 0 utterance IDs.",
+    "runs": {
+      "A": {
+        "run_dir": "runs/cascade-l2arctic-plus-seed42/A",
+        "config": {
+          "stage": "A",
+          "purpose": "scientific_training",
+          "seed": 42,
+          "model_path": "models/pretrained/wav2vec2-base",
+          "annotations": "data/processed/l2arctic-plus-cascade-v1/annotations.jsonl",
+          "vocab": "data/processed/l2arctic-plus-cascade-v1/vocab.json",
+          "normalization": "data/processed/l2arctic-plus-cascade-v1/normalization.json",
+          "protocol_dir": "data/protocol/l2arctic-plus-cascade-v1",
+          "device": "cuda",
+          "mixed_precision": "fp16",
+          "cpu_threads": 4,
+          "batch_size": 1,
+          "gradient_accumulation_steps": 4,
+          "max_steps": 2000,
+          "eval_every": 250,
+          "checkpoint_every": 50,
+          "backbone_learning_rate": 3e-05,
+          "head_learning_rate": 0.0003,
+          "weight_decay": 0.01,
+          "max_grad_norm": 1.0,
+          "freeze_feature_encoder": true,
+          "freeze_backbone": false,
+          "gradient_checkpointing": true,
+          "source_replay_fraction": 0.5,
+          "fold": 1,
+          "max_train_samples": null,
+          "max_eval_samples": null,
+          "max_audio_seconds": null,
+          "selection_metric": "f1",
+          "save_optimizer": true
+        },
+        "completed": {
+          "status": "completed",
+          "optimizer_steps": 2000,
+          "purpose": "scientific_training",
+          "best_validation_value": 0.4740082079343365,
+          "seen_samples": {
+            "source": 8000,
+            "target": 0
+          },
+          "seen_audio_seconds": {
+            "source": 30044.529954648464,
+            "target": 0.0
+          },
+          "elapsed_seconds_this_session": 94.78199999999924,
+          "test_evaluated": false,
+          "created_at": "2026-10-21T06:17:22.813378+00:00"
+        },
+        "parameter_counts": {
+          "total": 94435539,
+          "trainable": 90235091
+        },
+        "best_checkpoint": {
+          "stage": "A",
+          "step": 1750,
+          "best_validation_value": 0.4740082079343365,
+          "selection_metric": "f1",
+          "decoder": "greedy_ctc",
+          "sample_rate": 16000
+        },
+        "data_selection": {
+          "source_train": {
+            "requested_count": 1949,
+            "selected_count": 1949
+          },
+          "target_train": null,
+          "validation": {
+            "requested_count": 300,
+            "selected_count": 300
+          },
+          "test_used_for_training": false
+        },
+        "training_log.jsonl": {
+          "count": 2000,
+          "first": {
+            "step": 1,
+            "loss": 20.096378564834595,
+            "gradient_norm": 21.019298553466797,
+            "elapsed_seconds": 1.3909999999959837,
+            "seen_samples": {
+              "source": 4,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 9.895827664399093,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 3e-05,
+              "phone_head": 0.0003
+            },
+            "created_at": "2026-10-21T04:56:47.842974+00:00"
+          },
+          "last": {
+            "step": 2000,
+            "loss": 0.6225973963737488,
+            "gradient_norm": 9.266080856323242,
+            "elapsed_seconds": 80.28199999999924,
+            "seen_samples": {
+              "source": 8000,
+              "target": 0
+            },
+            "seen_audio_seconds": {
+              "source": 30044.529954648464,
+              "target": 0.0
+            },
+            "lr": {
+              "backbone": 3e-05,
+              "phone_head": 0.0003
+            },
+            "created_at": "2026-10-21T06:17:08.324518+00:00"
+          }
+        },
+        "validation_log.jsonl": {
+          "count": 8,
+          "first": {
+            "step": 250,
+            "metrics": {
+              "precision": 0.12768762677484788,
+              "recall": 0.9509063444108762,
+              "f1": 0.22514306151645208,
+              "far": 0.04909365558912387,
+              "frr": 1.0,
+              "der": 0.824,
+              "per": 1.0,
+              "word_precision": 0.36767317939609234,
+              "word_recall": 1.0,
+              "word_f1": 0.5376623376623376
+            },
+            "best_value": 0.22514306151645208
+          },
+          "last": {
+            "step": 2000,
+            "metrics": {
+              "precision": 0.4280180761781795,
+              "recall": 0.5007552870090635,
+              "f1": 0.46153846153846156,
+              "far": 0.49924471299093653,
+              "frr": 0.10196800552422604,
+              "der": 0.32926829268292684,
+              "per": 0.17145801133436372,
+              "word_precision": 0.5935251798561151,
+              "word_recall": 0.6376811594202898,
+              "word_f1": 0.6148113646949231
+            },
+            "best_value": 0.4740082079343365
+          },
+          "all": [
+            {
+              "step": 250,
+              "metrics": {
+                "precision": 0.12768762677484788,
+                "recall": 0.9509063444108762,
+                "f1": 0.22514306151645208,
+                "far": 0.04909365558912387,
+                "frr": 1.0,
+                "der": 0.824,
+                "per": 1.0,
+                "word_precision": 0.36767317939609234,
+                "word_recall": 1.0,
+                "word_f1": 0.5376623376623376
+              },
+              "best_value": 0.22514306151645208
+            },
+            {
+              "step": 500,
+              "metrics": {
+                "precision": 0.2037595729867719,
+                "recall": 0.6631419939577039,
+                "f1": 0.3117344221551571,
+                "far": 0.3368580060422961,
+                "frr": 0.3976587853500232,
+                "der": 0.5643678160919541,
+                "per": 0.43049974240082434,
+                "word_precision": 0.39176570458404075,
+                "word_recall": 0.8917874396135266,
+                "word_f1": 0.54438218814509
+              },
+              "best_value": 0.3117344221551571
+            },
+            {
+              "step": 750,
+              "metrics": {
+                "precision": 0.3911671924290221,
+                "recall": 0.5619335347432024,
+                "f1": 0.4612523248605084,
+                "far": 0.4380664652567976,
+                "frr": 0.1326156665139716,
+                "der": 0.3695652173913043,
+                "per": 0.1938176197836167,
+                "word_precision": 0.5561456752655539,
+                "word_recall": 0.7082125603864734,
+                "word_f1": 0.6230344241393965
+              },
+              "best_value": 0.4612523248605084
+            },
+            {
+              "step": 1000,
+              "metrics": {
+                "precision": 0.4043427230046948,
+                "recall": 0.520392749244713,
+                "f1": 0.45508586525759576,
+                "far": 0.479607250755287,
+                "frr": 0.11597349177330896,
+                "der": 0.3671071953010279,
+                "per": 0.18299845440494591,
+                "word_precision": 0.5728813559322034,
+                "word_recall": 0.6531400966183575,
+                "word_f1": 0.6103837471783295
+              },
+              "best_value": 0.4612523248605084
+            },
+            {
+              "step": 1250,
+              "metrics": {
+                "precision": 0.42027114267269206,
+                "recall": 0.4916918429003021,
+                "f1": 0.45318482422554823,
+                "far": 0.5083081570996979,
+                "frr": 0.10311172350442072,
+                "der": 0.3136645962732919,
+                "per": 0.17228232869654816,
+                "word_precision": 0.5899280575539568,
+                "word_recall": 0.633816425120773,
+                "word_f1": 0.6110852352119236
+              },
+              "best_value": 0.4612523248605084
+            },
+            {
+              "step": 1500,
+              "metrics": {
+                "precision": 0.4255459960291198,
+                "recall": 0.48564954682779454,
+                "f1": 0.45361552028218693,
+                "far": 0.5143504531722054,
+                "frr": 0.0996098232728942,
+                "der": 0.38522012578616355,
+                "per": 0.1729005667181865,
+                "word_precision": 0.6018867924528302,
+                "word_recall": 0.6164251207729469,
+                "word_f1": 0.6090692124105012
+              },
+              "best_value": 0.4612523248605084
+            },
+            {
+              "step": 1750,
+              "metrics": {
+                "precision": 0.433125,
+                "recall": 0.5234138972809668,
+                "f1": 0.4740082079343365,
+                "far": 0.47658610271903323,
+                "frr": 0.10431282346175963,
+                "der": 0.36151603498542273,
+                "per": 0.1736218444100979,
+                "word_precision": 0.6029929577464789,
+                "word_recall": 0.6618357487922706,
+                "word_f1": 0.6310456011054814
+              },
+              "best_value": 0.4740082079343365
+            },
+            {
+              "step": 2000,
+              "metrics": {
+                "precision": 0.4280180761781795,
+                "recall": 0.5007552870090635,
+                "f1": 0.46153846153846156,
+                "far": 0.49924471299093653,
+                "frr": 0.10196800552422604,
+                "der": 0.32926829268292684,
+                "per": 0.17145801133436372,
+                "word_precision": 0.5935251798561151,
+                "word_recall": 0.6376811594202898,
+                "word_f1": 0.6148113646949231
+              },
+              "best_value": 0.4740082079343365
+            }
+          ]
+        }
+      },
+      "B": {
+        "run_dir": "runs/cascade-l2arctic-plus-seed42/B",
+        "config": {
+          "stage": "B",
+          "purpose": "scientific_training",
+          "seed": 42,
+          "model_path": "models/pretrained/wav2vec2-base",
+          "annotations": "data/processed/l2arctic-plus-cascade-v1/annotations.jsonl",
+          "vocab": "data/processed/l2arctic-plus-cascade-v1/vocab.json",
+          "normalization": "data/processed/l2arctic-plus-cascade-v1/normalization.json",
+          "protocol_dir": "data/protocol/l2arctic-plus-cascade-v1",
+          "device": "cuda",
+          "mixed_precision": "fp16",
+          "cpu_threads": 4,
+          "batch_size": 1,
+          "gradient_accumulation_steps": 4,
+          "max_steps": 400,
+          "eval_every": 100,
+          "checkpoint_every": 50,
+          "backbone_learning_rate": 1e-05,
+          "head_learning_rate": 0.0001,
+          "weight_decay": 0.01,
+          "max_grad_norm": 1.0,
+          "freeze_feature_encoder": true,
+          "freeze_backbone": false,
+          "gradient_checkpointing": true,
+          "source_replay_fraction": 0.5,
+          "fold": 1,
+          "max_train_samples": null,
+          "max_eval_samples": null,
+          "max_audio_seconds": null,
+          "selection_metric": "f1",
+          "save_optimizer": true
+        },
+        "completed": {
+          "status": "completed",
+          "optimizer_steps": 400,
+          "purpose": "scientific_training",
+          "best_validation_value": 0.6134453781512605,
+          "seen_samples": {
+            "source": 797,
+            "target": 803
+          },
+          "seen_audio_seconds": {
+            "source": 3003.9063265306118,
+            "target": 3006.8173922902524
+          },
+          "elapsed_seconds_this_session": 251.56199999999808,
+          "test_evaluated": false,
+          "created_at": "2026-10-21T06:21:47.177828+00:00"
+        },
+        "parameter_counts": {
+          "total": 94435539,
+          "trainable": 90235091
+        },
+        "best_checkpoint": {
+          "stage": "B",
+          "step": 200,
+          "best_validation_value": 0.6134453781512605,
+          "selection_metric": "f1",
+          "decoder": "greedy_ctc",
+          "sample_rate": 16000
+        },
+        "data_selection": {
+          "source_train": {
+            "requested_count": 1949,
+            "selected_count": 1949
+          },
+          "target_train": {
+            "requested_count": 300,
+            "selected_count": 300
+          },
+          "validation": {
+            "requested_count": 150,
+            "selected_count": 150
+          },
+          "test_used_for_training": false
+        },
+        "training_log.jsonl": {
+          "count": 400,
+          "first": {
+            "step": 1,
+            "loss": 0.8890348821878433,
+            "gradient_norm": 8.864286422729492,
+            "elapsed_seconds": 1.0,
+            "seen_samples": {
+              "source": 2,
+              "target": 2
+            },
+            "seen_audio_seconds": {
+              "source": 5.99562358276644,
+              "target": 8.528798185941044
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-21T06:17:36.620528+00:00"
+          },
+          "last": {
+            "step": 400,
+            "loss": 0.9858618825674057,
+            "gradient_norm": 7.322326183319092,
+            "elapsed_seconds": 245.60899999999674,
+            "seen_samples": {
+              "source": 797,
+              "target": 803
+            },
+            "seen_audio_seconds": {
+              "source": 3003.9063265306118,
+              "target": 3006.8173922902524
+            },
+            "lr": {
+              "backbone": 1e-05,
+              "phone_head": 0.0001
+            },
+            "created_at": "2026-10-21T06:21:41.226460+00:00"
+          }
+        },
+        "validation_log.jsonl": {
+          "count": 4,
+          "first": {
+            "step": 100,
+            "metrics": {
+              "precision": 0.6435124508519003,
+              "recall": 0.5498320268756999,
+              "f1": 0.5929951690821256,
+              "far": 0.4501679731243001,
+              "frr": 0.06483909415971395,
+              "der": 0.29124236252545826,
+              "per": 0.1603832534888565,
+              "word_precision": 0.7810344827586206,
+              "word_recall": 0.6691285081240768,
+              "word_f1": 0.720763723150358
+            },
+            "best_value": 0.5929951690821256
+          },
+          "last": {
+            "step": 400,
+            "metrics": {
+              "precision": 0.6585365853658537,
+              "recall": 0.5442329227323628,
+              "f1": 0.5959534028203556,
+              "far": 0.45576707726763716,
+              "frr": 0.059957173447537475,
+              "der": 0.26954732510288065,
+              "per": 0.15392626536138304,
+              "word_precision": 0.7928571428571428,
+              "word_recall": 0.6558345642540621,
+              "word_f1": 0.7178658043654002
+            },
+            "best_value": 0.6134453781512605
+          },
+          "all": [
+            {
+              "step": 100,
+              "metrics": {
+                "precision": 0.6435124508519003,
+                "recall": 0.5498320268756999,
+                "f1": 0.5929951690821256,
+                "far": 0.4501679731243001,
+                "frr": 0.06483909415971395,
+                "der": 0.29124236252545826,
+                "per": 0.1603832534888565,
+                "word_precision": 0.7810344827586206,
+                "word_recall": 0.6691285081240768,
+                "word_f1": 0.720763723150358
+              },
+              "best_value": 0.5929951690821256
+            },
+            {
+              "step": 200,
+              "metrics": {
+                "precision": 0.6610608020698577,
+                "recall": 0.5722284434490481,
+                "f1": 0.6134453781512605,
+                "far": 0.42777155655095184,
+                "frr": 0.062455303933253874,
+                "der": 0.273972602739726,
+                "per": 0.1535096854821912,
+                "word_precision": 0.7958477508650519,
+                "word_recall": 0.6794682422451994,
+                "word_f1": 0.7330677290836654
+              },
+              "best_value": 0.6134453781512605
+            },
+            {
+              "step": 300,
+              "metrics": {
+                "precision": 0.6492346938775511,
+                "recall": 0.5699888017917133,
+                "f1": 0.607036374478235,
+                "far": 0.43001119820828665,
+                "frr": 0.06547619047619048,
+                "der": 0.28094302554027506,
+                "per": 0.15538429493855446,
+                "word_precision": 0.7820945945945946,
+                "word_recall": 0.6838995568685377,
+                "word_f1": 0.7297084318360915
+              },
+              "best_value": 0.6134453781512605
+            },
+            {
+              "step": 400,
+              "metrics": {
+                "precision": 0.6585365853658537,
+                "recall": 0.5442329227323628,
+                "f1": 0.5959534028203556,
+                "far": 0.45576707726763716,
+                "frr": 0.059957173447537475,
+                "der": 0.26954732510288065,
+                "per": 0.15392626536138304,
+                "word_precision": 0.7928571428571428,
+                "word_recall": 0.6558345642540621,
+                "word_f1": 0.7178658043654002
+              },
+              "best_value": 0.6134453781512605
+            }
+          ]
+        }
+      }
+    },
+    "test_results": {
+      "A": {
+        "source": "data/generated/cascade-l2arctic-plus-seed42/audio/A/metrics.json",
+        "scoring_protocol": "canonical-phone-and-ordered-insertion-slots-v1",
+        "counts": {
+          "UTTERANCES": 900,
+          "TA": 23576,
+          "FR": 2360,
+          "FA": 2231,
+          "TR": 2151,
+          "CD": 1405,
+          "DE": 717,
+          "DIAG_EXCLUDED": 29,
+          "PER_S": 3381,
+          "PER_D": 928,
+          "PER_I": 592,
+          "PER_N": 29087,
+          "WORD_TP": 2074,
+          "WORD_FP": 1132,
+          "WORD_FN": 1368,
+          "WORD_TN": 3924,
+          "WORD_SCORED_UTTERANCES": 900,
+          "WORD_UNMAPPED_EVENTS": 3
+        },
+        "metrics": {
+          "precision": 0.47683440478829525,
+          "recall": 0.49087174806024647,
+          "f1": 0.48375126503991905,
+          "far": 0.5091282519397535,
+          "frr": 0.09099321406539174,
+          "der": 0.33788878416588125,
+          "per": 0.16849451645064806,
+          "word_precision": 0.6469120399251403,
+          "word_recall": 0.6025566531086578,
+          "word_f1": 0.6239470517448856
+        },
+        "model_step": 1750,
+        "utterance_count": 900,
+        "split": "cascade_test",
+        "fold": 1,
+        "stage": "A",
+        "speaker_macro_f1": 0.45408206667110645,
+        "limited_technical_subset": false,
+        "by_speaker": {
+          "NJS": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4053,
+              "FR": 357,
+              "FA": 340,
+              "TR": 339,
+              "CD": 258,
+              "DE": 78,
+              "DIAG_EXCLUDED": 3,
+              "PER_S": 528,
+              "PER_D": 146,
+              "PER_I": 63,
+              "PER_N": 4969,
+              "WORD_TP": 327,
+              "WORD_FP": 194,
+              "WORD_FN": 208,
+              "WORD_TN": 695,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.4870689655172414,
+              "recall": 0.4992636229749632,
+              "f1": 0.4930909090909091,
+              "far": 0.5007363770250368,
+              "frr": 0.08095238095238096,
+              "der": 0.23214285714285715,
+              "per": 0.1483195814047092,
+              "word_precision": 0.6276391554702495,
+              "word_recall": 0.611214953271028,
+              "word_f1": 0.6193181818181818
+            }
+          },
+          "TLV": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3422,
+              "FR": 473,
+              "FA": 434,
+              "TR": 835,
+              "CD": 507,
+              "DE": 328,
+              "DIAG_EXCLUDED": 0,
+              "PER_S": 686,
+              "PER_D": 123,
+              "PER_I": 186,
+              "PER_N": 4643,
+              "WORD_TP": 669,
+              "WORD_FP": 126,
+              "WORD_FN": 220,
+              "WORD_TN": 409,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.6383792048929664,
+              "recall": 0.6579984239558707,
+              "f1": 0.6480403570042685,
+              "far": 0.34200157604412923,
+              "frr": 0.1214377406931964,
+              "der": 0.39281437125748503,
+              "per": 0.21430109842774067,
+              "word_precision": 0.8415094339622642,
+              "word_recall": 0.7525309336332958,
+              "word_f1": 0.7945368171021377
+            }
+          },
+          "TNI": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3996,
+              "FR": 418,
+              "FA": 341,
+              "TR": 226,
+              "CD": 145,
+              "DE": 67,
+              "DIAG_EXCLUDED": 14,
+              "PER_S": 566,
+              "PER_D": 185,
+              "PER_I": 58,
+              "PER_N": 4879,
+              "WORD_TP": 261,
+              "WORD_FP": 222,
+              "WORD_FN": 209,
+              "WORD_TN": 722,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 2
+            },
+            "metrics": {
+              "precision": 0.35093167701863354,
+              "recall": 0.3985890652557319,
+              "f1": 0.37324525185796864,
+              "far": 0.6014109347442681,
+              "frr": 0.0946986859990938,
+              "der": 0.3160377358490566,
+              "per": 0.16581266653002663,
+              "word_precision": 0.5403726708074534,
+              "word_recall": 0.5553191489361702,
+              "word_f1": 0.5477439664218258
+            }
+          },
+          "TXHC": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3965,
+              "FR": 432,
+              "FA": 433,
+              "TR": 260,
+              "CD": 178,
+              "DE": 78,
+              "DIAG_EXCLUDED": 4,
+              "PER_S": 602,
+              "PER_D": 171,
+              "PER_I": 119,
+              "PER_N": 4889,
+              "WORD_TP": 302,
+              "WORD_FP": 203,
+              "WORD_FN": 258,
+              "WORD_TN": 649,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 1
+            },
+            "metrics": {
+              "precision": 0.37572254335260113,
+              "recall": 0.37518037518037517,
+              "f1": 0.37545126353790614,
+              "far": 0.6248196248196248,
+              "frr": 0.0982488060040937,
+              "der": 0.3046875,
+              "per": 0.18245039885457148,
+              "word_precision": 0.598019801980198,
+              "word_recall": 0.5392857142857143,
+              "word_f1": 0.5671361502347417
+            }
+          },
+          "YKWK": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4003,
+              "FR": 364,
+              "FA": 346,
+              "TR": 275,
+              "CD": 180,
+              "DE": 87,
+              "DIAG_EXCLUDED": 8,
+              "PER_S": 521,
+              "PER_D": 146,
+              "PER_I": 94,
+              "PER_N": 4819,
+              "WORD_TP": 292,
+              "WORD_FP": 201,
+              "WORD_FN": 228,
+              "WORD_TN": 683,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.4303599374021909,
+              "recall": 0.4428341384863124,
+              "f1": 0.4365079365079365,
+              "far": 0.5571658615136876,
+              "frr": 0.08335241584611862,
+              "der": 0.3258426966292135,
+              "per": 0.1579165802033617,
+              "word_precision": 0.592292089249493,
+              "word_recall": 0.5615384615384615,
+              "word_f1": 0.5765054294175715
+            }
+          },
+          "ZHAA": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4137,
+              "FR": 316,
+              "FA": 337,
+              "TR": 216,
+              "CD": 137,
+              "DE": 79,
+              "DIAG_EXCLUDED": 0,
+              "PER_S": 478,
+              "PER_D": 157,
+              "PER_I": 72,
+              "PER_N": 4888,
+              "WORD_TP": 223,
+              "WORD_FP": 186,
+              "WORD_FN": 245,
+              "WORD_TN": 766,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.40601503759398494,
+              "recall": 0.39059674502712477,
+              "f1": 0.39815668202764976,
+              "far": 0.6094032549728752,
+              "frr": 0.07096339546373231,
+              "der": 0.36574074074074076,
+              "per": 0.14463993453355156,
+              "word_precision": 0.5452322738386308,
+              "word_recall": 0.47649572649572647,
+              "word_f1": 0.508551881413911
+            }
+          }
+        }
+      },
+      "B": {
+        "source": "data/generated/cascade-l2arctic-plus-seed42/audio/B/metrics.json",
+        "scoring_protocol": "canonical-phone-and-ordered-insertion-slots-v1",
+        "counts": {
+          "UTTERANCES": 900,
+          "TA": 23660,
+          "FR": 2294,
+          "FA": 2198,
+          "TR": 2184,
+          "CD": 1380,
+          "DE": 770,
+          "DIAG_EXCLUDED": 34,
+          "PER_S": 3426,
+          "PER_D": 864,
+          "PER_I": 569,
+          "PER_N": 29087,
+          "WORD_TP": 2087,
+          "WORD_FP": 1120,
+          "WORD_FN": 1355,
+          "WORD_TN": 3936,
+          "WORD_SCORED_UTTERANCES": 900,
+          "WORD_UNMAPPED_EVENTS": 3
+        },
+        "metrics": {
+          "precision": 0.48771773112996875,
+          "recall": 0.4984025559105431,
+          "f1": 0.4930022573363431,
+          "far": 0.5015974440894568,
+          "frr": 0.08838714648994375,
+          "der": 0.3581395348837209,
+          "per": 0.16705057242066904,
+          "word_precision": 0.6507639538509511,
+          "word_recall": 0.6063335270191749,
+          "word_f1": 0.6277635734696947
+        },
+        "model_step": 200,
+        "utterance_count": 900,
+        "split": "cascade_test",
+        "fold": 1,
+        "stage": "B",
+        "speaker_macro_f1": 0.45512491553904183,
+        "limited_technical_subset": false,
+        "by_speaker": {
+          "NJS": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4067,
+              "FR": 347,
+              "FA": 368,
+              "TR": 311,
+              "CD": 228,
+              "DE": 80,
+              "DIAG_EXCLUDED": 3,
+              "PER_S": 551,
+              "PER_D": 145,
+              "PER_I": 64,
+              "PER_N": 4969,
+              "WORD_TP": 317,
+              "WORD_FP": 189,
+              "WORD_FN": 218,
+              "WORD_TN": 700,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.4726443768996961,
+              "recall": 0.4580265095729013,
+              "f1": 0.46522064323111445,
+              "far": 0.5419734904270986,
+              "frr": 0.07861350249207068,
+              "der": 0.2597402597402597,
+              "per": 0.1529482793318575,
+              "word_precision": 0.6264822134387352,
+              "word_recall": 0.5925233644859813,
+              "word_f1": 0.6090297790585975
+            }
+          },
+          "TLV": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3468,
+              "FR": 422,
+              "FA": 363,
+              "TR": 906,
+              "CD": 562,
+              "DE": 344,
+              "DIAG_EXCLUDED": 0,
+              "PER_S": 601,
+              "PER_D": 135,
+              "PER_I": 153,
+              "PER_N": 4643,
+              "WORD_TP": 703,
+              "WORD_FP": 125,
+              "WORD_FN": 186,
+              "WORD_TN": 410,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.6822289156626506,
+              "recall": 0.7139479905437353,
+              "f1": 0.6977281478629187,
+              "far": 0.2860520094562648,
+              "frr": 0.10848329048843187,
+              "der": 0.37969094922737306,
+              "per": 0.19147103166056428,
+              "word_precision": 0.8490338164251208,
+              "word_recall": 0.7907761529808774,
+              "word_f1": 0.8188701223063483
+            }
+          },
+          "TNI": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3966,
+              "FR": 452,
+              "FA": 344,
+              "TR": 223,
+              "CD": 122,
+              "DE": 82,
+              "DIAG_EXCLUDED": 19,
+              "PER_S": 636,
+              "PER_D": 170,
+              "PER_I": 59,
+              "PER_N": 4879,
+              "WORD_TP": 258,
+              "WORD_FP": 245,
+              "WORD_FN": 212,
+              "WORD_TN": 699,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 2
+            },
+            "metrics": {
+              "precision": 0.33037037037037037,
+              "recall": 0.3932980599647266,
+              "f1": 0.35909822866344604,
+              "far": 0.6067019400352733,
+              "frr": 0.10230873698506111,
+              "der": 0.4019607843137255,
+              "per": 0.17729042836646855,
+              "word_precision": 0.5129224652087475,
+              "word_recall": 0.548936170212766,
+              "word_f1": 0.5303186022610483
+            }
+          },
+          "TXHC": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 3981,
+              "FR": 420,
+              "FA": 417,
+              "TR": 276,
+              "CD": 173,
+              "DE": 98,
+              "DIAG_EXCLUDED": 5,
+              "PER_S": 611,
+              "PER_D": 145,
+              "PER_I": 123,
+              "PER_N": 4889,
+              "WORD_TP": 308,
+              "WORD_FP": 189,
+              "WORD_FN": 252,
+              "WORD_TN": 663,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 1
+            },
+            "metrics": {
+              "precision": 0.39655172413793105,
+              "recall": 0.39826839826839827,
+              "f1": 0.39740820734341253,
+              "far": 0.6017316017316018,
+              "frr": 0.09543285616905249,
+              "der": 0.36162361623616235,
+              "per": 0.17979136837799142,
+              "word_precision": 0.6197183098591549,
+              "word_recall": 0.55,
+              "word_f1": 0.5827814569536424
+            }
+          },
+          "YKWK": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4045,
+              "FR": 326,
+              "FA": 352,
+              "TR": 269,
+              "CD": 169,
+              "DE": 93,
+              "DIAG_EXCLUDED": 7,
+              "PER_S": 521,
+              "PER_D": 125,
+              "PER_I": 89,
+              "PER_N": 4819,
+              "WORD_TP": 287,
+              "WORD_FP": 183,
+              "WORD_FN": 233,
+              "WORD_TN": 701,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.45210084033613446,
+              "recall": 0.4331723027375201,
+              "f1": 0.44243421052631576,
+              "far": 0.5668276972624798,
+              "frr": 0.07458247540608556,
+              "der": 0.3549618320610687,
+              "per": 0.15252126997302345,
+              "word_precision": 0.6106382978723405,
+              "word_recall": 0.551923076923077,
+              "word_f1": 0.5797979797979798
+            }
+          },
+          "ZHAA": {
+            "counts": {
+              "UTTERANCES": 150,
+              "TA": 4133,
+              "FR": 327,
+              "FA": 354,
+              "TR": 199,
+              "CD": 126,
+              "DE": 73,
+              "DIAG_EXCLUDED": 0,
+              "PER_S": 506,
+              "PER_D": 144,
+              "PER_I": 81,
+              "PER_N": 4888,
+              "WORD_TP": 214,
+              "WORD_FP": 189,
+              "WORD_FN": 254,
+              "WORD_TN": 763,
+              "WORD_SCORED_UTTERANCES": 150,
+              "WORD_UNMAPPED_EVENTS": 0
+            },
+            "metrics": {
+              "precision": 0.37832699619771865,
+              "recall": 0.35985533453887886,
+              "f1": 0.36886005560704355,
+              "far": 0.6401446654611211,
+              "frr": 0.07331838565022422,
+              "der": 0.36683417085427134,
+              "per": 0.14954991816693944,
+              "word_precision": 0.5310173697270472,
+              "word_recall": 0.45726495726495725,
+              "word_f1": 0.49138920780711826
+            }
+          }
+        }
+      }
+    },
+    "status_snapshot": {
+      "status": "completed",
+      "phase": "current_training_only",
+      "started_at_utc": "2026-10-21T06:15:39.784709+00:00",
+      "pid": 21280,
+      "total_commands": 1,
+      "command_index": 1,
+      "current_command": "train_Q",
+      "argv": [
+        "D:\\NCC\\MDD\\.venv\\Scripts\\python.exe",
+        "-X",
+        "utf8",
+        "-u",
+        "scripts/train_feedback_model.py",
+        "--config",
+        "configs/cascade_feedback_qlora.json",
+        "--resume"
+      ],
+      "log": "D:\\NCC\\MDD\\data\\generated\\cascade-l2arctic-plus-seed42\\train_Q.log",
+      "updated_at_utc": "2026-10-21T08:31:22.581424+00:00",
+      "child_pid": null,
+      "previous_launcher_pid": 23960,
+      "control_mode": "manual_no_followup",
+      "qwen_compute_pid": 19544,
+      "note": "Current Qwen job ended. Further training and evaluation require user commands.",
+      "finished_at_utc": "2026-10-21T08:31:22.581424+00:00",
+      "qwen_training_status": "completed"
+    },
+    "stale_report": {
+      "generated_at_utc": "2026-10-21T04:57:08.487175+00:00",
+      "protocol_id": "l2arctic-plus-cascade-v1",
+      "protocol_sha256": "8692ddd427c5d99829c1997f255dd424ce455a8d63edec19004a09da9125f575",
+      "counts": {
+        "train": 2249,
+        "validation": 450,
+        "test": 900
+      },
+      "status": "awaiting_evaluations",
+      "missing_feedback": [
+        "A_Q0",
+        "A_Q1",
+        "B_Q0",
+        "B_Q1",
+        "oracle_Q0",
+        "oracle_Q1"
+      ],
+      "missing_audio": [
+        "A",
+        "B"
+      ],
+      "scope": "One training seed; lexical/reference compliance and acoustic MDD measured separately; no claim of learner improvement",
+      "shared_prompts": "Speaker holdout, not unseen-prompt testing",
+      "training_label_provenance": "Authors' GPT-4o training feedback; authors' human-checked test references; English originals",
+      "metrics": {},
+      "paired_intervals": {}
+    },
+    "caveats": [
+      "comparison.json ghi missing_audio A/B do thời điểm report 2026-10-21 04:57 UTC; phải dùng audio/A,B/metrics.json hiện có khi viết số liệu cập nhật.",
+      "Notebook cell 18 còn output pipeline running/train_A và cell 20 awaiting_evaluations; không khẳng định đang train ở ngày rà soát. Pipeline hiện completed phase=current_training_only.",
+      "Các lượt Qwen feedback oracle/cascade không thấy artifacts dưới report root: chưa có kết quả đầu-cuối Qwen để khẳng định tăng chất lượng.",
+      "Cascade C có cấu hình 400 updates nhưng pipeline chính thiết kế A→B→Q và không có cascade C run hoàn tất.",
+      "A cascade resumed. completed.elapsed_seconds_this_session=94,782 chỉ là phiên resume cuối, không phải tổng thời gian train A. Training log đầu→cuối từ 04:56:47 đến 06:17:08 UTC có gián đoạn; không ghi A train chỉ 95 giây."
+    ]
+  },
+  "asr_experiment": {
+    "sources": [
+      {
+        "path": "notebooks/mdd_asr_vi_finetuning.ipynb",
+        "cell_index_zero_based": 1,
+        "cell_number_one_based": 2
+      },
+      {
+        "path": "notebooks/mdd_asr_vi_finetuning.ipynb",
+        "cell_index_zero_based": 5,
+        "cell_number_one_based": 6
+      },
+      {
+        "path": "notebooks/mdd_asr_vi_finetuning.ipynb",
+        "cell_index_zero_based": 7,
+        "cell_number_one_based": 8
+      },
+      {
+        "path": "runs/asr-vietnamese-english-v1/training_provenance.json"
+      },
+      {
+        "path": "scripts/train_asr_vi.py"
+      }
+    ],
+    "checkpoint": "facebook/wav2vec2-base-960h; character CTC vocab 32; khác với phoneme BASE MDD 83 tokens.",
+    "provenance": {
+      "status": "completed",
+      "started_at_utc": "2026-10-23T01:39:35.311175+00:00",
+      "config": {
+        "experiment": "asr-vietnamese-english-v1",
+        "base_model": "models/pretrained/wav2vec2-base-960h",
+        "corpus_root": "l2arctic_release_v5.0",
+        "source_protocol": "data/protocol/l2arctic-plus-cascade-v1",
+        "dataset_dir": "data/processed/asr-vietnamese-english-v1",
+        "run_dir": "runs/asr-vietnamese-english-v1",
+        "report_dir": "data/generated/asr-vietnamese-english-v1",
+        "train_speakers": [
+          "HQTV",
+          "THV"
+        ],
+        "validation_speakers": [
+          "PNV"
+        ],
+        "test_speakers": [
+          "TLV"
+        ],
+        "source_replay_fraction": 0.25,
+        "max_train_seconds": 8.0,
+        "epochs": 2,
+        "batch_size": 1,
+        "gradient_accumulation": 4,
+        "backbone_learning_rate": 3e-06,
+        "head_learning_rate": 1e-05,
+        "eval_steps": 150,
+        "warmup_steps": 50,
+        "seed": 42,
+        "precision": "bf16",
+        "gpu_memory_fraction": 0.65,
+        "cpu_threads": 2,
+        "freeze_cnn": true,
+        "gradient_checkpointing": true
+      },
+      "dataset": {
+        "dataset": "L2-ARCTIC v5.0, full scripted Vietnamese transcripts + source replay",
+        "indexed_counts": {
+          "HQTV": 1132,
+          "THV": 1132,
+          "PNV": 1132,
+          "TLV": 1132,
+          "source": 1949
+        },
+        "excluded_counts": {
+          "speaker_prompt_holdout": 2806,
+          "long_train_utterance": 6
+        },
+        "seed": 42,
+        "split_policy": "Speaker-disjoint and normalized-prompt-disjoint; fixed SHA256 prompt buckets 80/10/10.",
+        "train_speakers": [
+          "HQTV",
+          "THV"
+        ],
+        "validation_speakers": [
+          "PNV"
+        ],
+        "test_speakers": [
+          "TLV"
+        ],
+        "source_replay_count": 611,
+        "source_replay_candidates": 1616,
+        "labels": "Corpus orthographic English transcripts; not gold realized-word annotations.",
+        "license": "CC BY-NC 4.0; research use",
+        "parts": {
+          "train": {
+            "count": 2445,
+            "hours": 2.494734265558075,
+            "max_seconds": 7.97795918367347,
+            "sha256": "87f57a3d749eae1086d29b1560b82329579bbdf4d7b6e46c6fee16f1a6f40845"
+          },
+          "validation": {
+            "count": 104,
+            "hours": 0.10382064121945074,
+            "max_seconds": 6.954761904761905,
+            "sha256": "a8746f059c45a92021b86e3ef7a7414c08f70320a45912713b350ec7f0a2995f"
+          },
+          "test": {
+            "count": 111,
+            "hours": 0.13423270345175106,
+            "max_seconds": 8.098684807256236,
+            "sha256": "49eec7b07ef8b8093a55692a2ccef6b4fd2911203cb11e71f29ac1dd02a842aa"
+          }
+        }
+      },
+      "base_sha256": "8aa76ab2243c81747a1f832954586bc566090c83a0ac167df6f31f0fa917d74a",
+      "task": "English orthographic ASR, not phoneme recognition",
+      "test_used_for_training_or_selection": false,
+      "trainable_parameters": 90195104,
+      "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "precision": "bf16",
+      "model_type": "wav2vec2-base-960h",
+      "finished_at_utc": "2026-10-23T01:51:31.592302+00:00",
+      "global_step": 1223,
+      "results": {
+        "baseline_validation": {
+          "wer": 0.18369690011481057,
+          "cer": 0.0738387379491674,
+          "utterances": 104,
+          "word_errors": 160,
+          "reference_words": 871,
+          "seconds": 4.78
+        },
+        "best_validation": {
+          "step": 1050,
+          "wer": 0.15614236509758897,
+          "cer": 0.06200701139351446,
+          "utterances": 104,
+          "word_errors": 136,
+          "reference_words": 871,
+          "seconds": 4.06
+        },
+        "baseline_test": {
+          "wer": 0.43010752688172044,
+          "cer": 0.1919701213818861,
+          "utterances": 111,
+          "word_errors": 440,
+          "reference_words": 1023,
+          "seconds": 3.91
+        },
+        "trained_test": {
+          "wer": 0.37927663734115347,
+          "cer": 0.16676003734827263,
+          "utterances": 111,
+          "word_errors": 388,
+          "reference_words": 1023,
+          "seconds": 7.0
+        },
+        "selection": "lowest validation WER; test excluded from selection",
+        "validation_improved": true,
+        "trained_sha256": "bc37e9b27f704767cb0aa4b5484e8e36d6fcc2c6a2fb152b2ad76ac18dbb9f7b",
+        "base_sha256": "8aa76ab2243c81747a1f832954586bc566090c83a0ac167df6f31f0fa917d74a",
+        "steps": 1223,
+        "epochs": 2,
+        "scope": "Small, speaker-and-prompt-disjoint Vietnamese read-speech benchmark; not conversational or pronunciation accuracy."
+      }
+    },
+    "method_details": {
+      "optimizer": "AdamW weight_decay=0,01, foreach=False; clip norm=1,0",
+      "scheduler": "warmup tuyến tính 50 updates, sau đó decay tuyến tính đến 0",
+      "effective_batch": 4,
+      "train_order": "2 epochs, shuffle cố định seed+epoch; 2445×2=4890 mẫu, ceil(4890/4)=1223 updates",
+      "augmentation": "apply_spec_augment=False, mask_time_prob=mask_feature_prob=0",
+      "checkpoint_selection": "WER validation nhỏ nhất, best step 1050",
+      "frozen": "CNN; attention/character CTC thay đổi thật trong weight_changes.json",
+      "data_policy": "Speaker disjoint AND normalized prompt disjoint; SHA256 buckets 80/10/10, full scripted orthographic transcript. 611 source replay rows, 25% tổng train; bỏ 6 train utterances dài >8 giây, test không cắt như train."
+    },
+    "weight_changes": {
+      "cnn": {
+        "changed": false,
+        "max_absolute_change": 0.0
+      },
+      "transformer_attention": {
+        "changed": true,
+        "max_absolute_change": 0.00031951069831848145
+      },
+      "ctc_head": {
+        "changed": true,
+        "max_absolute_change": 0.0027897879481315613
+      }
+    },
+    "development_examples": {
+      "purpose": "Development cases already inspected before this experiment; not a held-out benchmark.",
+      "references_used_for_decoding": false,
+      "training_on_these_files": false,
+      "reference_limit": "Intended sentence, not human annotation of realized pronunciation/omitted words.",
+      "trained_sha256": "bc37e9b27f704767cb0aa4b5484e8e36d6fcc2c6a2fb152b2ad76ac18dbb9f7b",
+      "cases": [
+        {
+          "file": "audio-file.mp3",
+          "sha256": "44de4765d126b6f1787aec57465d85e8352739ee7f02a924700d13606d1d0b98",
+          "reference": "It was difficult to get there",
+          "reference_source": "user_confirmed_in_chat",
+          "before": {
+            "transcript": "IT WAS THE DIVICOTE TRUE GETESIR",
+            "wer_vs_intended": 0.6666666666666666
+          },
+          "after": {
+            "transcript": "IT WAS THE DIFVICUTO TRUE GETESAIR",
+            "wer_vs_intended": 0.6666666666666666
+          }
+        },
+        {
+          "file": "End of the road for some players.mp3",
+          "sha256": "86d89d85c120146dd8c59ab1d9aded910a375c231d7a422e18c8fa618eb24efb",
+          "reference": "End of the road for some players",
+          "reference_source": "user_confirmed_in_chat",
+          "before": {
+            "transcript": "AND THOU THEYLL O THE FOR SAMUN PLAY ARMS",
+            "wer_vs_intended": 1.1428571428571428
+          },
+          "after": {
+            "transcript": "AND THOUG THEY LO THE FOR SAMON PLAY ARMS",
+            "wer_vs_intended": 1.1428571428571428
+          }
+        },
+        {
+          "file": "Zero five eight three.mp3",
+          "sha256": "fd7c8ce0a19f2f24d5203028f902d874a7854409ea2513f46c244e19ac63f1be",
+          "reference": "Zero five eight three",
+          "reference_source": "user_confirmed_in_chat",
+          "before": {
+            "transcript": "NAWHA IT U SAY",
+            "wer_vs_intended": 1.0
+          },
+          "after": {
+            "transcript": "TA WHA ET US SAY",
+            "wer_vs_intended": 1.25
+          }
+        }
+      ]
+    },
+    "caveats": [
+      "WER/CER là lỗi transcription so với transcript chữ corpus, không phải chất lượng phát âm.",
+      "111 câu TLV test, 1 speaker. Chưa chứng minh accuracy hội thoại tự do, mọi người Việt hay recordings bất kỳ.",
+      "3 recordings phát triển đã xem lúc lập kế hoạch, không phải holdout: WER không cải thiện, mẫu số 3 tệ hơn (100→125%). Báo cả mặt hạn chế này.",
+      "Probe grammar Qwen trong notebook ASR có scope riêng, không phải đầu ra MDD acoustic."
+    ]
+  },
+  "external_validation": {
+    "sources": [
+      {
+        "path": "notebooks/mdd_external_validation.ipynb",
+        "cell_index_zero_based": 8,
+        "cell_number_one_based": 9
+      },
+      {
+        "path": "notebooks/mdd_external_validation.ipynb",
+        "cell_index_zero_based": 10,
+        "cell_number_one_based": 11
+      },
+      {
+        "path": "notebooks/mdd_external_validation.ipynb",
+        "cell_index_zero_based": 13,
+        "cell_number_one_based": 14
+      },
+      {
+        "path": "notebooks/mdd_external_validation.ipynb",
+        "cell_index_zero_based": 21,
+        "cell_number_one_based": 22
+      }
+    ],
+    "checkpoint_family": "A/B/C windows-notebook-seed42 của l2arctic-v1 cũ, không phải cascade A/B mới.",
+    "results": {
+      "B-full": {
+        "source": "data/generated/external/speechocean762/20261021T024600Z/B-full/metrics.json",
+        "status": "completed",
+        "evaluated_count": 2500,
+        "failed_count": 0,
+        "unprocessed_count": 0,
+        "counts": {
+          "utterances": 2500,
+          "reference_phones": 47369,
+          "reference_words": 15967,
+          "position_tp": 1725,
+          "position_fp": 12722,
+          "position_fn": 225,
+          "position_tn": 32697,
+          "unanimous_correct_positions": 38495,
+          "unanimous_correct_rejections": 8718,
+          "unanimous_acceptable_positions": 42118,
+          "unanimous_acceptable_rejections": 10643,
+          "predicted_insertions": 2760,
+          "word_tp": 1261,
+          "word_fp": 8463,
+          "word_fn": 34,
+          "word_tn": 6209,
+          "strict_perfect_utterances": 179,
+          "strict_perfect_sentence_flags": 173,
+          "strict_perfect_reference_phones": 2890,
+          "strict_perfect_phone_rejections": 546,
+          "strict_perfect_reference_words": 972,
+          "strict_perfect_word_flags": 434
+        },
+        "metrics": {
+          "canonical_position_detection": {
+            "precision": 0.11940195196234513,
+            "recall": 0.8846153846153846,
+            "f1": 0.21040434225773008
+          },
+          "word_detection": {
+            "precision": 0.12967914438502673,
+            "recall": 0.9737451737451738,
+            "f1": 0.228877393592885
+          },
+          "unanimous_correct_position_rejection_rate": {
+            "rate": 0.2264709702558774,
+            "numerator": 8718,
+            "denominator": 38495,
+            "wilson95": [
+              0.22231728326794978,
+              0.23067924332817588
+            ]
+          },
+          "unanimous_acceptable_position_rejection_rate": {
+            "rate": 0.25269480982002945,
+            "numerator": 10643,
+            "denominator": 42118,
+            "wilson95": [
+              0.24856736475785093,
+              0.2568673627251378
+            ]
+          },
+          "majority_accepted_word_false_positive_rate": {
+            "rate": 0.5768129770992366,
+            "numerator": 8463,
+            "denominator": 14672,
+            "wilson95": [
+              0.5687994692535281,
+              0.584786272751423
+            ]
+          },
+          "strict_perfect_sentence_any_flag_rate": {
+            "rate": 0.9664804469273743,
+            "numerator": 173,
+            "denominator": 179,
+            "wilson95": [
+              0.9288107184545821,
+              0.9845488722921246
+            ]
+          },
+          "strict_perfect_phone_false_rejection_rate": {
+            "rate": 0.18892733564013842,
+            "numerator": 546,
+            "denominator": 2890,
+            "wilson95": [
+              0.17507204678704902,
+              0.2036084975394098
+            ]
+          },
+          "strict_perfect_word_false_positive_rate": {
+            "rate": 0.44650205761316875,
+            "numerator": 434,
+            "denominator": 972,
+            "wilson95": [
+              0.41552102372511635,
+              0.47790428726168654
+            ]
+          },
+          "predicted_insertions_per_100_reference_phones": 5.826595452722245
+        },
+        "checkpoint_unchanged": true
+      },
+      "A-control": {
+        "source": "data/generated/external/speechocean762/20261021T024600Z/A-control/metrics.json",
+        "status": "completed",
+        "evaluated_count": 179,
+        "failed_count": 0,
+        "unprocessed_count": 0,
+        "counts": {
+          "utterances": 179,
+          "reference_phones": 2890,
+          "reference_words": 972,
+          "position_tp": 0,
+          "position_fp": 515,
+          "position_fn": 0,
+          "position_tn": 2375,
+          "unanimous_correct_positions": 2890,
+          "unanimous_correct_rejections": 515,
+          "unanimous_acceptable_positions": 2890,
+          "unanimous_acceptable_rejections": 515,
+          "predicted_insertions": 103,
+          "word_tp": 0,
+          "word_fp": 401,
+          "word_fn": 0,
+          "word_tn": 571,
+          "strict_perfect_utterances": 179,
+          "strict_perfect_sentence_flags": 167,
+          "strict_perfect_reference_phones": 2890,
+          "strict_perfect_phone_rejections": 515,
+          "strict_perfect_reference_words": 972,
+          "strict_perfect_word_flags": 401
+        },
+        "metrics": {
+          "canonical_position_detection": {
+            "precision": 0.0,
+            "recall": null,
+            "f1": 0.0
+          },
+          "word_detection": {
+            "precision": 0.0,
+            "recall": null,
+            "f1": 0.0
+          },
+          "unanimous_correct_position_rejection_rate": {
+            "rate": 0.1782006920415225,
+            "numerator": 515,
+            "denominator": 2890,
+            "wilson95": [
+              0.16467857983924591,
+              0.19257715567088388
+            ]
+          },
+          "unanimous_acceptable_position_rejection_rate": {
+            "rate": 0.1782006920415225,
+            "numerator": 515,
+            "denominator": 2890,
+            "wilson95": [
+              0.16467857983924591,
+              0.19257715567088388
+            ]
+          },
+          "majority_accepted_word_false_positive_rate": {
+            "rate": 0.4125514403292181,
+            "numerator": 401,
+            "denominator": 972,
+            "wilson95": [
+              0.3820062916583439,
+              0.44378508207008394
+            ]
+          },
+          "strict_perfect_sentence_any_flag_rate": {
+            "rate": 0.9329608938547486,
+            "numerator": 167,
+            "denominator": 179,
+            "wilson95": [
+              0.8864907122439717,
+              0.9612382492275223
+            ]
+          },
+          "strict_perfect_phone_false_rejection_rate": {
+            "rate": 0.1782006920415225,
+            "numerator": 515,
+            "denominator": 2890,
+            "wilson95": [
+              0.16467857983924591,
+              0.19257715567088388
+            ]
+          },
+          "strict_perfect_word_false_positive_rate": {
+            "rate": 0.4125514403292181,
+            "numerator": 401,
+            "denominator": 972,
+            "wilson95": [
+              0.3820062916583439,
+              0.44378508207008394
+            ]
+          },
+          "predicted_insertions_per_100_reference_phones": 3.56401384083045
+        },
+        "checkpoint_unchanged": true
+      },
+      "C-control": {
+        "source": "data/generated/external/speechocean762/20261021T024600Z/C-control/metrics.json",
+        "status": "completed",
+        "evaluated_count": 179,
+        "failed_count": 0,
+        "unprocessed_count": 0,
+        "counts": {
+          "utterances": 179,
+          "reference_phones": 2890,
+          "reference_words": 972,
+          "position_tp": 0,
+          "position_fp": 499,
+          "position_fn": 0,
+          "position_tn": 2391,
+          "unanimous_correct_positions": 2890,
+          "unanimous_correct_rejections": 499,
+          "unanimous_acceptable_positions": 2890,
+          "unanimous_acceptable_rejections": 499,
+          "predicted_insertions": 101,
+          "word_tp": 0,
+          "word_fp": 395,
+          "word_fn": 0,
+          "word_tn": 577,
+          "strict_perfect_utterances": 179,
+          "strict_perfect_sentence_flags": 166,
+          "strict_perfect_reference_phones": 2890,
+          "strict_perfect_phone_rejections": 499,
+          "strict_perfect_reference_words": 972,
+          "strict_perfect_word_flags": 395
+        },
+        "metrics": {
+          "canonical_position_detection": {
+            "precision": 0.0,
+            "recall": null,
+            "f1": 0.0
+          },
+          "word_detection": {
+            "precision": 0.0,
+            "recall": null,
+            "f1": 0.0
+          },
+          "unanimous_correct_position_rejection_rate": {
+            "rate": 0.1726643598615917,
+            "numerator": 499,
+            "denominator": 2890,
+            "wilson95": [
+              0.15932142843016917,
+              0.1868763412392747
+            ]
+          },
+          "unanimous_acceptable_position_rejection_rate": {
+            "rate": 0.1726643598615917,
+            "numerator": 499,
+            "denominator": 2890,
+            "wilson95": [
+              0.15932142843016917,
+              0.1868763412392747
+            ]
+          },
+          "majority_accepted_word_false_positive_rate": {
+            "rate": 0.4063786008230453,
+            "numerator": 395,
+            "denominator": 972,
+            "wilson95": [
+              0.3759287743276714,
+              0.4375655198992337
+            ]
+          },
+          "strict_perfect_sentence_any_flag_rate": {
+            "rate": 0.9273743016759777,
+            "numerator": 166,
+            "denominator": 179,
+            "wilson95": [
+              0.8797215343060882,
+              0.9570689889528705
+            ]
+          },
+          "strict_perfect_phone_false_rejection_rate": {
+            "rate": 0.1726643598615917,
+            "numerator": 499,
+            "denominator": 2890,
+            "wilson95": [
+              0.15932142843016917,
+              0.1868763412392747
+            ]
+          },
+          "strict_perfect_word_false_positive_rate": {
+            "rate": 0.4063786008230453,
+            "numerator": 395,
+            "denominator": 972,
+            "wilson95": [
+              0.3759287743276714,
+              0.4375655198992337
+            ]
+          },
+          "predicted_insertions_per_100_reference_phones": 3.4948096885813147
+        },
+        "checkpoint_unchanged": true
+      }
+    },
+    "scope": "SpeechOcean762 official test 2500 câu, 125 speakers tiếng mẹ đẻ Trung, 1220 adult + 1280 child; 0 inference failures. 179 strict perfect utterances từ 87 speakers, 972 words, 2890 canonical phones. Weights unchanged.",
+    "rubric": "Phone detection chỉ vị trí âm canonical, thêm âm báo riêng. Reference expert majority quyết định error; strict perfect là cả 5 chuyên gia chấp nhận mọi phone. Vì vậy F1 không so trực tiếp với canonical-phone-and-ordered-insertion-slots-v1 L2-ARCTIC.",
+    "interpretation": "Cảnh báo nhầm rất cao dù internal fold 1 tốt hơn; có thể do acoustic recognition, alignment hoặc chuẩn corpus. Chưa tách nhân quả. SpeechOcean không phải giọng bản ngữ/TTS; không suy diễn mọi voice TTS.",
+    "caveat": "Wilson intervals mang tính mô tả, không xét tương quan utterances trong speaker và không chứng minh A/B/C khác biệt có ý nghĩa thống kê."
+  },
+  "metric_definitions": {
+    "source": "src/mdd/metrics.py",
+    "protocol": "canonical-phone-and-ordered-insertion-slots-v1, micro metrics từ cộng counters trước khi chia",
+    "units": "Mỗi vị trí canonical và insertion slot có thứ tự trong cùng gap; gaps không có insertion không tạo TN.",
+    "counters": {
+      "TA": "âm chuẩn đúng được chấp nhận",
+      "FR": "âm chuẩn đúng bị từ chối, false rejection",
+      "FA": "âm sai bị chấp nhận, false acceptance",
+      "TR": "âm sai được phát hiện, true rejection",
+      "CD": "lỗi đã phát hiện và chẩn đoán đúng kind/expected/observed",
+      "DE": "lỗi đã phát hiện nhưng chẩn đoán sai"
+    },
+    "formulas": {
+      "precision": "TR/(TR+FR)",
+      "recall": "TR/(TR+FA)",
+      "F1": "2TR/(2TR+FR+FA)",
+      "FAR": "FA/(FA+TR)",
+      "FRR": "FR/(TA+FR)",
+      "DER": "DE/(CD+DE)",
+      "PER": "(substitutions+deletions+insertions giữa perceived gold và predicted)/số perceived gold phones",
+      "word_F1": "2WORD_TP/(2WORD_TP+WORD_FP+WORD_FN)",
+      "WER": "edit distance từ / số từ tham chiếu",
+      "CER": "edit distance ký tự / số ký tự tham chiếu"
+    },
+    "diagnosis_exclusions": "err/[UNK] gold bỏ khỏi diagnosis DER nhưng vẫn giữ trong detection; PER giữ marker *. Denominator 0 → null. PER/WER có thể >1.",
+    "percent_convention": "Raw JSON rates 0–1. Nhân 100 để thành %. Chênh lệch B−A trong % dùng điểm phần trăm; không nhầm với relative %."
+  },
+  "notebook_inventory": {
+    "train_mdd_colab": {
+      "source": "notebooks/train_mdd_colab.ipynb",
+      "cells": 16,
+      "executed_code_cells": 0,
+      "images": [],
+      "errors": []
+    },
+    "mdd_cascade_training_comparison": {
+      "source": "notebooks/mdd_cascade_training_comparison.ipynb",
+      "cells": 21,
+      "executed_code_cells": 10,
+      "images": [
+        {
+          "cell_index_zero_based": 7,
+          "cell_number_one_based": 8,
+          "output_index_zero_based": 1,
+          "format": "image/png",
+          "source_excerpt": "annotations={r['utterance_id']:r for r in (json.loads(line) for line in (ROOT/config['processed_dir']/'annotations.jsonl').read_text(encoding='utf-8').splitlines() if line.strip())}\nframes=[]\nqwen_config=json.loads((ROOT/config['feedback_config']).re"
+        },
+        {
+          "cell_index_zero_based": 8,
+          "cell_number_one_based": 9,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "fig,axes=plt.subplots(1,2,figsize=(12,3.5))\nframe.groupby('speaker')['id'].count().plot.bar(ax=axes[0],color='#278391')\nerror_counts={split:{} for split in ['train','validation','test']}\nfor row in frames:\n    for event in annotations[row['id']]['gol"
+        },
+        {
+          "cell_index_zero_based": 20,
+          "cell_number_one_based": 21,
+          "output_index_zero_based": 2,
+          "format": "image/png",
+          "source_excerpt": "run_script('scripts/report_cascade.py')\nsummary=json.loads((REPORTS/'report/comparison.json').read_text(encoding='utf-8'))\nprint('Trạng thái:',summary['status'])\nprint('Còn chờ:',summary['missing_audio'],summary['missing_feedback'])\nfor filename in ["
+        }
+      ],
+      "errors": []
+    },
+    "mdd_local_demo_comparison": {
+      "source": "notebooks/mdd_local_demo_comparison.ipynb",
+      "cells": 72,
+      "executed_code_cells": 37,
+      "images": [
+        {
+          "cell_index_zero_based": 16,
+          "cell_number_one_based": 17,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "fig, axes = plt.subplots(1, 3, figsize=(15, 4))\ndata.groupby(\"language\").size().sort_values().plot.barh(ax=axes[0], color=\"#3575b8\")\naxes[0].set(xlabel=\"Utterances\", ylabel=\"Native language\", title=\"Dataset composition\")\naxes[1].hist(data.duration_se"
+        },
+        {
+          "cell_index_zero_based": 20,
+          "cell_number_one_based": 21,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "from scipy.signal import spectrogram\n\nfrequencies, times, power = spectrogram(waveform, fs=16000, nperseg=400, noverlap=240)\nfig, axes = plt.subplots(2, 1, figsize=(12, 6))\naxes[0].plot(np.arange(len(waveform)) / 16000, waveform, linewidth=0.6)\naxes["
+        },
+        {
+          "cell_index_zero_based": 22,
+          "cell_number_one_based": 23,
+          "output_index_zero_based": 2,
+          "format": "image/png",
+          "source_excerpt": "print(\"Canonical:\", \" \".join(sample[\"canonical_phones\"]))\nprint(\"Perceived (gold):\", \" \".join(sample[\"perceived_phones\"]))\ngold_events = pd.DataFrame(sample[\"gold_error_events\"])\nsave_table(\"sample_gold_errors\", gold_events)\nfig, ax = plt.subplots(fi"
+        },
+        {
+          "cell_index_zero_based": 48,
+          "cell_number_one_based": 49,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "discovered_runs = app.status()[\"training\"]\nPLOT_RUN_IDS = list(RUN_IDS.values())\nexisting_smoke = next((row[\"run_id\"] for row in discovered_runs if row[\"purpose\"] == \"technical_smoke_only\"), None)\nif existing_smoke:\n    PLOT_RUN_IDS.append(existing_s"
+        },
+        {
+          "cell_index_zero_based": 56,
+          "cell_number_one_based": 57,
+          "output_index_zero_based": 2,
+          "format": "image/png",
+          "source_excerpt": "if comparison is not None:\n    metrics = [\"precision\", \"recall\", \"f1\", \"far\", \"frr\", \"der\", \"per\"]\n    metric_table = pd.DataFrame({stage: comparison[\"runs\"][stage][\"metrics\"] for stage in (\"A\", \"B\", \"C\")})\n    save_table(\"test_metrics_percent\", (met"
+        },
+        {
+          "cell_index_zero_based": 58,
+          "cell_number_one_based": 59,
+          "output_index_zero_based": 2,
+          "format": "image/png",
+          "source_excerpt": "from collections import Counter\n\nif comparison is not None:\n    rows = read_jsonl(EVALUATIONS[\"B\"] / \"predictions.jsonl\")\n    confusions = Counter()\n    for row in rows:\n        for event in align_phones(row[\"perceived_phones\"], row[\"predicted_phones"
+        }
+      ],
+      "errors": []
+    },
+    "mdd_asr_vi_finetuning": {
+      "source": "notebooks/mdd_asr_vi_finetuning.ipynb",
+      "cells": 16,
+      "executed_code_cells": 8,
+      "images": [
+        {
+          "cell_index_zero_based": 5,
+          "cell_number_one_based": 6,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "history = pd.read_json(ROOT/config['run_dir']/'training_history.jsonl', lines=True)\nvalidation = pd.DataFrame(json.loads((ROOT/config['run_dir']/'history.json').read_text()))\nfig, axes = plt.subplots(1,2,figsize=(11,3.4))\naxes[0].plot(history.step,hi"
+        },
+        {
+          "cell_index_zero_based": 7,
+          "cell_number_one_based": 8,
+          "output_index_zero_based": 1,
+          "format": "image/png",
+          "source_excerpt": "rows=[]\nfor split,before,after in [('validation','baseline_validation','best_validation'),('test','baseline_test','trained_test')]:\n    for label,key in [('Before',before),('After',after)]:\n        r=results[key];rows.append({'split':split,'model':la"
+        }
+      ],
+      "errors": []
+    },
+    "mdd_external_validation": {
+      "source": "notebooks/mdd_external_validation.ipynb",
+      "cells": 23,
+      "executed_code_cells": 14,
+      "images": [
+        {
+          "cell_index_zero_based": 11,
+          "cell_number_one_based": 12,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "import numpy as np\nfig, axes = plt.subplots(1, 2, figsize=(10, 4))\nfor ax, prefix, title in zip(axes, [\"position\", \"word\"], [\"Canonical phone positions\", \"Words\"]):\n    c = b[\"counts\"]\n    matrix = np.array([[c[prefix+\"_tn\"], c[prefix+\"_fp\"]], [c[pre"
+        },
+        {
+          "cell_index_zero_based": 14,
+          "cell_number_one_based": 15,
+          "output_index_zero_based": 0,
+          "format": "image/png",
+          "source_excerpt": "fig, ax = plt.subplots(figsize=(9, 4))\ncolumns = [\"Câu bị báo sai %\", \"Từ bị báo sai %\", \"Âm bị báo sai %\"]\nchart = control[columns].copy()\nchart.columns = [\"Utterances with any flag\", \"Flagged words\", \"Rejected phone positions\"]\nchart.plot.bar(ax=ax"
+        },
+        {
+          "cell_index_zero_based": 17,
+          "cell_number_one_based": 18,
+          "output_index_zero_based": 1,
+          "format": "image/png",
+          "source_excerpt": "phones = pd.read_csv(RESULTS / \"B-full/per_phone.csv\").fillna(0)\nphones = phones[phones[\"unanimous_correct_positions\"] >= 100].copy()\nphones[\"false_rejection_percent\"] = 100*phones[\"unanimous_correct_rejections\"]/phones[\"unanimous_correct_positions\"]"
+        }
+      ],
+      "errors": []
+    }
+  },
+  "figure_recommendations": [
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 16,
+      "cell_number_one_based": 17,
+      "caption": "Thành phần corpus, phân bố thời lượng và số lỗi nhãn thủ công."
+    },
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 20,
+      "cell_number_one_based": 21,
+      "caption": "Waveform và phổ STFT audio source train; không phải attention map."
+    },
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 22,
+      "cell_number_one_based": 23,
+      "caption": "Khoảng lỗi theo timing nhãn TextGrid của con người."
+    },
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 48,
+      "cell_number_one_based": 49,
+      "caption": "Learning curves A/B/C cũ từ training/validation log thật; smoke phải ghi technical."
+    },
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 56,
+      "cell_number_one_based": 57,
+      "caption": "So sánh test HQTV fold 1 và chênh lệch B−A/B−C."
+    },
+    {
+      "notebook": "mdd_local_demo_comparison",
+      "cell_index_zero_based": 58,
+      "cell_number_one_based": 59,
+      "caption": "Heatmap substitutions qua alignment perceived→predicted, không phải confusion classification trực tiếp."
+    },
+    {
+      "notebook": "mdd_cascade_training_comparison",
+      "cell_index_zero_based": 7,
+      "cell_number_one_based": 8,
+      "caption": "Phân bố data split cascade và full Qwen prompt/target tokens."
+    },
+    {
+      "notebook": "mdd_cascade_training_comparison",
+      "cell_index_zero_based": 8,
+      "cell_number_one_based": 9,
+      "caption": "Số mẫu theo speaker và human phone errors theo split cascade."
+    },
+    {
+      "notebook": "mdd_cascade_training_comparison",
+      "cell_index_zero_based": 20,
+      "cell_number_one_based": 21,
+      "caption": "Ảnh learning curve snapshot cũ lúc mới bắt đầu train; chỉ dùng kèm nhãn snapshot, không đại diện kết quả cuối."
+    },
+    {
+      "notebook": "mdd_asr_vi_finetuning",
+      "cell_index_zero_based": 5,
+      "cell_number_one_based": 6,
+      "caption": "ASR chữ: train CTC loss và validation WER; best validation step 1050."
+    },
+    {
+      "notebook": "mdd_asr_vi_finetuning",
+      "cell_index_zero_based": 7,
+      "cell_number_one_based": 8,
+      "caption": "WER/CER matched before-after trên 104 validation và 111 test."
+    },
+    {
+      "notebook": "mdd_external_validation",
+      "cell_index_zero_based": 11,
+      "cell_number_one_based": 12,
+      "caption": "Confusion counts phone/word của B trên SpeechOcean762 2500 test."
+    },
+    {
+      "notebook": "mdd_external_validation",
+      "cell_index_zero_based": 14,
+      "cell_number_one_based": 15,
+      "caption": "False alerts A/B/C trên cùng 179 câu được cả 5 chuyên gia chấm đúng."
+    },
+    {
+      "notebook": "mdd_external_validation",
+      "cell_index_zero_based": 17,
+      "cell_number_one_based": 18,
+      "caption": "Các phone bị B báo nhầm nhiều nhất, chỉ xét phone có ít nhất 100 vị trí được cả 5 chuyên gia chấm đúng."
+    }
+  ],
+  "colab_notebook_status": {
+    "source": "notebooks/train_mdd_colab.ipynb",
+    "executed_code_cells": 0,
+    "embedded_figures": 0,
+    "meaning": "Notebook cung cấp hướng dẫn train trên GPU Colab và verify ZIP SHA256; không có output đã chạy, không lấy làm bằng chứng có run Colab thật. Kết quả thực tế trong repository đến Windows CUDA local."
+  },
+  "limitations_global": [
+    "Không gọi kết quả smoke, loss forward, dữ liệu minh họa hoặc cell chưa chạy là chất lượng model.",
+    "Không gộp metric khác task, khác speaker split, khác rubric.",
+    "Kết quả một seed không phản ánh biến thiên giữa seeds; không suy ra statistical significance hoặc hiệu quả học viên chỉ từ F1/WER/ROUGE.",
+    "Không sửa/chạy lại notebooks để dựng số mới; ảnh báo cáo lấy output đã nhúng và chú thích nguồn cell."
+  ],
+  "environment": {
+    "created_at": "2026-10-20T14:47:55.606339+00:00",
+    "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.22000-SP0",
+    "packages": {
+      "torch": "2.7.1+cu126",
+      "transformers": "4.57.6",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "soundfile": "0.13.1",
+      "safetensors": "0.6.2"
+    },
+    "device": "cuda",
+    "cpu_threads": 4,
+    "cuda_runtime": "12.6",
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "mixed_precision_effective": "fp16",
+    "determinism": "Fixed seeds and deterministic cuDNN; bitwise equality across hardware is not guaranteed."
+  }
+}

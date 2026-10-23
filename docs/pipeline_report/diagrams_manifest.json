@@ -1,0 +1,26 @@
+[
+  {
+    "id": "architecture",
+    "pdf": "figures\\architecture.pdf",
+    "png": "figures\\architecture.png",
+    "png_sha256": "edfe51694a2b696cebe598f9dc741b4ee19e63c34af25623b0de7a6dc82808b7"
+  },
+  {
+    "id": "workflow",
+    "pdf": "figures\\workflow.pdf",
+    "png": "figures\\workflow.png",
+    "png_sha256": "bdb5797bec6a1d46e199ce747ffe8985d604af17f858b8abd14b62ee09023e68"
+  },
+  {
+    "id": "routing",
+    "pdf": "figures\\routing.pdf",
+    "png": "figures\\routing.png",
+    "png_sha256": "9108df4bbac66afa9160c16611e080cf41fcecb413f5c9e52501f7c92c6685ea"
+  },
+  {
+    "id": "reference",
+    "pdf": "figures\\reference.pdf",
+    "png": "figures\\reference.png",
+    "png_sha256": "a21a7ee6c8f00290e746795e2c0943fd55ae8e18d85d35f70e78ca947cf5dd6a"
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "dataset": "L2-ARCTIC v5.0, full scripted Vietnamese transcripts + source replay",
+  "indexed_counts": {
+    "HQTV": 1132,
+    "THV": 1132,
+    "PNV": 1132,
+    "TLV": 1132,
+    "source": 1949
+  },
+  "excluded_counts": {
+    "speaker_prompt_holdout": 2806,
+    "long_train_utterance": 6
+  },
+  "seed": 42,
+  "split_policy": "Speaker-disjoint and normalized-prompt-disjoint; fixed SHA256 prompt buckets 80/10/10.",
+  "train_speakers": [
+    "HQTV",
+    "THV"
+  ],
+  "validation_speakers": [
+    "PNV"
+  ],
+  "test_speakers": [
+    "TLV"
+  ],
+  "source_replay_count": 611,
+  "source_replay_candidates": 1616,
+  "labels": "Corpus orthographic English transcripts; not gold realized-word annotations.",
+  "license": "CC BY-NC 4.0; research use",
+  "parts": {
+    "train": {
+      "count": 2445,
+      "hours": 2.494734265558075,
+      "max_seconds": 7.97795918367347,
+      "sha256": "87f57a3d749eae1086d29b1560b82329579bbdf4d7b6e46c6fee16f1a6f40845"
+    },
+    "validation": {
+      "count": 104,
+      "hours": 0.10382064121945074,
+      "max_seconds": 6.954761904761905,
+      "sha256": "a8746f059c45a92021b86e3ef7a7414c08f70320a45912713b350ec7f0a2995f"
+    },
+    "test": {
+      "count": 111,
+      "hours": 0.13423270345175106,
+      "max_seconds": 8.098684807256236,
+      "sha256": "49eec7b07ef8b8093a55692a2ccef6b4fd2911203cb11e71f29ac1dd02a842aa"
+    }
+  }
+}

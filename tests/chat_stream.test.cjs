@@ -1,7 +1,130 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { LiveReply } = require('../demo/chat.js');
+const { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest, voiceResourceKey,
+  conversationInterpretation, conversationUserText, updateUserSpeech } = require('../demo/chat.js');
+
+test('accepted interpretation drives conversation text while retaining the raw ASR and confirmation state', () => {
+  const user = { content: 'Audio recording' };
+  const speech = { transcript: 'It was the divicote true getesir', conversation_source: 'asr_interpreted',
+    conversation_text: 'It was difficult to get there.', interpretation: {
+      status: 'accepted', text: 'It was difficult to get there.', changed: true, requires_confirmation: true,
+    } };
+  updateUserSpeech(user, speech);
+  assert.equal(user.content, speech.transcript);
+  assert.equal(conversationUserText(user), speech.interpretation.text);
+  assert.equal(user.interpretedRequiresConfirmation, true);
+  assert.equal(user.confirmedSource, undefined, 'An interpretation cannot confirm itself.');
+  assert.equal(speech.reference_text, undefined, 'Updating display/history must not invent an acoustic reference.');
+});
+test('ambiguous, unavailable and mismatched interpretations cannot replace the spoken transcript', () => {
+  for (const status of ['ambiguous', 'unavailable']) {
+    const user = { content: 'Original', interpretedText: 'Stale old interpretation', interpretedSource: 'asr_interpreted' };
+    const speech = { transcript: 'And he dishurt my m', conversation_source: 'asr_interpreted',
+      conversation_text: 'And he hurt my arm.', interpretation: { status, text: 'And he hurt my arm.' } };
+    updateUserSpeech(user, speech);
+    assert.equal(conversationInterpretation(speech), null);
+    assert.equal(conversationUserText(user), speech.transcript);
+  }
+  assert.equal(conversationInterpretation({ conversation_source: 'asr_interpreted', conversation_text: 'Different',
+    interpretation: { status: 'accepted', text: 'Unexpected mismatch' } }), null);
+});
+test('explicit confirmation overrides inferred text and safe formatting remains supported', () => {
+  const user = { content: 'to day', interpretedSource: 'asr_interpreted', interpretedText: 'Today.' };
+  user.confirmedSource = 'user_confirmed'; user.confirmedText = 'Two days.';
+  assert.equal(conversationUserText(user), 'Two days.');
+  const formatted = { content: 'hello' };
+  updateUserSpeech(formatted, { transcript: 'hello', conversation_source: 'asr_normalized', conversation_text: 'Hello.',
+    normalization: { lexical_preservation: true } });
+  assert.equal(conversationUserText(formatted), 'Hello.');
+});
+
+test('sentence prefetch and Listen share a pending provider request without duplicate synthesis', async () => {
+  const requests = new Map(); let calls = 0, release;
+  const create = () => { calls++; return new Promise(resolve => { release = resolve; }); };
+  const prefetched = sharedVoiceRequest(requests, 'sentence-revision-1', create);
+  const listen = sharedVoiceRequest(requests, 'sentence-revision-1', create);
+  assert.equal(prefetched, listen); await Promise.resolve(); assert.equal(calls, 1);
+  release({ status: 'ready', url: '/api/chat/audio/example' });
+  assert.equal((await listen).status, 'ready'); assert.equal(requests.size, 0);
+});
+test('a failed voice request allows an explicit retry without leaving a pending lock', async () => {
+  const requests = new Map();
+  await assert.rejects(sharedVoiceRequest(requests, 'sentence', () => { throw new Error('offline'); }), /offline/);
+  assert.equal(requests.size, 0);
+  assert.equal(await sharedVoiceRequest(requests, 'sentence', () => 'ready'), 'ready');
+});
+test('prepared voice resources are isolated by turn, reference revision, target, selected voice, speed and sentence', () => {
+  const makeKey = (...args) => voiceResourceKey(...args);
+  const args = ['job-a', 1, 'sentence', { voice_id: 'Sarah', speed: 1 }, 'Original words.'];
+  const original = makeKey(...args);
+  for (const changed of [
+    ['job-b', ...args.slice(1)], [args[0], 2, ...args.slice(2)],
+    [args[0], args[1], 'reply', ...args.slice(3)],
+    [...args.slice(0, 3), { voice_id: 'Other', speed: 1 }, args[4]],
+    [...args.slice(0, 3), { voice_id: 'Sarah', speed: .85 }, args[4]],
+    [...args.slice(0, 4), 'Confirmed different words.'],
+  ]) assert.notEqual(makeKey(...changed), original);
+  assert.equal(makeKey(...args), makeKey(...args.slice(0, 3), { speed: 1.0, voice_id: 'Sarah' }, args[4]));
+});
+
+function openingAudio(readyState = 0) {
+  const audio = new EventTarget(); audio.readyState = readyState; audio.loadCount = 0;
+  audio.load = () => { audio.loadCount++; };
+  return audio;
+}
+test('opening audio waits for a playable buffer before its settling pause', async () => {
+  const audio = openingAudio(); let finished = false;
+  const pending = prepareOpeningAudio(audio, { delayMs: 15, timeoutMs: 500 }).then(value => { finished = true; return value; });
+  await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(finished, false);
+  audio.readyState = 3; audio.dispatchEvent(new Event('canplay'));
+  assert.equal(finished, false); assert.equal(await pending, true);
+  assert.equal(audio.preload, 'auto'); assert.equal(audio.loadCount, 1);
+});
+test('cached playable opening audio still observes the short settling pause', async () => {
+  const audio = openingAudio(4); let finished = false;
+  const pending = prepareOpeningAudio(audio, { delayMs: 15 }).then(value => { finished = true; return value; });
+  await Promise.resolve(); assert.equal(finished, false); assert.equal(await pending, true);
+});
+test('stopping during opening buffering or its settling pause prevents playback permission', async () => {
+  let current = true;
+  const pending = prepareOpeningAudio(openingAudio(), { isCurrent: () => current, delayMs: 1, timeoutMs: 500 });
+  current = false; assert.equal(await pending, false);
+  current = true;
+  const settling = prepareOpeningAudio(openingAudio(4), { isCurrent: () => current, delayMs: 20 });
+  await Promise.resolve(); current = false; assert.equal(await settling, false);
+});
+test('opening audio errors and buffering timeouts finish instead of keeping text hidden', async () => {
+  const audio = openingAudio();
+  const failed = prepareOpeningAudio(audio, { timeoutMs: 500 });
+  audio.dispatchEvent(new Event('error')); await assert.rejects(failed, /Không tải được/);
+  await assert.rejects(prepareOpeningAudio(openingAudio(), { timeoutMs: 5 }), /tải quá lâu/);
+});
+
+test('completed reply is revealed and spoken while feedback remains pending', () => {
+  const h = harness();
+  const job = { status: 'correcting', text: 'How was your visit?', speech: {
+    reply_ready: true, rewrite: { status: 'pending' }, coaching: { status: 'pending' },
+  } };
+  h.reply.update(job.text, { final: replyReady(job) });
+  assert.equal(h.reply.visibleText, job.text);
+  assert.equal(h.spoken.length, 1);
+  job.speech.rewrite = { status: 'ready', natural: 'I visited yesterday.' };
+  job.status = 'coaching'; h.reply.update(job.text, { final: replyReady(job) });
+  job.status = 'ready'; h.reply.update(job.text, { final: replyReady(job) });
+  assert.equal(h.reply.visibleText, job.text);
+  assert.equal(h.spoken.length, 1, 'feedback updates must not replay the reply');
+});
+
+test('a feedback stage without an explicit completed reply cannot release speech', () => {
+  for (const status of ['transcribing', 'generating', 'correcting', 'coaching']) {
+    assert.equal(replyReady({ status, speech: { rewrite: { status: 'ready' } } }), false);
+  }
+  for (const status of ['error', 'cancelled', 'cancelling']) {
+    assert.equal(replyReady({ status, speech: { reply_ready: true } }), false);
+  }
+  assert.equal(replyReady({ status: 'ready' }), true);
+});
 
 function harness(options = {}) {
   const tasks = new Map(), spoken = [], frames = [], errors = []; let next = 0, cancelled = 0;

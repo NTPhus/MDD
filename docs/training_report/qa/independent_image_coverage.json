@@ -1,0 +1,751 @@
+{
+  "pdf": "MDD_Bao_cao_huan_luyen_Wav2Vec2_Qwen.pdf",
+  "pdf_sha256": "ed32132db57e47a4d1d160fd49824bd0608e4f4385c32e3953a17b9eafe99473",
+  "pages": 36,
+  "image_occurrences": 35,
+  "matched_originals": 35,
+  "unmatched": [],
+  "positions": [
+    {
+      "page": 5,
+      "xref": 35,
+      "width": 1490,
+      "height": 390,
+      "n": 3,
+      "original_figure_id": 13,
+      "display_figure_number": 1,
+      "rectangles": [
+        [
+          51.02,
+          181.53,
+          544.25,
+          310.63
+        ]
+      ]
+    },
+    {
+      "page": 5,
+      "xref": 37,
+      "width": 1190,
+      "height": 590,
+      "n": 3,
+      "original_figure_id": 14,
+      "display_figure_number": 2,
+      "rectangles": [
+        [
+          51.02,
+          357.63,
+          544.25,
+          602.17
+        ]
+      ]
+    },
+    {
+      "page": 6,
+      "xref": 42,
+      "width": 990,
+      "height": 290,
+      "n": 3,
+      "original_figure_id": 2,
+      "display_figure_number": 4,
+      "rectangles": [
+        [
+          51.02,
+          540.33,
+          544.25,
+          684.81
+        ]
+      ]
+    },
+    {
+      "page": 6,
+      "xref": 40,
+      "width": 1190,
+      "height": 290,
+      "n": 3,
+      "original_figure_id": 15,
+      "display_figure_number": 3,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          185.73
+        ]
+      ]
+    },
+    {
+      "page": 7,
+      "xref": 45,
+      "width": 1399,
+      "height": 340,
+      "n": 3,
+      "original_figure_id": 5,
+      "display_figure_number": 5,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          185.4
+        ]
+      ]
+    },
+    {
+      "page": 7,
+      "xref": 49,
+      "width": 1287,
+      "height": 390,
+      "n": 3,
+      "original_figure_id": 19,
+      "display_figure_number": 7,
+      "rectangles": [
+        [
+          51.02,
+          473.32,
+          544.25,
+          622.78
+        ]
+      ]
+    },
+    {
+      "page": 7,
+      "xref": 47,
+      "width": 1190,
+      "height": 340,
+      "n": 3,
+      "original_figure_id": 6,
+      "display_figure_number": 6,
+      "rectangles": [
+        [
+          51.02,
+          232.4,
+          544.25,
+          373.32
+        ]
+      ]
+    },
+    {
+      "page": 9,
+      "xref": 53,
+      "width": 1588,
+      "height": 390,
+      "n": 3,
+      "original_figure_id": 16,
+      "display_figure_number": 8,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          186.66
+        ]
+      ]
+    },
+    {
+      "page": 10,
+      "xref": 56,
+      "width": 1590,
+      "height": 490,
+      "n": 3,
+      "original_figure_id": 17,
+      "display_figure_number": 9,
+      "rectangles": [
+        [
+          51.02,
+          449.83,
+          544.25,
+          601.83
+        ]
+      ]
+    },
+    {
+      "page": 11,
+      "xref": 59,
+      "width": 838,
+      "height": 590,
+      "n": 3,
+      "original_figure_id": 18,
+      "display_figure_number": 10,
+      "rectangles": [
+        [
+          86.26,
+          65.53,
+          509.01,
+          363.17
+        ]
+      ]
+    },
+    {
+      "page": 12,
+      "xref": 62,
+      "width": 1950,
+      "height": 600,
+      "n": 3,
+      "original_figure_id": 22,
+      "display_figure_number": 11,
+      "rectangles": [
+        [
+          51.02,
+          159.53,
+          544.25,
+          311.29
+        ]
+      ]
+    },
+    {
+      "page": 13,
+      "xref": 65,
+      "width": 1500,
+      "height": 600,
+      "n": 3,
+      "original_figure_id": 23,
+      "display_figure_number": 12,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          262.82
+        ]
+      ]
+    },
+    {
+      "page": 15,
+      "xref": 69,
+      "width": 1800,
+      "height": 675,
+      "n": 3,
+      "original_figure_id": 25,
+      "display_figure_number": 13,
+      "rectangles": [
+        [
+          51.02,
+          337.43,
+          544.25,
+          522.39
+        ]
+      ]
+    },
+    {
+      "page": 16,
+      "xref": 72,
+      "width": 1190,
+      "height": 240,
+      "n": 3,
+      "original_figure_id": 20,
+      "display_figure_number": 14,
+      "rectangles": [
+        [
+          51.02,
+          593.63,
+          544.25,
+          693.1
+        ]
+      ]
+    },
+    {
+      "page": 17,
+      "xref": 75,
+      "width": 1950,
+      "height": 600,
+      "n": 3,
+      "original_figure_id": 24,
+      "display_figure_number": 15,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          217.29
+        ]
+      ]
+    },
+    {
+      "page": 18,
+      "xref": 77,
+      "width": 1490,
+      "height": 390,
+      "n": 3,
+      "original_figure_id": 33,
+      "display_figure_number": 16,
+      "rectangles": [
+        [
+          51.02,
+          384.33,
+          544.25,
+          513.43
+        ]
+      ]
+    },
+    {
+      "page": 18,
+      "xref": 78,
+      "width": 890,
+      "height": 490,
+      "n": 3,
+      "original_figure_id": 34,
+      "display_figure_number": 17,
+      "rectangles": [
+        [
+          130.31,
+          560.43,
+          464.97,
+          744.68
+        ]
+      ]
+    },
+    {
+      "page": 20,
+      "xref": 82,
+      "width": 1090,
+      "height": 329,
+      "n": 3,
+      "original_figure_id": 3,
+      "display_figure_number": 18,
+      "rectangles": [
+        [
+          51.02,
+          467.93,
+          544.25,
+          616.8
+        ]
+      ]
+    },
+    {
+      "page": 21,
+      "xref": 85,
+      "width": 990,
+      "height": 330,
+      "n": 3,
+      "original_figure_id": 4,
+      "display_figure_number": 19,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          229.94
+        ]
+      ]
+    },
+    {
+      "page": 22,
+      "xref": 88,
+      "width": 954,
+      "height": 436,
+      "n": 3,
+      "original_figure_id": 10,
+      "display_figure_number": 20,
+      "rectangles": [
+        [
+          51.02,
+          308.33,
+          544.25,
+          533.74
+        ]
+      ]
+    },
+    {
+      "page": 23,
+      "xref": 91,
+      "width": 979,
+      "height": 420,
+      "n": 3,
+      "original_figure_id": 11,
+      "display_figure_number": 21,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          277.13
+        ]
+      ]
+    },
+    {
+      "page": 23,
+      "xref": 93,
+      "width": 979,
+      "height": 429,
+      "n": 3,
+      "original_figure_id": 12,
+      "display_figure_number": 22,
+      "rectangles": [
+        [
+          51.02,
+          324.13,
+          544.25,
+          540.26
+        ]
+      ]
+    },
+    {
+      "page": 24,
+      "xref": 96,
+      "width": 977,
+      "height": 330,
+      "n": 3,
+      "original_figure_id": 26,
+      "display_figure_number": 23,
+      "rectangles": [
+        [
+          51.02,
+          227.53,
+          544.25,
+          394.12
+        ]
+      ]
+    },
+    {
+      "page": 24,
+      "xref": 98,
+      "width": 2080,
+      "height": 608,
+      "n": 3,
+      "original_figure_id": 27,
+      "display_figure_number": 24,
+      "rectangles": [
+        [
+          51.02,
+          494.12,
+          544.25,
+          638.3
+        ]
+      ]
+    },
+    {
+      "page": 25,
+      "xref": 103,
+      "width": 1040,
+      "height": 720,
+      "n": 3,
+      "original_figure_id": 29,
+      "display_figure_number": 26,
+      "rectangles": [
+        [
+          103.15,
+          343.74,
+          492.13,
+          613.03
+        ]
+      ]
+    },
+    {
+      "page": 25,
+      "xref": 101,
+      "width": 1440,
+      "height": 640,
+      "n": 3,
+      "original_figure_id": 28,
+      "display_figure_number": 25,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          284.74
+        ]
+      ]
+    },
+    {
+      "page": 26,
+      "xref": 107,
+      "width": 1040,
+      "height": 720,
+      "n": 3,
+      "original_figure_id": 31,
+      "display_figure_number": 28,
+      "rectangles": [
+        [
+          103.15,
+          256.7,
+          492.13,
+          525.99
+        ]
+      ]
+    },
+    {
+      "page": 26,
+      "xref": 106,
+      "width": 2080,
+      "height": 608,
+      "n": 3,
+      "original_figure_id": 30,
+      "display_figure_number": 27,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          209.7
+        ]
+      ]
+    },
+    {
+      "page": 27,
+      "xref": 111,
+      "width": 590,
+      "height": 329,
+      "n": 3,
+      "original_figure_id": 9,
+      "display_figure_number": 30,
+      "rectangles": [
+        [
+          56.18,
+          349.87,
+          539.1,
+          619.16
+        ]
+      ]
+    },
+    {
+      "page": 27,
+      "xref": 109,
+      "width": 990,
+      "height": 370,
+      "n": 3,
+      "original_figure_id": 8,
+      "display_figure_number": 29,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          249.87
+        ]
+      ]
+    },
+    {
+      "page": 28,
+      "xref": 116,
+      "width": 1500,
+      "height": 540,
+      "n": 3,
+      "original_figure_id": 35,
+      "display_figure_number": 32,
+      "rectangles": [
+        [
+          51.02,
+          362.82,
+          544.25,
+          540.38
+        ]
+      ]
+    },
+    {
+      "page": 28,
+      "xref": 114,
+      "width": 1350,
+      "height": 540,
+      "n": 3,
+      "original_figure_id": 32,
+      "display_figure_number": 31,
+      "rectangles": [
+        [
+          51.02,
+          65.53,
+          544.25,
+          262.82
+        ]
+      ]
+    },
+    {
+      "page": 31,
+      "xref": 123,
+      "width": 1800,
+      "height": 570,
+      "n": 3,
+      "original_figure_id": 21,
+      "display_figure_number": 34,
+      "rectangles": [
+        [
+          51.02,
+          326.83,
+          544.25,
+          483.02
+        ]
+      ]
+    },
+    {
+      "page": 31,
+      "xref": 121,
+      "width": 2240,
+      "height": 560,
+      "n": 3,
+      "original_figure_id": 7,
+      "display_figure_number": 33,
+      "rectangles": [
+        [
+          51.02,
+          144.53,
+          544.25,
+          267.83
+        ]
+      ]
+    },
+    {
+      "page": 32,
+      "xref": 126,
+      "width": 990,
+      "height": 290,
+      "n": 3,
+      "original_figure_id": 1,
+      "display_figure_number": 35,
+      "rectangles": [
+        [
+          51.02,
+          311.53,
+          544.25,
+          456.01
+        ]
+      ]
+    }
+  ],
+  "caption_sequence": [
+    {
+      "display_figure_number": 1,
+      "page": 5
+    },
+    {
+      "display_figure_number": 2,
+      "page": 5
+    },
+    {
+      "display_figure_number": 3,
+      "page": 6
+    },
+    {
+      "display_figure_number": 4,
+      "page": 6
+    },
+    {
+      "display_figure_number": 5,
+      "page": 7
+    },
+    {
+      "display_figure_number": 6,
+      "page": 7
+    },
+    {
+      "display_figure_number": 7,
+      "page": 7
+    },
+    {
+      "display_figure_number": 8,
+      "page": 9
+    },
+    {
+      "display_figure_number": 9,
+      "page": 10
+    },
+    {
+      "display_figure_number": 10,
+      "page": 11
+    },
+    {
+      "display_figure_number": 11,
+      "page": 12
+    },
+    {
+      "display_figure_number": 12,
+      "page": 13
+    },
+    {
+      "display_figure_number": 13,
+      "page": 15
+    },
+    {
+      "display_figure_number": 14,
+      "page": 16
+    },
+    {
+      "display_figure_number": 15,
+      "page": 17
+    },
+    {
+      "display_figure_number": 16,
+      "page": 18
+    },
+    {
+      "display_figure_number": 17,
+      "page": 18
+    },
+    {
+      "display_figure_number": 18,
+      "page": 20
+    },
+    {
+      "display_figure_number": 19,
+      "page": 21
+    },
+    {
+      "display_figure_number": 20,
+      "page": 22
+    },
+    {
+      "display_figure_number": 21,
+      "page": 23
+    },
+    {
+      "display_figure_number": 22,
+      "page": 23
+    },
+    {
+      "display_figure_number": 23,
+      "page": 24
+    },
+    {
+      "display_figure_number": 24,
+      "page": 24
+    },
+    {
+      "display_figure_number": 25,
+      "page": 25
+    },
+    {
+      "display_figure_number": 26,
+      "page": 25
+    },
+    {
+      "display_figure_number": 27,
+      "page": 26
+    },
+    {
+      "display_figure_number": 28,
+      "page": 26
+    },
+    {
+      "display_figure_number": 29,
+      "page": 27
+    },
+    {
+      "display_figure_number": 30,
+      "page": 27
+    },
+    {
+      "display_figure_number": 31,
+      "page": 28
+    },
+    {
+      "display_figure_number": 32,
+      "page": 28
+    },
+    {
+      "display_figure_number": 33,
+      "page": 31
+    },
+    {
+      "display_figure_number": 34,
+      "page": 31
+    },
+    {
+      "display_figure_number": 35,
+      "page": 32
+    }
+  ],
+  "captions_exactly_01_through_35": true,
+  "expected_pdf_sha256": "ed32132db57e47a4d1d160fd49824bd0608e4f4385c32e3953a17b9eafe99473",
+  "expected_pdf_sha256_matches": true,
+  "caption_review": "Reviewed all 35 captions against original figures, saved notebook outputs and prior QA notes. Previously flagged misleading details corrected, including original IDs 2,12,15,19,20,23,24,26–31."
+}

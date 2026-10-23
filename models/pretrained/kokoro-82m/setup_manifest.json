@@ -1,0 +1,114 @@
+{
+  "status": "ready",
+  "model_id": "hexgrad/Kokoro-82M",
+  "runtime": "kokoro-onnx==0.6.1",
+  "provider": "kokoro",
+  "device": "cuda",
+  "threads": 4,
+  "precision": "fp32-optimized",
+  "model_file": "kokoro-v1.0.optimized.onnx",
+  "voices_file": "voices-v1.0.bin",
+  "runtime_python": ".venv-kokoro/Scripts/python.exe",
+  "default_voice_id": "af_heart",
+  "release": "model-files-v1.0",
+  "source": "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0",
+  "checksum_source": "Official pinned v1.0 download; SHA256 retained locally",
+  "model_license": "Apache-2.0",
+  "runtime_license": "MIT",
+  "files": {
+    "kokoro-v1.0.optimized.onnx": {
+      "sha256": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+      "bytes": 325532387,
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
+    },
+    "voices-v1.0.bin": {
+      "sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+      "bytes": 28214398,
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin"
+    }
+  },
+  "downloaded_at_utc": "2026-10-23T10:16:16.339864+07:00",
+  "voices": [
+    "af_alloy",
+    "af_aoede",
+    "af_bella",
+    "af_heart",
+    "af_jessica",
+    "af_kore",
+    "af_nicole",
+    "af_nova",
+    "af_river",
+    "af_sarah",
+    "af_sky",
+    "am_adam",
+    "am_echo",
+    "am_eric",
+    "am_fenrir",
+    "am_liam",
+    "am_michael",
+    "am_onyx",
+    "am_puck",
+    "am_santa",
+    "bf_alice",
+    "bf_emma",
+    "bf_isabella",
+    "bf_lily",
+    "bm_daniel",
+    "bm_fable",
+    "bm_george",
+    "bm_lewis"
+  ],
+  "packages": {
+    "kokoro-onnx": "0.6.1",
+    "onnxruntime-gpu": "1.20.2",
+    "numpy": "2.5.4",
+    "soundfile": "0.13.1",
+    "espeakng-loader": "0.2.4",
+    "phonemizer": "3.4.0"
+  },
+  "verified_at_utc": "2026-10-23T03:34:28.766085+00:00",
+  "smoke": {
+    "audio": "data/generated/tts/kokoro/90dc25b1c694ca12bbf81548c6c55a91ea099ce6e19e029dd7a4a30d50903b25.wav",
+    "timing": {
+      "total_sec": 1.206485,
+      "cache_lookup_sec": 2e-05,
+      "cache_hit": false,
+      "new_tasks_submitted": 0,
+      "synthesis_sec": 1.187345,
+      "load_sec": 0.0,
+      "audio_duration_sec": 3.349333,
+      "real_time_factor": 0.354502,
+      "phonemize_sec": 0.152824,
+      "inference_sec": 1.034514,
+      "requested_device": "cuda",
+      "effective_device": "cuda",
+      "execution_provider": "CUDAExecutionProvider",
+      "provider_options": {
+        "CUDAExecutionProvider": {
+          "device_id": "0",
+          "gpu_mem_limit": "805306368",
+          "arena_extend_strategy": "kSameAsRequested",
+          "cudnn_conv_algo_search": "HEURISTIC",
+          "do_copy_in_default_stream": "1",
+          "cudnn_conv_use_max_workspace": "0",
+          "use_tf32": "1"
+        }
+      }
+    },
+    "providers": [
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "effective_device": "cuda",
+    "execution_provider": "CUDAExecutionProvider"
+  },
+  "benchmark": "data/generated/kokoro-gpu-validation-v1/summary.json",
+  "gpu_mem_limit_mb": 768,
+  "cuda_dll_directory": ".venv/Lib/site-packages/torch/lib",
+  "validation": {
+    "live-api": "data/generated/kokoro-gpu-validation-v1/live-api.json",
+    "browser-kokoro": "data/generated/kokoro-gpu-validation-v1/browser-kokoro.json",
+    "pipeline-live": "data/generated/kokoro-gpu-validation-v1/pipeline-live.json"
+  },
+  "applied_at_utc": "2026-10-23T03:39:55.567511+00:00"
+}

@@ -25,6 +25,7 @@ import wave
 from .speech_practice import PRACTICE_PROMPTS
 from .speech_topics import TOPICS, public_topics, guidance
 from .chat_voices import load_voices, preview_stem
+from .tts_registry import kokoro_status
 
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SYSTEM = ("You are a helpful conversational assistant. Answer the user's actual question clearly and concisely. "
@@ -79,11 +80,15 @@ class ChatService:
         self._lock = threading.RLock()
         self._generation_slot = threading.BoundedSemaphore(1)
         self._voice_slot = threading.BoundedSemaphore(1)
+        # One reply and one sentence example can synthesize concurrently. A
+        # prefetched practice sentence must never occupy the reply's slot.
+        self._sentence_voice_slot = threading.BoundedSemaphore(1)
         self._jobs = OrderedDict()
         self._requests = {}
         self._voices = {}
         self._runner = None
         self.cache_dir = self.root / "data/generated/tts/ai33/chat"
+        self.kokoro_cache_dir = self.root / "data/generated/tts/kokoro"
 
     def _module(self, name):
         if str(self.root) not in sys.path:
@@ -108,20 +113,31 @@ class ChatService:
                                  "adapter": adapter, "expected_sha256": provenance.get("adapter_sha256")}}
 
     def config(self):
+        from mdd.demo_model_registry import asr_selection, grammar_selection, recovery_selection
+        from mdd.chat_runtime import requested_device
         capabilities = self.capability_loader()
         english_voices = self.english_voices()
+        kokoro = kokoro_status(self.root)
+        recovery = recovery_selection(self.root)
         voice_name = os.environ.get("AI33_VOICE_EN_NAME", "").strip()[:120] if capabilities.get("english_voice_configured") else ""
         models = [{key: item[key] for key in ("id", "label", "ready", "description")} for item in self._models().values()]
-        return {"models": models, "default_model_id": "qwen-base", "device": "cpu", "threads": 2,
+        return {"models": models, "default_model_id": "qwen-base", "device": requested_device(), "threads": 2,
+                "acoustic_device": "cpu",
+                "asr_model_id": asr_selection(self.root)['id'],
+                "grammar_model_id": grammar_selection(self.root)['id'],
                 "max_message_chars": 2000, "max_new_tokens": 384,
                 "ai33_available": bool(capabilities.get("tts_configured")),
+                "kokoro_available": kokoro['ready'],
+                "kokoro_voices": kokoro['voices'],
+                "kokoro_default_voice_id": kokoro['default_voice_id'],
                 "english_voice_name": voice_name,
                 "english_voices": english_voices,
                 "default_voice_id": os.environ.get('AI33_VOICE_EN', '').strip() or (english_voices[0]['id'] if english_voices else ''),
                 "voice_speeds": [0.85, 1.0, 1.15],
-                "default_voice_provider": "ai33" if capabilities.get("tts_configured") and (voice_name or english_voices) else "browser",
+                "default_voice_provider": "kokoro" if kokoro['ready'] else (
+                    "ai33" if capabilities.get("tts_configured") and (voice_name or english_voices) else "browser"),
                 "voice_locales": [locale for locale, key in (("vi-VN", "vietnamese_voice_configured"), ("en-US", "english_voice_configured"))
-                                  if capabilities.get(key) or (locale == 'en-US' and english_voices and capabilities.get('tts_configured'))],
+                                  if capabilities.get(key) or (locale == 'en-US' and (kokoro['ready'] or (english_voices and capabilities.get('tts_configured'))))],
                 "speech_ready": (self.root / "models/pretrained/wav2vec2-base-960h/model.safetensors").is_file()
                     and (self.root / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/model.safetensors").is_file(),
                 "practice_prompts": [{"id": key, "text": value} for key, value in PRACTICE_PROMPTS.items()],
@@ -132,6 +148,10 @@ class ChatService:
                 "pronunciation_feedback": "collapsed", "voice_content": "reply_only",
                 "reference_confirmation": True,
                 "transcript_normalization": "lexical_preserving_v1",
+                "transcript_recovery": recovery['version'],
+                "transcript_recovery_provider": recovery['provider'],
+                "transcript_recovery_model": recovery['model_id'],
+                "transcript_recovery_revision": recovery['revision'],
                 "reference_regenerates_reply": True,
                 "reference_regenerates_only_on_change": True,
                 "pronunciation_review": "immediate_provisional",
@@ -148,6 +168,14 @@ class ChatService:
                 for voice in voices]
 
     def voice_preview(self, identifier):
+        if any(voice['id'] == identifier for voice in kokoro_status(self.root)['voices']):
+            try:
+                client = self._module('kokoro_tts').KokoroTTS(cache_dir=self.kokoro_cache_dir)
+                path = client.synthesize('Hello! Let us practice speaking English together.',
+                                         locale='en-US', voice_id=identifier, speed=1.0)
+                return self._read_voice(path)
+            except Exception:
+                raise ChatError(503, 'chat_preview_unavailable', 'Chưa tạo được bản nghe thử. Hãy thử lại.') from None
         voice = next((v for v in load_voices(self.root) if v['id'] == identifier), None)
         if voice is None or not voice['preview_url']:
             raise ChatError(404, 'chat_voice_not_found', 'Chưa có bản nghe thử cho giọng này.')
@@ -307,9 +335,12 @@ class ChatService:
             self._requests[request_id] = (fingerprint, job.identifier)
             self._prune()
         request = {"audio_base64": encoded, "history": cleaned[1:-1],
-                   'rewrite_enabled': True, 'normalization_enabled': True,
+                   'rewrite_enabled': True, 'normalization_enabled': True, 'recovery_enabled': True,
                    "reference_text": corrected_reference or PRACTICE_PROMPTS.get(practice_id), "model_id": model_id, "topic_id": topic_id,
                    'reference_source': 'corrected_sentence' if corrected_reference else 'reading_prompt' if practice_id else 'asr'}
+        from mdd.demo_model_registry import grammar_selection, recovery_selection
+        request['grammar_model_id'] = grammar_selection(self.root)['id']
+        request['recovery_provider'] = recovery_selection(self.root)['provider']
         threading.Thread(target=self._generate_speech, args=(job, request), daemon=True, name="local-speech-job").start()
         return self.poll(job.identifier)
 
@@ -335,6 +366,8 @@ class ChatService:
                 raise ChatError(409, 'chat_reference_not_ready', 'Chờ lượt hiện tại xử lý xong rồi đối chiếu lại.')
             speech['conversation_text'] = speech['reference_text']
             speech['conversation_source'] = 'user_confirmed'
+            speech['transcript_clarity'] = {'needs_clarification': False, 'reason': None,
+                                            'interpreted': False, 'requires_confirmation': False}
             previous_text = original.get('conversation_text') or original.get('reference_text') or original.get('transcript')
             changed = spoken_text_key(speech['reference_text']) != spoken_text_key(previous_text)
             if not changed:
@@ -358,7 +391,6 @@ class ChatService:
                 speech.pop(key, None)
             speech['rewrite'] = {'status': 'pending', 'mode': 'grammar_and_natural', 'original': speech['conversation_text']}
             speech['correction'] = {'status': 'not_needed', 'mode': 'completion_only', 'original': speech['conversation_text']}
-            speech['transcript_clarity'] = {'needs_clarification': False, 'reason': None}
             revision = job.generation_revision + 1
             job.reply_revisions.append({'reference_revision': job.generation_revision, 'text': job.text,
                                         'metadata': deepcopy(job.metadata)})
@@ -385,6 +417,8 @@ class ChatService:
             request = {**context, 'operation': 'regenerate_reference', 'dialogue_text': speech['conversation_text'],
                        'reference_source': 'user_confirmed', 'reference_revision': revision,
                        'speech': {key: deepcopy(value) for key, value in speech.items() if not key.startswith('_')}}
+            from mdd.demo_model_registry import grammar_selection
+            request['grammar_model_id'] = grammar_selection(self.root)['id']
             # Return the accepted empty-reply revision even when the worker is
             # fast. The client resets its old voice/text before polling chunks.
             accepted = self.poll(job.identifier)
@@ -419,7 +453,7 @@ class ChatService:
                         job.speech = {**value, **private}
             def text(chunk):
                 with self._lock:
-                    if current() and not cancelled.is_set():
+                    if current() and not cancelled.is_set() and not (job.speech or {}).get('reply_ready'):
                         job.text = (job.text + chunk)[:12000]
             regenerate = request.get('operation') == 'regenerate_reference'
             runner = self.reference_generator if regenerate else self.speech_generator
@@ -455,8 +489,9 @@ class ChatService:
 
     def _generate(self, job, model, messages):
         try:
+            from mdd.chat_runtime import requested_device
             settings = {"path": self.root / "models/pretrained/Qwen3-0.6B", "adapter": model["adapter"],
-                        "device": "cpu", "threads": 2, "context": 4096}
+                        "device": requested_device(), "threads": 2, "context": 4096}
             def ready():
                 with self._lock:
                     job.status = "generating"
@@ -510,18 +545,26 @@ class ChatService:
             return self.poll(job.identifier)
 
     def voice(self, payload):
-        if (not isinstance(payload, dict) or set(payload) - {"job_id", "locale", "target", "voice_id", "speed"}
+        if (not isinstance(payload, dict) or set(payload) - {"job_id", "locale", "target", "voice_id", "speed", "provider"}
                 or not {"job_id", "locale"} <= set(payload) or payload.get("locale") not in ("vi-VN", "en-US")
-                or payload.get("target", "reply") not in ("reply", "sentence")):
+                or payload.get("target", "reply") not in ("reply", "sentence")
+                or ('provider' in payload and payload['provider'] not in ('ai33', 'kokoro'))):
             raise ChatError(400, "invalid_chat_voice", "Yêu cầu giọng đọc không hợp lệ.")
         target = payload.get("target", "reply")
         field = "sentence_voice" if target == "sentence" else "voice"
         option_field = 'sentence_voice_options' if target == 'sentence' else 'voice_options'
-        options = {}
+        kokoro = kokoro_status(self.root)
+        provider = payload.get('provider') or ('kokoro' if kokoro['ready'] and payload['locale'] == 'en-US' else 'ai33')
+        if provider == 'kokoro' and payload['locale'] != 'en-US':
+            raise ChatError(400, 'speech_voice_language', 'Kokoro hiện dùng giọng tiếng Anh.')
+        options = {'provider': provider}
+        catalog = kokoro['voices'] if provider == 'kokoro' else self.english_voices()
         if 'voice_id' in payload:
-            if payload['locale'] != 'en-US' or not any(v['id'] == payload['voice_id'] for v in self.english_voices()):
+            if payload['locale'] != 'en-US' or not any(v['id'] == payload['voice_id'] for v in catalog):
                 raise ChatError(400, 'invalid_chat_voice', 'Chọn một giọng tiếng Anh trong danh sách.')
             options['voice_id'] = payload['voice_id']
+        elif provider == 'kokoro':
+            options['voice_id'] = kokoro['default_voice_id']
         if 'speed' in payload:
             speed = payload['speed']
             if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not .5 <= speed <= 1.5:
@@ -531,7 +574,13 @@ class ChatService:
             job = self._job(payload["job_id"])
             if (target == "sentence" or job.speech is not None or job.metadata.get('input') == 'topic') and payload["locale"] != "en-US":
                 raise ChatError(400, "speech_voice_language", "Speech practice uses an English voice.")
-            if job.status != "ready":
+            reply_available = (target == "reply" and job.status in {"generating", "correcting", "coaching"}
+                               and (job.speech or {}).get('reply_ready') is True and bool(job.text.strip()))
+            sentence_available = (target == 'sentence' and job.status in {
+                'transcribing', 'analyzing', 'generating', 'correcting', 'coaching'}
+                and isinstance(job.speech, dict)
+                and bool(str(job.speech.get('reference_text') or job.speech.get('transcript') or '').strip()))
+            if job.status != "ready" and not reply_available and not sentence_available:
                 raise ChatError(409, "chat_not_ready", "Chờ Qwen trả lời xong rồi tạo giọng đọc.")
             spoken = job.text
             if target == "sentence":
@@ -550,39 +599,80 @@ class ChatService:
                 raise ChatError(409, 'chat_voice_selection', 'Bản đọc này đã dùng giọng và tốc độ khác. Lựa chọn mới áp dụng cho lượt tiếp theo.')
             if voice["status"] != "not_requested" and not resuming:
                 return self.poll(job.identifier)
-            caps = self.capability_loader()
-            key = "vietnamese_voice_configured" if payload["locale"] == "vi-VN" else "english_voice_configured"
-            if not caps.get("tts_configured") or not (caps.get(key) or options.get('voice_id')):
-                raise ChatError(503, "chat_voice_unavailable", "Giọng ai33 cho ngôn ngữ này chưa được cấu hình.")
-            if not self._voice_slot.acquire(blocking=False):
-                raise ChatError(409, "chat_voice_busy", "Đang tạo một giọng đọc khác; hãy thử lại sau.")
+            if provider == 'kokoro':
+                if not kokoro['ready']:
+                    raise ChatError(503, 'chat_voice_unavailable', 'Kokoro chưa sẵn sàng trên máy này.')
+            else:
+                caps = self.capability_loader()
+                key = "vietnamese_voice_configured" if payload["locale"] == "vi-VN" else "english_voice_configured"
+                if not caps.get("tts_configured") or not (caps.get(key) or options.get('voice_id')):
+                    raise ChatError(503, "chat_voice_unavailable", "Giọng ai33 cho ngôn ngữ này chưa được cấu hình.")
+            slot = self._sentence_voice_slot if target == 'sentence' else self._voice_slot
+            if not slot.acquire(blocking=False):
+                raise ChatError(409, "chat_voice_busy", "Giọng đọc chưa sẵn sàng; bạn thử lại sau nhé.")
             locale = payload["locale"]
             if target == "reply":
                 job.voice_locale = locale
             revision = job.generation_revision
             setattr(job, option_field, options)
             setattr(job, field, {"status": "generating", 'reference_revision': revision, **options})
-        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming, target, options), daemon=True, name="chat-ai33-voice").start()
+        threading.Thread(target=self._synthesize, args=(job, revision, spoken, locale, resuming, target, options), daemon=True, name="chat-tts-voice").start()
         return self.poll(job.identifier)
 
     def _synthesize(self, job, revision, spoken, locale, resuming=False, target="reply", voice_options=None):
+        started = time.perf_counter()
         client = None
         voice_options = voice_options or {}
+        provider = voice_options.get('provider', 'ai33')
+        synthesis_options = {key: value for key, value in voice_options.items() if key != 'provider'}
         field = "sentence_voice" if target == "sentence" else "voice"
         def current():
             return (revision == job.generation_revision
+                    and not job.cancelled.is_set()
                     and (target != "sentence" or job.sentence_voice_text == spoken))
+        def public_timing():
+            # Provider/client objects can contain credentials and signed URLs.
+            # Publish only the documented primitive timing fields, even for
+            # custom factories or mocks that expose arbitrary attributes.
+            result = {}
+            raw = getattr(client, 'last_timing', None)
+            if isinstance(raw, dict):
+                for key in ('total_sec', 'cache_lookup_sec', 'submit_sec', 'wait_sec', 'download_sec', 'synthesis_sec', 'load_sec', 'audio_duration_sec', 'real_time_factor'):
+                    value = raw.get(key)
+                    if type(value) in (int, float) and math.isfinite(value) and value >= 0:
+                        result[key] = round(value, 6)
+                for key in ('cache_hit', 'resumed_task'):
+                    if type(raw.get(key)) is bool:
+                        result[key] = raw[key]
+                for key, allowed in (('requested_device', {'cpu', 'cuda', 'auto'}),
+                                     ('effective_device', {'cpu', 'cuda'}),
+                                     ('execution_provider', {'CPUExecutionProvider', 'CUDAExecutionProvider'})):
+                    value = raw.get(key)
+                    if isinstance(value, str) and value in allowed:
+                        result[key] = value
+                for key in ('new_tasks_submitted', 'request_count', 'poll_count', 'download_attempts'):
+                    value = raw.get(key)
+                    if type(value) is int and value >= 0 and (key != 'new_tasks_submitted' or value <= 1):
+                        result[key] = value
+            result['backend_total_sec'] = round(time.perf_counter() - started, 6)
+            return result
         try:
-            client = self.tts_factory() if self.tts_factory else self._module("ai33_tts").AI33TTS(cache_dir=self.cache_dir)
+            if self.tts_factory:
+                client = self.tts_factory()
+            elif provider == 'kokoro':
+                client = self._module('kokoro_tts').KokoroTTS(cache_dir=self.kokoro_cache_dir)
+            else:
+                client = self._module('ai33_tts').AI33TTS(cache_dir=self.cache_dir)
             action = client.resume if resuming else client.synthesize
-            path = Path(action(spoken[:5000], locale=locale, **voice_options)).resolve()
+            path = Path(action(spoken[:5000], locale=locale, **synthesis_options)).resolve()
             self._read_voice(path)
             with self._lock:
                 if not current():
                     return
                 identifier = secrets.token_hex(16)
                 self._voices[identifier] = (job.identifier, path)
-                setattr(job, field, {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision, **voice_options})
+                setattr(job, field, {"status": "ready", "url": "/api/chat/audio/" + identifier, 'reference_revision': revision,
+                                     'timing': public_timing(), **voice_options})
         except Exception as error:
             code = getattr(error, "code", "voice_local_error")
             if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,60}", code):
@@ -590,7 +680,7 @@ class ChatService:
             retryable = (code != "ai33_task_failed" and client is not None
                          and callable(getattr(client, "can_resume", None))
                          and callable(getattr(client, "resume", None))
-                         and client.can_resume(spoken[:5000], locale=locale, **voice_options) is True)
+                         and client.can_resume(spoken[:5000], locale=locale, **synthesis_options) is True)
             # Only typed error identifiers are logged, never raw provider errors,
             # credentials, signed CDN URLs or learner/conversation text.
             logging.getLogger(__name__).warning("Chat voice failed: job=%s code=%s exception=%s cached_resume=%s",
@@ -598,14 +688,20 @@ class ChatService:
             with self._lock:
                 if current():
                     setattr(job, field, {"status": "error", "code": code, "retryable": retryable, **voice_options,
+                                 'timing': public_timing(),
                                  "message": "Chưa tải được giọng đọc. Bấm Thử lại giọng đọc để tải tiếp tác vụ đã có."
                                     if retryable else "Chưa tạo được giọng đọc. Bạn có thể chọn giọng trình duyệt trong Settings."})
         finally:
-            self._voice_slot.release()
+            with self._lock:
+                if (revision == job.generation_revision and job.cancelled.is_set()
+                        and getattr(job, field).get('status') == 'generating'):
+                    setattr(job, field, {'status': 'cancelled', 'reference_revision': revision, **voice_options})
+            (self._sentence_voice_slot if target == 'sentence' else self._voice_slot).release()
 
     def _read_voice(self, path):
         path = Path(path).resolve()
-        if not path.is_relative_to(self.cache_dir.resolve()) or not path.is_file() or not 0 < path.stat().st_size <= 25 * 1024 * 1024:
+        trusted = any(path.is_relative_to(root.resolve()) for root in (self.cache_dir, self.kokoro_cache_dir))
+        if not trusted or not path.is_file() or not 0 < path.stat().st_size <= 25 * 1024 * 1024:
             raise ChatError(404, "chat_voice_not_found", "Không tìm thấy giọng đọc.")
         data = path.read_bytes()
         if data.startswith(b"ID3") or (len(data) > 1 and data[0] == 255 and data[1] & 224 == 224):

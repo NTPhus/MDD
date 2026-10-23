@@ -144,7 +144,9 @@ def evaluate(args):
             model = AutoModelForCausalLM.from_pretrained(str(path), local_files_only=True,
                 trust_remote_code=False, dtype=dtype, quantization_config=quantization, device_map={'': args.device})
             if adapter:
-                model = PeftModel.from_pretrained(model, str(adapter), local_files_only=True, is_trainable=False)
+                model = PeftModel.from_pretrained(model, str(adapter), local_files_only=True, is_trainable=False,
+                                                  torch_device=args.device, device_map={'': args.device})
+                if args.device == 'cpu': model.to('cpu')
             model.eval().requires_grad_(False)
             for row in rows[len(observations):]:
                 prompt = tokenizer.apply_chat_template(messages(row), tokenize=False,

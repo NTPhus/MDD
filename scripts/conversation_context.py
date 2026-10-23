@@ -19,8 +19,9 @@ def _validate_text(value, name):
     return value.strip()
 
 
-def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, source='asr', missing_words=(), normalized_text=None):
-    """Select confirmed text or a guarded ASR formatting view and its clarity.
+def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, source='asr', missing_words=(), normalized_text=None,
+                             interpretation=None):
+    """Select confirmed text, ASR formatting, or a separately recorded interpretation.
 
     ``user_confirmed`` is an internal service provenance, not a client flag.
     The caller must bind it to the recording/reference revision before calling.
@@ -47,10 +48,30 @@ def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, sou
                 raise ValueError('Normalization must preserve the ASR lexical content')
             effective = _validate_text(normalized_text, 'normalized_text')
             source = 'asr_normalized'
+        if interpretation is not None:
+            if (source != 'asr' or not isinstance(interpretation, dict)
+                    or interpretation.get('original') != raw_transcript
+                    or interpretation.get('reference_confirmed') is not False):
+                raise ValueError('An interpretation must be bound to the original ASR transcript')
+            if interpretation.get('status') in {'accepted', 'unchanged'}:
+                effective = _validate_text(interpretation.get('text'), 'interpretation.text')
+                source = 'asr_interpreted'
         missing_count = len(missing_words)
         needs_clarification = source in {'asr', 'asr_normalized'} and missing_count >= 2 and missing_count / max(len(effective.split()), 1) >= .25
+        if source == 'asr_interpreted':
+            unresolved = interpretation.get('unresolved_words')
+            if not isinstance(unresolved, list):
+                unresolved = missing_words if interpretation.get('status') == 'unchanged' else []
+            needs_clarification = len(unresolved) >= 2 and len(unresolved) / max(len(effective.split()), 1) >= .25
+        if interpretation is not None and interpretation.get('status') == 'ambiguous':
+            needs_clarification = True
     view['conversation_source'] = source
     view['needs_clarification'] = needs_clarification
+    reason = ('unclear_interpretation' if interpretation is not None
+              and (interpretation.get('status') == 'ambiguous' or source == 'asr_interpreted')
+              else 'multiple_unresolved_words') if needs_clarification else None
     return {'text': effective, 'request': view,
-            'clarity': {'needs_clarification': needs_clarification,
-                        'reason': 'multiple_unresolved_words' if needs_clarification else None}}
+            'clarity': {'needs_clarification': needs_clarification, 'reason': reason,
+                        'interpreted': source == 'asr_interpreted',
+                        'requires_confirmation': source == 'asr_interpreted'
+                            and interpretation.get('requires_confirmation') is True}}

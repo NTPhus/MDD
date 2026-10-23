@@ -1,5 +1,23 @@
 # Huấn luyện local trên CPU
 
+## ASR tiếng Anh giọng Việt trên Windows CUDA
+
+Nhánh riêng này fine-tune `wav2vec2-base-960h` bằng **audio → transcript chữ tiếng Anh**, không dùng nhãn phoneme. Cấu hình ở `configs/asr_vietnamese_english.json`: BF16, batch 1, accumulation 4, CNN đóng băng, Transformer/head cập nhật, gradient checkpointing. Audio train dài hơn 8 giây được loại cả câu, không cắt audio rồi giữ nguyên transcript.
+
+```powershell
+.venv\Scripts\python.exe -X utf8 scripts/train_asr_vi.py --prepare
+.venv\Scripts\python.exe -X utf8 scripts/train_asr_vi.py --run
+Get-Content data\generated\asr-vietnamese-english-v1\training.log -Tail 20 -Wait
+# Chỉ khi run bị gián đoạn và có checkpoint tương ứng:
+.venv\Scripts\python.exe -X utf8 scripts/train_asr_vi.py --run --resume
+```
+
+Dataset được đánh chỉ mục từ toàn bộ 4.528 câu giọng Việt của L2-ARCTIC và phần source train cũ. Split đồng thời tách **người nói và normalized prompt**: HQTV/THV cho train, PNV cho validation, TLV cho test; mỗi nhóm chỉ dùng prompt thuộc bucket riêng. Run v1 có 2.445 câu train (1.834 Việt + 611 source replay), 104 validation, 111 test. Không dùng test chọn checkpoint; các nhãn chữ là transcript của corpus, chưa phải xác minh từng từ thực sự được phát ra. Đây là benchmark đọc câu nhỏ, không đại diện mọi giọng Việt/hội thoại.
+
+Kết quả nằm riêng trong `runs/asr-vietnamese-english-v1` và `data/generated/asr-vietnamese-english-v1`. Chạy `scripts/report_asr_vi.py` sau khi hoàn tất để tạo notebook `notebooks/mdd_asr_vi_finetuning.ipynb`, biểu đồ loss/WER/CER và HTML. Demo chỉ chọn ASR mới khi run hoàn tất, checksum đúng và validation WER cải thiện. Phoneme-B giữ nguyên.
+
+Adapter Qwen grammar ở `runs/grammar-qwen3-06b-wi-jfleg-v1/adapter` dùng hai tác vụ đơn trường `grammar_corrected` / `natural` theo prompt train. Demo chỉ nạp adapter sau khi có bản kiểm tra khớp SHA tại `demo_validation.json`; adapter này phục vụ collapse ngữ pháp, tách với Qwen gốc cho hội thoại và adapter Qwen pronunciation coach. Adapter, backbone và input được đặt cùng thiết bị tường minh (`torch_device`/`device_map`), tránh PEFT tự chọn sai thiết bị. Demo dùng `MDD_CHAT_DEVICE=auto` để chọn CUDA khi đủ bộ nhớ lúc nạp; đặt `MDD_CHAT_DEVICE=cpu` và restart demo trước khi cần dành GPU cho train khác. Các evaluator CPU vẫn dùng chính sách CPU tường minh; thay đổi tăng tốc demo không đổi trọng số/checkpoint benchmark.
+
 Project hiện hỗ trợ train trực tiếp trên máy Ubuntu i5-10400, RAM 16 GB, dùng **CPU**. Intel UHD 630 không cung cấp CUDA cho cấu hình PyTorch này. Các preset local dùng FP32, 4 threads, batch 1 và gradient checkpointing để giảm bộ nhớ. Huấn luyện đầy đủ trên CPU sẽ chậm; chưa có benchmark thời gian cho toàn bộ A/B/C.
 
 Giữ protocol **l2arctic-v1** đang hoạt động. V2 cân đối metadata vẫn là đề xuất, chưa kích hoạt. Lý thuyết nằm trong [SPEECH_THEORY.md](docs/SPEECH_THEORY.md); lý do chia tập trong [DATA_SPLIT.md](docs/DATA_SPLIT.md).

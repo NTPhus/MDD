@@ -53,11 +53,51 @@ class ChatVoiceTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ready')
         self.assertEqual(result['voice_id'], self.voice['id'])
         self.assertEqual(result['speed'], .85)
+        self.assertEqual(set(result['timing']), {'backend_total_sec'})
+        self.assertGreaterEqual(result['timing']['backend_total_sec'], 0)
         self.client.synthesize.assert_called_once_with(self.job.text, locale='en-US', voice_id=self.voice['id'], speed=.85)
         self.service.voice(self.payload)
         self.assertEqual(self.client.synthesize.call_count, 1)
         with self.assertRaisesRegex(ChatError, 'tốc độ khác'):
             self.service.voice({**self.payload, 'speed': 1})
+
+    def test_public_voice_timing_has_only_allowed_primitive_metrics(self):
+        self.client.last_timing = {
+            'total_sec': 5.2, 'cache_lookup_sec': .01, 'submit_sec': .4, 'wait_sec': 4.6, 'download_sec': .1,
+            'cache_hit': False, 'resumed_task': True, 'new_tasks_submitted': 0,
+            'request_count': 3, 'poll_count': 2, 'download_attempts': 1,
+            'audio_url': 'https://cdn.example/audio?signature=secret', 'task_id': 'private-task',
+            'key': 'test-only', 'text': 'Private conversation', 'nested': {'secret': 'secret'},
+        }
+        self.service.voice(self.payload)
+        result = self.finish_voice()
+        self.assertEqual(result['status'], 'ready')
+        timing = result['timing']
+        self.assertEqual(timing['total_sec'], 5.2)
+        self.assertEqual(timing['request_count'], 3)
+        self.assertTrue(timing['resumed_task'])
+        self.assertFalse(timing['cache_hit'])
+        self.assertGreaterEqual(timing['backend_total_sec'], 0)
+        self.assertEqual(set(timing), set(self.client.last_timing) - {'audio_url', 'task_id', 'key', 'text', 'nested'} | {'backend_total_sec'})
+        self.assertNotIn('secret', json.dumps(timing))
+        self.assertNotIn('test-only', json.dumps(timing))
+        self.assertNotIn('private-task', json.dumps(timing))
+
+    def test_voice_error_keeps_safe_timing_and_rejects_nonfinite_or_wrong_types(self):
+        self.client.last_timing = {
+            'total_sec': float('nan'), 'cache_lookup_sec': True, 'submit_sec': .02,
+            'wait_sec': float('inf'), 'download_sec': -1, 'cache_hit': 'yes', 'resumed_task': False,
+            'new_tasks_submitted': 2, 'request_count': True, 'poll_count': -1, 'download_attempts': 0,
+            'error': 'test-only',
+        }
+        self.client.synthesize.side_effect = AI33Error('private raw provider response')
+        self.client.can_resume.return_value = False
+        self.service.voice(self.payload)
+        result = self.finish_voice()
+        self.assertEqual(result['status'], 'error')
+        self.assertEqual(set(result['timing']), {'submit_sec', 'resumed_task', 'download_attempts', 'backend_total_sec'})
+        self.assertEqual(result['timing']['submit_sec'], .02)
+        self.assertNotIn('private raw', json.dumps(result))
 
     def test_invalid_selection_is_rejected_before_provider_call(self):
         for change in ({'voice_id': '../.env'}, {'voice_id': 'unknown'}, {'speed': True}, {'speed': float('nan')},

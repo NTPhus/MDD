@@ -78,6 +78,7 @@ class SpeechChatTests(unittest.TestCase):
     def test_rewrite_is_internal_and_cached_posterior_is_not_in_public_poll(self):
         def run(request, *, on_stage, on_speech, on_text, cancelled):
             self.assertTrue(request['rewrite_enabled'])
+            self.assertTrue(request['recovery_enabled'])
             on_speech({'transcript': 'Yesterday I go', '_acoustic_evidence': {'data': 'private'},
                        'rewrite': {'status': 'ready', 'grammar_corrected': 'Yesterday I went.'}})
             on_text('What happened next?')
@@ -111,6 +112,46 @@ class SpeechChatTests(unittest.TestCase):
         while self.service.poll(final["id"])["voice"]["status"] == "generating" and time.monotonic() < until: time.sleep(.01)
         self.assertNotEqual(final['text'], final['speech']['spoken_response'])
         tts.synthesize.assert_called_once_with(final['text'], locale="en-US")
+
+    def test_reply_and_idempotent_voice_are_available_while_feedback_is_blocked(self):
+        entered, publish, published, finish = (threading.Event() for _ in range(4))
+        self.addCleanup(publish.set); self.addCleanup(finish.set)
+        reply = 'How was your visit?'
+        def run(request, *, on_stage, on_speech, on_text, cancelled):
+            snapshot = {'transcript': 'I visited yesterday', 'reply_ready': False,
+                        'rewrite': {'status': 'pending'}, 'coaching': {'status': 'pending'}}
+            on_speech(snapshot); on_text(reply); on_stage('correcting'); entered.set()
+            publish.wait(2)
+            on_speech({**snapshot, 'reply_ready': True, 'spoken_response': reply}); published.set()
+            finish.wait(2)
+            on_text('Private optional feedback must not become dialogue.')
+            on_speech({**snapshot, 'reply_ready': True, 'spoken_response': reply,
+                       'rewrite': {'status': 'ready', 'natural': 'I visited yesterday.'}})
+            return {}
+        self.service.speech_generator = run
+        audio = self.service.cache_dir / 'early-reply.mp3'
+        audio.parent.mkdir(parents=True); audio.write_bytes(b'ID3test')
+        tts = Mock(); tts.synthesize.return_value = audio
+        self.service.tts_factory = lambda: tts
+        self.service.capability_loader = lambda: {'tts_configured': True, 'english_voice_configured': True}
+        job = self.service.submit_speech(self.payload())
+        self.assertTrue(entered.wait(1))
+        with self.assertRaises(ChatError): self.service.voice({'job_id': job['id'], 'locale': 'en-US'})
+        publish.set(); self.assertTrue(published.wait(1))
+        pending = self.service.poll(job['id'])
+        self.assertEqual(pending['status'], 'correcting')
+        self.assertEqual(pending['text'], reply)
+        self.assertEqual(pending['speech']['rewrite']['status'], 'pending')
+        self.service.voice({'job_id': job['id'], 'locale': 'en-US'})
+        self.service.voice({'job_id': job['id'], 'locale': 'en-US'})
+        until = time.monotonic() + 1
+        while self.service.poll(job['id'])['voice']['status'] == 'generating' and time.monotonic() < until:
+            time.sleep(.01)
+        self.assertEqual(self.service.poll(job['id'])['voice']['status'], 'ready')
+        tts.synthesize.assert_called_once_with(reply, locale='en-US')
+        finish.set(); final = finished(self.service, job['id'])
+        self.assertEqual(final['text'], reply)
+        self.assertEqual(final['speech']['rewrite']['status'], 'ready')
 
     def test_audio_http_route_accepts_over_text_limit_and_keeps_origin_guard(self):
         app = DemoApplication(self.root, chat_service=self.service)

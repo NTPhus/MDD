@@ -91,11 +91,11 @@ class NormalizationTests(unittest.TestCase):
             if len(requests) == 1:
                 output = json.dumps({'normalized_text': normalized})
             elif len(requests) == 2:
-                self.assertEqual(json.loads(request['messages'][-1]['content'])['transcript'], normalized)
-                output = json.dumps({'grammar_corrected': normalized, 'natural': normalized, 'explanation': 'No grammar changes.'})
-            else:
                 self.assertEqual(request['messages'][-1]['content'], normalized)
                 output = 'What do you enjoy most about your work?'
+            else:
+                self.assertEqual(json.loads(request['messages'][-1]['content'])['transcript'], normalized)
+                output = json.dumps({'grammar_corrected': normalized, 'natural': normalized, 'explanation': 'No grammar changes.'})
             emit({'type': 'chunk', 'text': output}); return {'finish_reason': 'stop'}
         qwen.generate.side_effect = generate
         metadata = engine.run({'model_id': 'qwen-base', 'audio_base64': 'YWJj', 'history': [],
