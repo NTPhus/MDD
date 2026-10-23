@@ -32,7 +32,11 @@ STATIC_FILES = {"/": "index.html", "/index.html": "index.html",
                 "/pronunciation.js": "pronunciation.js",
                 "/speech_highlight.js": "speech_highlight.js",
                 "/recorder-worklet.js": "recorder-worklet.js",
-                "/assets/mezon-wordmark.png": "assets/mezon-wordmark.png"}
+                "/assets/mezon-wordmark.png": "assets/mezon-wordmark.png",
+                "/assets/fonts/InterVariable.woff2": "assets/fonts/InterVariable.woff2",
+                "/assets/fonts/InterVariable-Italic.woff2": "assets/fonts/InterVariable-Italic.woff2",
+                **{f"/assets/topics/{name}.webp": f"assets/topics/{name}.webp" for name in
+                   ("daily-life", "travel", "food", "work", "hobbies", "technology", "learning", "city")}}
 RFC1918_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
@@ -553,7 +557,8 @@ class DemoHandler(BaseHTTPRequestHandler):
                     if not _inside(file, app.root / "demo") or not file.is_file():
                         raise DemoError(404, "not_found", "Trang demo chưa có sẵn.")
                     types = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-                             ".css": "text/css; charset=utf-8", ".png": "image/png"}
+                             ".css": "text/css; charset=utf-8", ".png": "image/png", ".woff2": "font/woff2",
+                             ".webp": "image/webp"}
                     self._send(200, file.read_bytes(), types[file.suffix])
                 else:
                     raise DemoError(404, "not_found", "Không tìm thấy tài nguyên.")

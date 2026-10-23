@@ -1,3 +1,19 @@
+/* Self-hosted Inter keeps English and Vietnamese typography consistent offline. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/assets/fonts/InterVariable.woff2') format('woff2');
+}
+@font-face {
+  font-family: Inter;
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/assets/fonts/InterVariable-Italic.woff2') format('woff2');
+}
+
 /* Shared purple and white palette for practice, conversation, and training. */
 :root {
   --paper: #ffffff;
@@ -19,8 +35,8 @@
   --green-light: var(--accent-soft);
   --gold: #a96518;
   --danger: #b4233c;
-  --serif: Georgia, 'Times New Roman', serif;
-  --sans: 'Segoe UI', Tahoma, Arial, sans-serif;
+  --sans: Inter, 'Segoe UI', Tahoma, Arial, sans-serif;
+  --serif: var(--sans);
   font-family: var(--sans);
   color: var(--ink);
   background: var(--paper);

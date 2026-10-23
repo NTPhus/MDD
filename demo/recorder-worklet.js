@@ -17,9 +17,11 @@ class MDDRecorder extends AudioWorkletProcessor {
     };
   }
   process(inputs) {
-    const input = inputs[0]?.[0];
-    if (this.active && input) {
-      for (const sample of input) {
+    const channels = inputs[0];
+    if (this.active && channels?.length) {
+      for (let index = 0; index < channels[0].length; index++) {
+        let sample = 0;
+        for (const channel of channels) sample += channel[index] / channels.length;
         this.buffer[this.used++] = sample;
         if (this.used === this.buffer.length) {
           this.port.postMessage({ samples: this.buffer.slice() });
