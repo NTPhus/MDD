@@ -168,9 +168,18 @@ function updateUserSpeech(turn, speech) {
     ? speech.conversation_text : undefined;
   turn.normalizedSource = turn.normalizedText ? 'asr_normalized' : undefined;
 }
+function microphoneConstraints(supported = {}, deviceId = '', mode = 'clear') {
+  const audio = {};
+  if (deviceId) audio.deviceId = { exact: deviceId };
+  if (supported.channelCount) audio.channelCount = { ideal: 1 };
+  for (const key of ['echoCancellation', 'noiseSuppression', 'autoGainControl']) {
+    if (supported[key]) audio[key] = mode === 'clear';
+  }
+  return { audio };
+}
 if (typeof module === 'object' && module.exports) module.exports = { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest,
   voiceResourceKey, voiceCatalog, providerAvailable, preferredVoiceProvider, voiceSelection,
-  conversationInterpretation, conversationUserText, updateUserSpeech };
+  conversationInterpretation, conversationUserText, updateUserSpeech, microphoneConstraints };
 
 (() => {
   if (typeof document === 'undefined') return;
@@ -193,6 +202,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     job: null, activeTurn: null, visible: false, recording: false, pending: false, decoding: false,
     stopping: false, context: null, stream: null, source: null, processor: null, sink: null,
     chunks: [], sampleCount: 0, timer: null, flush: null, epoch: 0, micAllowed: () => true,
+    inputDeviceId: '', inputNotice: '', deviceHint: '', inputRms: 0, clippedBlocks: 0, signalHint: '',
     speaking: null, speechEpoch: 0, audio: null, playback: null, speechTrackers: new Set(), audioFrame: null,
     voiceTasks: new Set(), voiceRequests: new Map(), voiceBuffers: new Map(), urls: new Set(), lastAudio: null, destroyed: false,
     liveReply: null, liveTurnId: null, voiceStopped: false, openingPending: null, topic: null, inRoom: false, starting: false, hintKey: '', repeatTarget: null,
@@ -279,6 +289,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-mic').querySelector('span').textContent = state.recording ? 'Send recording' : 'Record';
     node('chat-mic').setAttribute('aria-label', state.recording ? 'Gửi bản ghi âm' : 'Nhấn để nói tiếng Anh');
     node('chat-mic-label').textContent = state.recording ? 'Nhấn để gửi' : locked ? 'Đang xử lý…' : 'Nhấn để nói';
+    node('chat-input-device').disabled = locked || state.recording;
+    node('chat-input-processing').disabled = locked || state.recording;
+    node('chat-input-meter').hidden = !state.recording;
     node('chat-upload').disabled = locked || state.recording || !ready || !AudioContextClass;
     node('chat-stop').hidden = !state.busy;
     node('chat-stop').disabled = !state.job || state.activeTurn?.status === 'cancelling';
@@ -290,7 +303,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       : 'Máy này chưa có model hội thoại. Cài model để bắt đầu luyện nói.';
     for (const button of node('chat-topic-grid').querySelectorAll('button')) {
       button.disabled = locked || state.recording || !ready;
-      button.querySelector('.chat-topic-cta').textContent = ready ? 'Vào kịch bản ↗' : 'Cần model để bắt đầu';
+      const cta = button.querySelector('.chat-topic-cta');
+      cta.toggleAttribute('hidden', !ready);
     }
     node('chat-retry-audio').disabled = locked || state.recording;
     for (const id of ['chat-read-prompt', 'chat-reading-listen']) node(id).disabled = audioLocked;
@@ -336,10 +350,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-model-note').hidden = false;
     node('chat-model-note').textContent = 'Conversation replies use original Qwen. This selection controls the pronunciation coach.';
     node('chat-practice-panel').hidden = node('chat-mode').value !== 'reading';
-    node('chat-mic-status').textContent = !window.isSecureContext ? 'Microphone access needs HTTPS. Audio uploads are available here.'
-      : state.recording ? 'Tap Send recording when you finish.'
-      : state.pending ? 'Waiting for microphone permission…' : state.decoding ? 'Preparing your audio…'
-      : 'English audio · Up to 30 seconds';
+    node('chat-mic-status').textContent = !window.isSecureContext ? 'Micro cần HTTPS hoặc localhost. Bạn vẫn có thể tải audio lên.'
+      : state.recording ? state.signalHint || 'Đang thu âm · nhấn nút micro để gửi'
+      : state.pending ? 'Đang mở micro và chờ quyền truy cập…' : state.decoding ? 'Đang chuẩn bị âm thanh…'
+      : state.inputNotice || state.deviceHint || 'Nói tiếng Anh rõ ràng · tối đa 30 giây';
     const prompt = state.config?.practice_prompts.find(p => p.id === node('chat-practice').value);
     node('chat-practice-text').textContent = prompt?.text || '';
     node('chat-reading-card').hidden = !state.repeatTarget && node('chat-mode').value !== 'reading';
@@ -898,17 +912,31 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   }
   function renderTopics() {
     const icons = { sun: 'i-sun', plane: 'i-plane', cup: 'i-cup', briefcase: 'i-briefcase', spark: 'i-spark', laptop: 'i-laptop', book: 'i-book', city: 'i-city' };
+    const artwork = {
+      'daily-life': 'daily-life', travel: 'travel', food: 'food', work: 'work',
+      hobbies: 'hobbies', technology: 'technology', learning: 'learning', city: 'city'
+    };
+    const topics = state.config?.topics || [];
+    node('chat-topic-count').textContent = `${topics.length} chủ đề`;
     node('chat-topic-grid').replaceChildren();
-    for (const topic of state.config?.topics || []) {
+    for (const topic of topics) {
       const button = make('button', 'chat-topic-card'); button.type = 'button'; button.dataset.topic = topic.id;
       const art = make('div', 'chat-topic-art'); art.setAttribute('aria-hidden', 'true');
+      if (artwork[topic.id]) {
+        const image = make('img', 'chat-topic-image');
+        image.src = `/assets/topics/${artwork[topic.id]}.webp`;
+        image.alt = '';
+        image.decoding = 'async';
+        art.append(image);
+      }
       const head = make('div', 'chat-topic-card-top');
       const topicIcon = make('span', 'chat-topic-icon'); topicIcon.append(icon(icons[topic.icon] || 'i-spark'));
       head.append(topicIcon, make('span', 'chat-topic-level', topic.level));
       art.append(head, make('span', 'chat-topic-art-orbit'));
       button.append(art, make('h3', '', topic.title), make('p', '', topic.description));
       const keywords = make('div', 'chat-topic-preview'); topic.guidance.keywords.slice(0, 3).forEach(word => keywords.append(make('span', '', word)));
-      button.append(keywords, make('span', 'chat-topic-cta', 'Vào kịch bản ↗')); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
+      const cta = make('span', 'chat-topic-cta'); cta.append(make('span', '', 'Bắt đầu'), icon('i-arrow'));
+      button.append(keywords, cta); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
     }
   }
   const currentVoiceProvider = () => node('chat-voice-provider').value;
@@ -1175,12 +1203,42 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     } catch (error) { showError(error.message || 'This audio file could not be decoded. Try WAV, MP3, M4A, OGG or FLAC.'); }
     finally { if (context) await context.close().catch(() => {}); state.decoding = false; node('chat-audio-file').value = ''; render(); }
   }
+  async function refreshInputDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices || !window.isSecureContext) return;
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices())
+        .filter(device => device.kind === 'audioinput' && device.deviceId && device.deviceId !== 'default' && device.label);
+      const select = node('chat-input-device');
+      const seen = new Set();
+      const options = [new Option('Micro mặc định', '')];
+      for (const device of devices) {
+        if (seen.has(device.deviceId)) continue;
+        seen.add(device.deviceId);
+        options.push(new Option(device.label, device.deviceId));
+      }
+      if (state.inputDeviceId && seen.size && !seen.has(state.inputDeviceId)) {
+        state.inputDeviceId = '';
+        state.inputNotice = 'Micro đã chọn không còn khả dụng. Đã chuyển sang micro mặc định.';
+      }
+      if (state.inputDeviceId && !seen.size) options.push(new Option('Micro đã chọn', state.inputDeviceId));
+      state.deviceHint = seen.size ? '' : 'Nhấn nút micro để cấp quyền, sau đó chọn thiết bị.';
+      select.replaceChildren(...options);
+      select.value = state.inputDeviceId;
+      if (!state.recording && !state.pending) render();
+    } catch { /* Device labels may be unavailable before permission is granted. */ }
+  }
+  function inputConstraints(deviceId = state.inputDeviceId) {
+    const supported = navigator.mediaDevices.getSupportedConstraints?.() || {};
+    return microphoneConstraints(supported, deviceId, node('chat-input-processing').value);
+  }
   function releaseMic() {
     clearInterval(state.timer); state.timer = null;
     if (state.processor) { if (state.processor.port) state.processor.port.onmessage = null; else state.processor.onaudioprocess = null; state.processor.disconnect(); }
     state.source?.disconnect(); state.sink?.disconnect(); state.stream?.getTracks().forEach(t => t.stop());
     if (state.context && state.context.state !== 'closed') state.context.close().catch(() => {});
     state.processor = state.source = state.sink = state.stream = state.context = null; state.recording = false; state.stopping = false; state.flush = null;
+    state.inputRms = 0; state.clippedBlocks = 0; state.signalHint = '';
+    node('chat-input-meter-fill').style.width = '0%';
   }
   async function stopMic(send = false) {
     if (!state.recording || state.stopping) return;
@@ -1208,28 +1266,62 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { showError('Microphone access needs HTTPS or localhost. You can upload an audio file instead.'); return; }
     const epoch = state.epoch; state.pending = true; stopSpeech(); showError(); render();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia(inputConstraints()); }
+      catch (error) {
+        if (!state.inputDeviceId || !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error;
+        state.inputDeviceId = '';
+        state.inputNotice = 'Micro đã chọn không còn khả dụng. Đang dùng micro mặc định.';
+        stream = await navigator.mediaDevices.getUserMedia(inputConstraints(''));
+      }
       if (epoch !== state.epoch || !state.visible) { stream.getTracks().forEach(t => t.stop()); return; }
-      state.stream = stream; state.context = new AudioContextClass(); await state.context.resume();
+      state.stream = stream;
+      stream.getAudioTracks()[0].onended = () => {
+        if (state.recording && !state.stopping) {
+          stopMic(false);
+          showError('Micro bị ngắt kết nối. Hãy chọn lại micro và thu âm lại.');
+          refreshInputDevices();
+        }
+      };
+      refreshInputDevices();
+      state.context = new AudioContextClass(); await state.context.resume();
       state.source = state.context.createMediaStreamSource(stream); state.sink = state.context.createGain(); state.sink.gain.value = 0;
-      state.chunks = []; state.sampleCount = 0;
+      state.chunks = []; state.sampleCount = 0; state.inputRms = 0; state.clippedBlocks = 0; state.signalHint = '';
       const collect = input => {
         if (!state.recording || !state.context) return;
         const chunk = new Float32Array(input.subarray(0, Math.max(0, 30 * state.context.sampleRate - state.sampleCount)));
         state.chunks.push(chunk); state.sampleCount += chunk.length;
+        if (chunk.length) {
+          let power = 0, peak = 0;
+          for (const value of chunk) { power += value * value; peak = Math.max(peak, Math.abs(value)); }
+          state.inputRms = state.inputRms * .65 + Math.sqrt(power / chunk.length) * .35;
+          state.clippedBlocks = state.clippedBlocks * .9 + (peak >= .985 ? 1 : 0);
+        }
       };
       if (state.context.audioWorklet && window.AudioWorkletNode) {
-        await state.context.audioWorklet.addModule('/recorder-worklet.js'); state.processor = new AudioWorkletNode(state.context, 'mdd-recorder');
-        state.processor.port.onmessage = ({ data }) => { if (data.samples) collect(data.samples); if (data.stopped) state.flush?.(); };
-      } else { state.processor = state.context.createScriptProcessor(4096, 1, 1); state.processor.onaudioprocess = event => collect(event.inputBuffer.getChannelData(0)); }
+        try {
+          await state.context.audioWorklet.addModule('/recorder-worklet.js'); state.processor = new AudioWorkletNode(state.context, 'mdd-recorder');
+          state.processor.port.onmessage = ({ data }) => { if (data.samples) collect(data.samples); if (data.stopped) state.flush?.(); };
+        } catch { state.processor = null; }
+      }
+      if (!state.processor) {
+        state.processor = state.context.createScriptProcessor(4096, 1, 1);
+        state.processor.onaudioprocess = event => collect(event.inputBuffer.getChannelData(0));
+      }
       if (epoch !== state.epoch || !state.visible) { releaseMic(); return; }
       state.recording = true; state.source.connect(state.processor); state.processor.connect(state.sink); state.sink.connect(state.context.destination);
       const start = performance.now(); state.timer = setInterval(() => {
         const seconds = Math.min(30, Math.floor((performance.now() - start) / 1000)); node('chat-recording-time').textContent = `00:${String(seconds).padStart(2, '0')}`;
+        const db = 20 * Math.log10(Math.max(state.inputRms, .00001));
+        node('chat-input-meter-fill').style.width = `${Math.max(2, Math.min(100, (db + 55) * 2.5))}%`;
+        state.signalHint = performance.now() - start < 1000 ? 'Đang kiểm tra tín hiệu micro…'
+          : state.clippedBlocks >= 3 ? 'Âm quá lớn · giảm âm lượng micro'
+          : state.inputRms < .009 ? 'Âm hơi nhỏ · đưa micro lại gần'
+          : 'Tín hiệu tốt · nhấn nút micro để gửi';
+        if (node('chat-mic-status').textContent !== state.signalHint) node('chat-mic-status').textContent = state.signalHint;
         if (seconds >= 30) stopMic(true);
       }, 200);
-      node('chat-mic-status').textContent = 'Recording English audio… Press Stop & send when you finish.';
-    } catch (error) { releaseMic(); showError(error.name === 'NotAllowedError' ? 'Allow microphone access in your browser, or upload audio.' : 'The microphone could not be opened. Try uploading an audio file.'); }
+    } catch (error) { releaseMic(); showError(error.name === 'NotAllowedError' ? 'Hãy cấp quyền micro trong trình duyệt hoặc tải audio lên.' : 'Không mở được micro. Hãy kiểm tra thiết bị hoặc tải audio lên.'); }
     finally { state.pending = false; render(); }
   }
   function revealOpening(turn) {
@@ -1488,6 +1580,18 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   node('chat-reading-card').append(readingActions);
   readingActions.append(node('chat-reading-listen'), clearRepeat);
   node('chat-mic').addEventListener('click', microphone);
+  window.addEventListener('focus', refreshInputDevices);
+  node('chat-input-device').addEventListener('change', event => {
+    state.inputDeviceId = event.target.value;
+    state.inputNotice = state.inputDeviceId ? 'Đã chọn micro. Nhấn nút để bắt đầu thu âm.' : '';
+    render();
+  });
+  node('chat-input-processing').addEventListener('change', () => {
+    state.inputNotice = node('chat-input-processing').value === 'raw'
+      ? 'Ít xử lý phù hợp khi dùng tai nghe và ở nơi yên tĩnh.' : 'Lọc ồn và vọng loa sẽ áp dụng nếu trình duyệt hỗ trợ.';
+    render();
+  });
+  navigator.mediaDevices?.addEventListener?.('devicechange', refreshInputDevices);
   node('chat-scroll').addEventListener('wheel', event => { if (event.deltaY < 0) state.scrollHeld = true; }, { passive: true });
   node('chat-scroll').addEventListener('scroll', () => {
     const scroll = node('chat-scroll');
@@ -1576,6 +1680,6 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     state.destroyed = true; state.epoch++; stopSpeech(); state.liveReply?.dispose(); releaseMic(); for (const url of state.urls) URL.revokeObjectURL(url);
     if (state.job) fetch('/api/chat/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: state.job }), keepalive: true }).catch(() => {});
   });
-  restore(); render(); initialize();
+  restore(); render(); initialize(); refreshInputDevices();
   if (window.location.hash === '#chat' && typeof window.switchView === 'function') window.switchView('chat');
 })();

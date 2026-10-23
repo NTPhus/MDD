@@ -2,7 +2,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest, voiceResourceKey,
-  conversationInterpretation, conversationUserText, updateUserSpeech } = require('../demo/chat.js');
+  conversationInterpretation, conversationUserText, updateUserSpeech, microphoneConstraints } = require('../demo/chat.js');
+
+test('microphone request selects the chosen device and uses the selected processing mode', () => {
+  const supported = { channelCount: true, echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  assert.deepEqual(microphoneConstraints(supported, 'usb-mic', 'clear'), { audio: {
+    deviceId: { exact: 'usb-mic' }, channelCount: { ideal: 1 },
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+  } });
+  assert.deepEqual(microphoneConstraints(supported, '', 'raw'), { audio: {
+    channelCount: { ideal: 1 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+  } });
+  assert.deepEqual(microphoneConstraints({}, '', 'clear'), { audio: {} });
+});
 
 test('accepted interpretation drives conversation text while retaining the raw ASR and confirmation state', () => {
   const user = { content: 'Audio recording' };
