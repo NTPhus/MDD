@@ -60,6 +60,10 @@ function toast(message) {
 
 function switchView(name) {
   if (!['practice', 'training', 'chat'].includes(name)) return;
+  document.body.classList.toggle('chat-page', name === 'chat');
+  document.body.classList.toggle('practice-page', name === 'practice');
+  document.title = name === 'chat' ? 'Mezon Speak — Đối thoại AI' : name === 'practice' ? 'Mezon Speak — Luyện phát âm' : 'Âm — Huấn luyện';
+  document.querySelector('meta[name="theme-color"]').content = name === 'chat' || name === 'practice' ? '#17161c' : '#ffffff';
   if (name !== 'practice') hideWordTooltip();
   $('practice-view').hidden = name !== 'practice';
   $('training-view').hidden = name !== 'training';

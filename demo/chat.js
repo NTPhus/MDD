@@ -282,8 +282,16 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-upload').disabled = locked || state.recording || !ready || !AudioContextClass;
     node('chat-stop').hidden = !state.busy;
     node('chat-stop').disabled = !state.job || state.activeTurn?.status === 'cancelling';
-    for (const id of ['chat-model', 'chat-mode', 'chat-practice', 'chat-new', 'chat-start-new', 'chat-topics', 'chat-free-talk', 'chat-open-reading']) node(id).disabled = locked || state.recording || !state.config;
-    for (const button of node('chat-topic-grid').querySelectorAll('button')) button.disabled = locked || state.recording || !ready;
+    for (const id of ['chat-model', 'chat-mode', 'chat-practice', 'chat-new', 'chat-start-new', 'chat-topics']) node(id).disabled = locked || state.recording || !state.config;
+    for (const id of ['chat-free-talk', 'chat-open-reading']) node(id).disabled = locked || state.recording || !ready;
+    node('chat-availability').hidden = !state.config || ready;
+    if (state.config && !ready) node('chat-availability').textContent = !state.config.speech_ready
+      ? 'Máy này chưa có checkpoint nhận dạng tiếng nói. Cài model để bắt đầu luyện nói.'
+      : 'Máy này chưa có model hội thoại. Cài model để bắt đầu luyện nói.';
+    for (const button of node('chat-topic-grid').querySelectorAll('button')) {
+      button.disabled = locked || state.recording || !ready;
+      button.querySelector('.chat-topic-cta').textContent = ready ? 'Vào kịch bản ↗' : 'Cần model để bắt đầu';
+    }
     node('chat-retry-audio').disabled = locked || state.recording;
     for (const id of ['chat-read-prompt', 'chat-reading-listen']) node(id).disabled = audioLocked;
     for (const button of document.querySelectorAll('.chat-hint-keywords button')) button.disabled = audioLocked;
@@ -311,7 +319,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-scenario-title').textContent = scenario?.title || '';
     node('chat-scenario-description').textContent = scenario?.description || '';
     node('chat-settings-label').textContent = state.visible && state.inRoom
-      ? node('chat-voice-provider').value !== 'browser' ? (selectedVoice()?.name.split(' - ')[0] || 'Giọng tiếng Anh') : 'Giọng đọc' : 'Settings';
+      ? node('chat-voice-provider').value !== 'browser' ? (selectedVoice()?.name.split(' - ')[0] || 'Giọng tiếng Anh') : 'Giọng đọc' : 'Giọng đọc & cài đặt';
     node('chat-english-voice').disabled = node('chat-voice-provider').value === 'browser';
     const voiceProvider = node('chat-voice-provider').value;
     const simpleVoices = state.config?.kokoro_available === true;
@@ -437,8 +445,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       let row = state.rows.get(turn.id);
       if (!row) {
         const item = make('article', 'chat-message ' + turn.role), body = make('div', 'chat-message-body');
-        item.append(make('div', 'chat-message-avatar', turn.role === 'user' ? 'You' : 'Q'), body);
-        const label = make('span', 'chat-message-label', turn.role === 'user' ? 'You' : 'Qwen');
+        item.append(make('div', 'chat-message-avatar', turn.role === 'user' ? 'You' : 'M'), body);
+        const label = make('span', 'chat-message-label', turn.role === 'user' ? 'You' : 'Mezon Coach');
         const text = make('div', 'chat-message-text'), timing = make('span', 'chat-word-timing'), meta = make('div', 'chat-message-meta'), details = make('details', 'chat-pronunciation'), review = make('div', 'chat-turn-review'), correction = make('section', 'chat-correction');
         timing.hidden = true;
         // The outer feedback is opt-in; opening it reveals the sound check first.
@@ -462,7 +470,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       row.item.classList.toggle('error', turn.status === 'error');
       row.item.querySelector('.chat-message-label').textContent = turn.role === 'user' ? 'You'
         : turn.metadata?.reply_source === 'clarification_fallback' ? 'Cần làm rõ'
-          : turn.metadata?.reply_source === 'conversation_unavailable' ? 'Chưa có phản hồi' : 'Qwen';
+          : turn.metadata?.reply_source === 'conversation_unavailable' ? 'Chưa có phản hồi' : 'Mezon Coach';
       const live = state.liveTurnId === turn.id ? state.liveReply : null;
       const playback = state.playback?.turnId === turn.id ? state.playback : null;
       const openingPending = state.openingPending === turn;
@@ -889,14 +897,18 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-turn-count').textContent = count ? `${count} speaking turn${count > 1 ? 's' : ''} · Keep going` : 'Take your time. Your first turn starts here.';
   }
   function renderTopics() {
-    const icons = { sun: '☀', plane: '✈', cup: '☕', briefcase: '▣', spark: '✦', laptop: '⌘', book: '▤', city: '⌂' };
+    const icons = { sun: 'i-sun', plane: 'i-plane', cup: 'i-cup', briefcase: 'i-briefcase', spark: 'i-spark', laptop: 'i-laptop', book: 'i-book', city: 'i-city' };
     node('chat-topic-grid').replaceChildren();
     for (const topic of state.config?.topics || []) {
       const button = make('button', 'chat-topic-card'); button.type = 'button'; button.dataset.topic = topic.id;
-      const head = make('div', 'chat-topic-card-top'); head.append(make('span', 'chat-topic-icon', icons[topic.icon] || '✦'), make('span', 'chat-topic-level', topic.level));
-      button.append(head, make('h3', '', topic.title), make('p', '', topic.description));
+      const art = make('div', 'chat-topic-art'); art.setAttribute('aria-hidden', 'true');
+      const head = make('div', 'chat-topic-card-top');
+      const topicIcon = make('span', 'chat-topic-icon'); topicIcon.append(icon(icons[topic.icon] || 'i-spark'));
+      head.append(topicIcon, make('span', 'chat-topic-level', topic.level));
+      art.append(head, make('span', 'chat-topic-art-orbit'));
+      button.append(art, make('h3', '', topic.title), make('p', '', topic.description));
       const keywords = make('div', 'chat-topic-preview'); topic.guidance.keywords.slice(0, 3).forEach(word => keywords.append(make('span', '', word)));
-      button.append(keywords, make('span', 'chat-topic-cta', 'Chọn giọng & bắt đầu ↗')); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
+      button.append(keywords, make('span', 'chat-topic-cta', 'Vào kịch bản ↗')); button.addEventListener('click', () => openTopicSetup(topic.id)); node('chat-topic-grid').append(button);
     }
   }
   const currentVoiceProvider = () => node('chat-voice-provider').value;

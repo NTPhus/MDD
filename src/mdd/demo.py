@@ -31,7 +31,8 @@ STATIC_FILES = {"/": "index.html", "/index.html": "index.html",
                 "/chat.js": "chat.js", "/chat.css": "chat.css",
                 "/pronunciation.js": "pronunciation.js",
                 "/speech_highlight.js": "speech_highlight.js",
-                "/recorder-worklet.js": "recorder-worklet.js"}
+                "/recorder-worklet.js": "recorder-worklet.js",
+                "/assets/mezon-wordmark.png": "assets/mezon-wordmark.png"}
 RFC1918_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
@@ -551,8 +552,9 @@ class DemoHandler(BaseHTTPRequestHandler):
                     file = app.root / "demo" / STATIC_FILES[path]
                     if not _inside(file, app.root / "demo") or not file.is_file():
                         raise DemoError(404, "not_found", "Trang demo chưa có sẵn.")
-                    types = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
-                    self._send(200, file.read_bytes(), types[file.suffix] + "; charset=utf-8")
+                    types = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                             ".css": "text/css; charset=utf-8", ".png": "image/png"}
+                    self._send(200, file.read_bytes(), types[file.suffix])
                 else:
                     raise DemoError(404, "not_found", "Không tìm thấy tài nguyên.")
             elif method == "POST" and path in {"/api/analyze", "/api/analyze-live", "/api/feedback", "/api/reference", "/api/chat/send", "/api/chat/speech", "/api/chat/topic", "/api/chat/cancel", "/api/chat/voice", "/api/chat/reference"}:
