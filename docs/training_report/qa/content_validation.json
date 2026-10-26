@@ -1,0 +1,14 @@
+{
+  "chapters": 18,
+  "legacy_figures": 35,
+  "unique_legacy_figures": 35,
+  "new_charts": [
+    "A1",
+    "A2",
+    "A3"
+  ],
+  "primary_references": 21,
+  "unknown_reference_ids": [],
+  "word_count": 11948,
+  "training_or_inference_executed": false
+}

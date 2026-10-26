@@ -1,4 +1,7 @@
 {
+  "_status": "historical_snapshot_superseded",
+  "_superseded_by": "docs/report_evidence_review_20261023.json and docs/pipeline_report/source_snapshot.json",
+  "_note_vi": "Giữ bằng chứng buổi sáng để truy vết; không dùng làm mô tả pipeline hiện tại trong bản báo cáo viết lại.",
   "title_vi": "Bằng chứng model routing, vai trò và workflow hiện tại của MDD",
   "snapshot_at_Bangkok": "2026-10-23T09:36:59.095211+07:00",
   "scope_vi": "Read-only source audit và kiểm registry/artifact nhẹ. Không load torch/model, không inference, train, gọi LLM API hay TTS. Chỉ tạo evidence_models.json.",

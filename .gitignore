@@ -32,6 +32,9 @@ data/generated/
 /models/pretrained/Qwen3-0.6B/tokenizer.json
 /models/pretrained/Qwen3-0.6B/vocab.json
 /models/pretrained/Qwen3-0.6B/merges.txt
+# Reproduced by setup_whisper_asr.py; retain config and the checksum manifest.
+/models/pretrained/faster-whisper-small.en/tokenizer.json
+/models/pretrained/faster-whisper-small.en/vocabulary.txt
 
 # Local training outputs: checkpoints, optimizer states, logs and predictions.
 /runs/

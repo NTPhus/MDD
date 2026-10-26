@@ -1,4 +1,4 @@
-"""Read-only CPU inference for the local demo; ML imports are deferred until use."""
+"""Read-only local inference; CPU remains the reproducible evaluation default."""
 
 from __future__ import annotations
 
@@ -104,13 +104,94 @@ def canonical_comparison(reference_text, reference, predicted_phones):
 
 
 class LocalInference:
-    """One CPU model cached per server; a failed replacement keeps the old cache."""
+    """One model cached per server, with optional CUDA and bounded CPU fallback.
 
-    def __init__(self, root: Path, threads: int = 2):
+    Existing evaluation callers retain CPU/float32. The interactive worker can
+    explicitly select ``auto`` or ``cuda`` to use CUDA/float16 when available.
+    Runtime metadata always records the device actually used, including fallback.
+    """
+
+    def __init__(self, root: Path, threads: int = 2, *, device: str = "cpu",
+                 compute_type: str = "auto"):
+        if device not in {"cpu", "auto", "cuda"}:
+            raise ValueError("Inference device must be cpu, auto, or cuda")
+        if compute_type not in {"auto", "float16", "float32"}:
+            raise ValueError("Inference compute_type must be auto, float16, or float32")
+        if device == "cpu" and compute_type == "float16":
+            raise ValueError("CPU phoneme inference requires float32")
         self.root = Path(root).resolve()
         self.threads = max(1, min(4, int(threads)))
+        self.device = device
+        self.compute_type = compute_type
         self._cache_key = None
         self._cached = None
+
+    @property
+    def runtime_info(self):
+        if self._cached is not None:
+            return dict(self._cached.get("runtime", self._cpu_runtime()))
+        return {"requested_device": self.device, "requested_compute_type": self.compute_type,
+                "device": None, "compute_type": None, "fallback_reason": None}
+
+    def _cpu_runtime(self, fallback_reason=None):
+        return {"requested_device": self.device, "requested_compute_type": self.compute_type,
+                "device": "cpu", "compute_type": "float32", "fallback_reason": fallback_reason}
+
+    @staticmethod
+    def _cuda_oom(error, torch):
+        return (isinstance(error, torch.cuda.OutOfMemoryError)
+                or (isinstance(error, RuntimeError) and "cuda" in str(error).lower()
+                    and "out of memory" in str(error).lower()))
+
+    def _place_network(self, network):
+        import torch
+
+        if self.device == "cpu":
+            network.to("cpu")
+            return self._cpu_runtime()
+        if not torch.cuda.is_available():
+            network.to("cpu")
+            return self._cpu_runtime("CUDA is unavailable; phoneme inference uses CPU float32")
+        compute_type = "float32" if self.compute_type == "float32" else "float16"
+        try:
+            network.to(device="cuda:0", dtype=getattr(torch, compute_type))
+        except RuntimeError as error:
+            if not self._cuda_oom(error, torch):
+                raise
+            # A failed transfer can leave some layers on CUDA. Move every layer
+            # back before releasing cached allocations and retrying on the CPU.
+            network.to(device="cpu", dtype=torch.float32)
+            torch.cuda.empty_cache()
+            return self._cpu_runtime("CUDA ran out of memory while loading the phoneme model")
+        return {"requested_device": self.device, "requested_compute_type": self.compute_type,
+                "device": "cuda:0", "compute_type": compute_type, "fallback_reason": None}
+
+    def _forward(self, bundle, inputs):
+        import torch
+
+        runtime = bundle.get("runtime", self._cpu_runtime())
+        gpu_inputs = None
+        try:
+            dtype = getattr(torch, runtime["compute_type"])
+            gpu_inputs = {key: value.to(device=runtime["device"],
+                                        dtype=dtype if value.is_floating_point() else value.dtype)
+                          for key, value in inputs.items()}
+            with torch.inference_mode():
+                return bundle["network"](**gpu_inputs)
+        except RuntimeError as error:
+            if not runtime["device"].startswith("cuda") or not self._cuda_oom(error, torch):
+                raise
+        # Retry only CUDA allocation failures. The CPU bundle stays cached for
+        # later clips, so repeated requests cannot repeatedly exhaust the GPU.
+        gpu_inputs = None
+        bundle["network"].to(device="cpu", dtype=torch.float32)
+        bundle["runtime"] = self._cpu_runtime("CUDA ran out of memory during phoneme inference")
+        torch.cuda.empty_cache()
+        cpu_inputs = {key: value.to(device="cpu", dtype=torch.float32
+                                   if value.is_floating_point() else value.dtype)
+                      for key, value in inputs.items()}
+        with torch.inference_mode():
+            return bundle["network"](**cpu_inputs)
 
     def _audio(self, audio_bytes):
         import numpy as np
@@ -175,11 +256,11 @@ class LocalInference:
             experimental = metadata.get("purpose") != "scientific_training"
         if loading.get("missing_keys") or loading.get("mismatched_keys") or loading.get("error_msgs"):
             raise ValueError("Checkpoint thiếu trọng số model; không dùng trọng số khởi tạo ngẫu nhiên.")
-        network.to("cpu")
+        runtime = self._place_network(network)
         network.eval()
         network.requires_grad_(False)
         return {"network": network, "extractor": extractor, "vocabulary": vocabulary,
-                "experimental": experimental}
+                "experimental": experimental, "runtime": runtime}
 
     def _get_bundle(self, model):
         path = Path(model["path"])
@@ -195,7 +276,8 @@ class LocalInference:
             if candidate.is_file():
                 status = candidate.stat()
                 signatures.append((filename, status.st_mtime_ns, status.st_size))
-        key = (str(path), kind, str(model.get("fingerprint", "")), tuple(signatures))
+        key = (str(path), kind, str(model.get("fingerprint", "")), tuple(signatures),
+               self.device, self.compute_type)
         if key != self._cache_key:
             # Assign only after the entire load/validation succeeds. A damaged
             # newly published checkpoint must not evict the previous model.
@@ -215,22 +297,24 @@ class LocalInference:
         torch.set_num_threads(self.threads)
         inputs = bundle["extractor"](waveform, sampling_rate=SAMPLE_RATE,
                                      return_attention_mask=True, return_tensors="pt")
-        inputs = {key: value.to("cpu") for key, value in inputs.items()}
-        with torch.inference_mode():
-            output = bundle["network"](**inputs)
+        output = self._forward(bundle, inputs)
+        runtime = dict(bundle.get("runtime", self._cpu_runtime()))
         features, phonemes, comparison = None, [], None
         experimental = bool(model.get("experimental", True)) or bundle["experimental"]
         if model["kind"] == "backbone":
-            hidden = output.last_hidden_state[0]
+            hidden = output.last_hidden_state[0].float()
             if not torch.isfinite(hidden).all():
                 raise ValueError("Model trả về đặc trưng không hữu hạn.")
             features = {"frames": int(hidden.shape[0]), "dimensions": int(hidden.shape[1]),
                         "norm_mean": float(hidden.norm(dim=-1).mean())}
             analysis_kind = "backbone_features"
             warning = "BASE là backbone chưa có đầu nhận diện âm vị hoặc bản chép lời."
-            notice = "Đã trích xuất đặc trưng giọng nói thực trên CPU. Chưa có điểm phát âm."
+            notice = (f"Đã trích xuất đặc trưng giọng nói thực trên {'GPU' if runtime['device'].startswith('cuda') else 'CPU'}. "
+                      "Chưa có điểm phát âm.")
         else:
-            logits = output.logits[0]
+            # Decode and export posteriors in float32 even when the encoder ran
+            # in float16. This avoids half-precision probability underflow.
+            logits = output.logits[0].float()
             if not torch.isfinite(logits).all():
                 raise ValueError("Model trả về logits không hữu hạn.")
             confidence, token_ids = logits.softmax(dim=-1).max(dim=-1)
@@ -253,7 +337,7 @@ class LocalInference:
                 "audio": audio, "reference_text": str(reference_text), "asr_text": None,
                 "phonemes": phonemes, "features": features, "comparison": comparison,
                 "notice": notice, "inference_seconds": round(time.monotonic() - started, 3),
-                "analysis_kind": analysis_kind}
+                "analysis_kind": analysis_kind, "runtime": runtime}
         if capture_evidence and model['kind'] == 'phoneme':
             result['_acoustic_evidence'] = {
                 'log_probs': logits.log_softmax(dim=-1).detach().cpu().numpy(),
@@ -299,4 +383,5 @@ class LocalInference:
             raise ValueError('Checkpoint changed during inference; retry with stable completed weights')
         evidence = result['_acoustic_evidence']
         evidence.update(identities)
+        evidence['runtime'] = result['runtime']
         return evidence

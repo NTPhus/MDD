@@ -1,0 +1,92 @@
+{
+  "status": "downloaded_verified_inspected",
+  "models": {
+    "charsiu-ctc": {
+      "model_id": "charsiu/en_w2v2_ctc_libris_and_cv",
+      "revision": "70f5061463f2927a27236d7e9d309cf0fd5282b3",
+      "weight_sha256": "fd35d545cedfe652b1cd835ecd4f99da86372103c219cd3ae1ea4ba47537ef40",
+      "config_bytes": 1877,
+      "config_sha256": "2d3868d5baf70c3166ae060c4e846a274c53146d5b2c6cc03fc912a3b86e27ab",
+      "objective": "CTC phone recognition",
+      "stride_samples": 320
+    },
+    "charsiu-fc10ms": {
+      "model_id": "charsiu/en_w2v2_fc_10ms",
+      "revision": "e9bf8dd314313fc57f6e4d0b5425bde4bbeac80f",
+      "weight_sha256": "6dc8a18422db7c22e951d5f72dc2afc267b942eb0b8459ac6dcc0cf412536de1",
+      "config_bytes": 1920,
+      "config_sha256": "7406aa4f917267640865688aa62f2337664a3abb9a49a2f204d932b53aeb6cb7",
+      "objective": "Frame-wise cross-entropy phone classification",
+      "stride_samples": 160
+    }
+  },
+  "tokenizer_id": "charsiu/tokenizer_en_cmu",
+  "tokenizer_revision": "10507401aedf5e0aba164128535b49225ff95260",
+  "files": {
+    "charsiu-ctc/pytorch_model.bin": {
+      "bytes": 377706220,
+      "sha256": "fd35d545cedfe652b1cd835ecd4f99da86372103c219cd3ae1ea4ba47537ef40"
+    },
+    "charsiu-ctc/config.json": {
+      "bytes": 1877,
+      "sha256": "2d3868d5baf70c3166ae060c4e846a274c53146d5b2c6cc03fc912a3b86e27ab"
+    },
+    "charsiu-fc10ms/pytorch_model.bin": {
+      "bytes": 377706220,
+      "sha256": "6dc8a18422db7c22e951d5f72dc2afc267b942eb0b8459ac6dcc0cf412536de1"
+    },
+    "charsiu-fc10ms/config.json": {
+      "bytes": 1920,
+      "sha256": "7406aa4f917267640865688aa62f2337664a3abb9a49a2f204d932b53aeb6cb7"
+    },
+    "tokenizer/vocab.json": {
+      "bytes": 403,
+      "sha256": "781514e251e9615ea4a05bbf3760ffcf8ec2ebe67355f411177ea64b0602d897"
+    },
+    "tokenizer/tokenizer_config.json": {
+      "bytes": 180,
+      "sha256": "56e02b54de01a0ec4cc0c705ad3c303d7b73c83d61063a94b84cbf3a55da76a1"
+    },
+    "tokenizer/special_tokens_map.json": {
+      "bytes": 85,
+      "sha256": "50eb73d51191696209d30d42d6ede50e57e7a542ca1db12df714b2c0aa3da8e2"
+    }
+  },
+  "state_inspection": {
+    "charsiu-ctc": {
+      "unsafe_globals": [],
+      "weights_only": true,
+      "map_location": "cpu",
+      "state_keys": 213,
+      "tensor_elements": 94404010,
+      "classification_head_shape": [
+        42,
+        768
+      ]
+    },
+    "charsiu-fc10ms": {
+      "unsafe_globals": [],
+      "weights_only": true,
+      "map_location": "cpu",
+      "state_keys": 213,
+      "tensor_elements": 94404010,
+      "classification_head_shape": [
+        42,
+        768
+      ]
+    }
+  },
+  "preprocessing": {
+    "feature_size": 1,
+    "sampling_rate": 16000,
+    "padding_value": 0.0,
+    "do_normalize": true,
+    "return_attention_mask": false
+  },
+  "source_revision": "13a69f2a22ca0c0962b75cc693399b0ae23a12c9",
+  "source_repository": "https://github.com/lingjzhu/charsiu",
+  "paper": "https://arxiv.org/abs/2110.03876",
+  "training": false,
+  "license_note": "Author source repository is MIT; individual HF weight repositories have no separate license/model-card metadata.",
+  "verified_at_utc": "2026-10-24T04:30:38.771697+00:00"
+}

@@ -129,7 +129,8 @@ _VERBS = set(('go be do have buy make eat drink take see get come say tell speak
               'give send like want love order visit enjoy work live play study learn help need prefer know travel '
               'walk watch cook try talk call use listen stay arrive run sit stand bring hear understand '
               'wake brush wash clean comb start check finish catch leave sleep dress shower rest '
-              'begin break choose drive fall forget keep lose pay sell teach wear win wait look depend').split())
+                  'begin break choose drive fall forget keep lose pay sell teach wear win wait look depend '
+                  'search specialize believe mention hope plan decide remember seem appear').split())
 _ARTICLES = {'a', 'an', 'the'}
 _AUXILIARIES = {'be', 'do', 'have'}
 _NEGATIVES = {'not', 'no', 'never', 'nothing', 'nobody', 'nowhere', 'neither', 'nor', 'without'}
@@ -149,7 +150,8 @@ _POSSESSIVE = dict(zip(('i', 'you', 'we', 'they', 'he', 'she', 'it'),
                        ('my', 'your', 'our', 'their', 'his', 'her', 'its')))
 _PREPOSITIONS = set('at in on to from by with for of into onto through over under before after'.split())
 _VERB_PREPOSITIONS = {'arrive': {'at', 'in'}, 'go': {'to'}, 'listen': {'to'}, 'look': {'at'},
-                      'wait': {'for'}, 'live': {'in'}, 'stay': {'at', 'in'}, 'depend': {'on'}}
+                      'wait': {'for'}, 'live': {'in'}, 'stay': {'at', 'in'}, 'depend': {'on'},
+                      'search': {'for'}}
 _HYGIENE = {'brush': {'teeth', 'tooth', 'hair'}, 'wash': {'face', 'hands', 'hand', 'hair'},
             'clean': {'teeth', 'tooth', 'hands', 'hand', 'face'}, 'comb': {'hair'}}
 
@@ -232,7 +234,7 @@ def _grammar_repairs(source, target):
              if word.lower() not in _TEMPORAL | _ARTICLES | _VERBS | _SENSITIVE]
     if names or set(before) & {'me', 'him', 'her', 'us', 'them'}:
         subject = None
-    remove, remove_before = set(), set()
+    remove, remove_before, replace_before = set(), set(), {}
     for marker in ('when', 'while', 'after', 'before', 'once'):
         left = [i for i, word in enumerate(before) if word == marker]
         right = [i for i, word in enumerate(after) if word == marker]
@@ -245,6 +247,9 @@ def _grammar_repairs(source, target):
                       and after[j + 1].endswith('ing') and _verb(after[j + 1])
                       and _verb(before[i + 2]) == _verb(after[j + 1])):
                     remove_before.add(i + 1)
+                    # A reduced time clause inherits its main clause's time;
+                    # it does not erase the tense of an independent assertion.
+                    replace_before[i + 2] = after[j + 1]
     for base in set(_VERB_PREPOSITIONS) | set(_HYGIENE):
         left = [i for i, word in enumerate(before) if _verb(word) == base]
         right = [i for i, word in enumerate(after) if _verb(word) == base]
@@ -256,6 +261,14 @@ def _grammar_repairs(source, target):
                 a += 1
             if a >= len(before) or b >= len(after):
                 continue
+            # Searching a room and searching for a room have different objects.
+            # License this omitted complement only for explicit search targets.
+            if base == 'search':
+                head = a
+                while head < len(before) and before[head] in {'any', 'some', 'new', 'another'}:
+                    head += 1
+                if head >= len(before) or before[head] not in {'job', 'jobs', 'work', 'employment', 'information', 'answer', 'answers'}:
+                    continue
             candidate = b
             if base in _VERB_PREPOSITIONS and before[a] not in _PREPOSITIONS and after[b] in _VERB_PREPOSITIONS[base]:
                 b += 1
@@ -267,8 +280,98 @@ def _grammar_repairs(source, target):
                     and after[candidate] == _POSSESSIVE[subject] and candidate + 1 < len(after)
                     and before[a] == after[candidate + 1]):
                 remove.add(candidate)
-    return ([word for index, word in enumerate(before) if index not in remove_before],
+    return ([replace_before.get(index, word) for index, word in enumerate(before) if index not in remove_before],
             [word for index, word in enumerate(after) if index not in remove])
+
+
+_INFINITIVE_GOVERNORS = {'able', 'unable', 'want', 'need', 'hope', 'plan', 'decide',
+                         'try', 'learn', 'forget', 'remember'}
+_IMPERSONAL_PREDICATES = {'important', 'necessary', 'possible', 'impossible', 'easy',
+                          'difficult', 'clear', 'obvious', 'likely', 'unlikely', 'good', 'bad'}
+_MODALS = {'can', 'could', 'will', 'would', 'should', 'shall', 'must', 'may', 'might'}
+_COMPOUNDS = {('life', 'styles'): 'lifestyles', ('life', 'style'): 'lifestyle',
+               ('film', 'making'): 'filmmaking'}
+
+
+def _surface_words(words):
+    """Canonicalize a few transparent compounds, never guess a misspelled word."""
+    result, index = [], 0
+    while index < len(words):
+        pair = tuple(words[index:index + 2])
+        if pair in _COMPOUNDS:
+            result.append(_COMPOUNDS[pair]); index += 2
+        elif words[index] == 'everyday' and index == len(words) - 1 and index >= 2 and any(
+                _verb(word) for word in words[:index]):
+            # Temporal adjunct only: do not turn "everyday life" into a duration.
+            result.extend(('every', 'day')); index += 1
+        else:
+            result.append(words[index]); index += 1
+    return result
+
+
+def _licensed_repairs(before, after):
+    """Normalize only context-bounded syntactic edits for the lexical comparison.
+
+    All unmatched edits still have to pass the ordered content/fact checks. This
+    is permission to show a draft, not a semantic or grammaticality certificate.
+    """
+    before, after = _surface_words(before), _surface_words(after)
+    remove, remove_before, replace, types = set(), set(), {}, []
+    for operation, i, j, a, b in SequenceMatcher(a=before, b=after, autojunk=False).get_opcodes():
+        left, right = before[i:j], after[a:b]
+        previous = before[i - 1] if i else None
+        following = before[j:]
+        if operation == 'insert' and right == ['to'] and previous and _lemma(previous) in _INFINITIVE_GOVERNORS and following and _verb(following[0]):
+            remove.add(a); types.append('missing_infinitive_to')
+        elif operation == 'insert' and right == ['it'] and previous and _lemma(previous) in {'think', 'believe', 'sure', 'seem', 'appear'}:
+            tail = list(following)
+            if tail and _lemma(tail.pop(0)) == 'be':
+                while tail and tail[0] in {'very', 'really', 'quite', 'not'}:
+                    tail.pop(0)
+                if tail and tail[0] in _IMPERSONAL_PREDICATES:
+                    remove.add(a); types.append('missing_impersonal_it')
+        elif operation == 'replace' and left[:1] == ['on'] and right[:1] == ['in'] and previous and _verb(previous) == 'specialize':
+            replace[a] = 'on'; types.append('specialize_preposition')
+        elif operation == 'replace' and left[:1] == ['in'] and right[:1] == ['at'] and previous and _verb(previous) == 'study' and set(following[:5]) & {'university', 'college', 'school'}:
+            replace[a] = 'in'; types.append('study_institution_preposition')
+        elif (operation == 'replace' and previous in {'goal', 'aim'} and len(left) == len(right) == 2
+              and left[0] == 'to' and right[0] == 'of' and right[1].endswith('ing')
+              and _forms(left[1]) & _forms(right[1]) and _verb(left[1])):
+            replace[a] = 'to'; types.append('goal_gerund_complement')
+        elif operation == 'replace' and left == ['other'] and right == ['another'] and (i == 0 or previous in {'and', 'but'}):
+            head = following[:1]
+            if head and head[0] in {'important', 'main', 'key', 'significant'}:
+                head = following[1:2]
+            if head and head[0] in {'aspect', 'point', 'reason', 'advantage', 'problem', 'example', 'option', 'way'}:
+                replace[a] = 'other'; types.append('singular_other_determiner')
+        elif operation == 'delete' and len(left) == 1 and previous and following:
+            if (_verb(previous) == 'mention' and left == ['about']) or (
+                    _verb(previous) == 'believe' and left == ['of'] and following[0] in {'what', 'that'}):
+                # Ignore this licensed redundant preposition on the comparison
+                # side only. The original and proposed text stay intact.
+                types.append('redundant_complement_preposition')
+                remove_before.add(i)
+    before = [word for index, word in enumerate(before) if index not in remove_before]
+    normalized = []
+    for index, word in enumerate(after):
+        if index in remove:
+            continue
+        value = replace.get(index, word)
+        normalized.extend(value if isinstance(value, list) else [value])
+    after = normalized
+    # "more enjoy the trip" -> "enjoy the trip more": the degree word can
+    # move across one verb and its unchanged object, never across another verb.
+    if before.count('more') == after.count('more') == 1:
+        i, j = before.index('more'), after.index('more')
+        boundary = j == len(after) - 1 or after[j + 1] in _PREPOSITIONS | {'and', 'or', 'but', 'then', 'when', 'while', 'because'}
+        if i + 1 < len(before) and _verb(before[i + 1]) and j > i and boundary:
+            left, right = before[:i] + before[i + 1:], after[:j] + after[j + 1:]
+            crossed = right[i:j]
+            if (sum(bool(_verb(word)) for word in crossed) == 1
+                    and not set(crossed) & (_SUBJECTS | _PREPOSITIONS | {'and', 'or', 'but', 'then', 'than', 'as', 'when', 'while'})
+                    and len(left) == len(right) and all(_forms(x) & _forms(y) for x, y in zip(left, right))):
+                before, after = left, right; types.append('degree_adverb_position')
+    return before, after, types
 
 
 def _canonical(words):
@@ -303,33 +406,81 @@ def _canonical(words):
     return output
 
 
-def _safe(source, target):
-    before, after = (_canonical(words) for words in _grammar_repairs(source, target))
+GUARD_VERSION = 'bounded-grammatical-edits-v2'
+
+
+def validate_rewrite(source, target):
+    """Return an inspectable delivery decision, not a grammar/meaning grade."""
+    before, after, edits = _licensed_repairs(*_grammar_repairs(source, target))
+    before, after = _canonical(before), _canonical(after)
+    def decision(accepted, reason):
+        return {'accepted': accepted, 'reason': reason, 'version': GUARD_VERSION,
+                'licensed_edit_types': sorted(set(edits))}
     if not before or not after or len(after) > min(150, len(before) + 8):
-        return False
+        return decision(False, 'unsupported_length_change')
     negative = lambda words: Counter('not' if word == 'no' else word for word in words if word in _NEGATIVES)
     if negative(before) != negative(after):
-        return False
+        return decision(False, 'negation_changed')
     # A modal added to an assertion changes certainty. would-like is normalized
     # above only when it expresses the same request/desire as want.
     protected = lambda words: Counter(word for word in words if word in _SENSITIVE or word.isdigit()
                                      or re.fullmatch(r'mddclock\d{4}(?:am|pm)', word))
     if protected(before) != protected(after):
-        return False
+        return decision(False, 'protected_fact_changed')
     numbers = lambda text: re.findall(r'\b\d+(?:[.,]\d+)?\b', text)
     if numbers(_clock_text(source)) != numbers(_clock_text(target)):
-        return False
+        return decision(False, 'number_changed')
+    symbols = lambda text: re.findall(r'[$€£¥%]|(?<!\w)[+-](?=\d)', text)
+    if symbols(source) != symbols(target):
+        return decision(False, 'quantity_unit_or_sign_changed')
     names = [word.lower() for word in re.findall(r"\b[A-Z][a-z]+(?:'[A-Za-z]+)*\b", _clock_text(source))
              if word.lower() not in _SENSITIVE | _TEMPORAL | _ARTICLES | _VERBS
              and _lemma(word.lower()) not in _AUXILIARIES]
     if any(before.count(word) != after.count(word) for word in names):
-        return False
-    # Reject an unsupported tense shift in an already complete present clause.
-    past_source = ('yesterday' in before or 'ago' in before or 'last' in before
-                   or any(word in _PAST_FORMS or (len(word) > 3 and word.endswith('ed')) for word in before))
-    if not past_source and any((word in _PAST_FORMS or (len(word) > 3 and word.endswith('ed')))
-                               and word not in before for word in after):
-        return False
+        return decision(False, 'name_changed')
+    def finite_past(words):
+        result = Counter()
+        for index, word in enumerate(words):
+            if word not in _PAST_FORMS and not (len(word) > 3 and word.endswith('ed')):
+                continue
+            if word in _SENSITIVE | _NEGATIVES:
+                continue
+            previous = words[max(0, index - 3):index]
+            # Participles in a verbal/adjectival complement are not an extra
+            # finite tense: "were drove -> were driven", "am worried", or
+            # "did not expected -> did not expect". Keep the actual auxiliary.
+            tail = list(previous)
+            while tail and tail[-1] in {'not', 'still', 'always', 'usually', 'just', 'already', 'well', 'very', 'quite', 'really', 'too', 'so'}:
+                tail.pop()
+            if tail and _lemma(tail[-1]) in {'be', 'have', 'do', 'feel', 'look', 'seem', 'appear', 'get'}:
+                continue
+            if previous and previous[-1] in _PREPOSITIONS | _ARTICLES:
+                continue
+            if (index + 1 < len(words) and words[index + 1] == 'to'
+                    and _forms(word) & {'compare', 'relate'}
+                    and previous and previous[-1] in {'important', 'less', 'more', 'better', 'worse'}):
+                continue
+            result[_lemma(word) if word in _INFLECTIONS else tuple(sorted(_forms(word)))] += 1
+        return result
+    past_before, past_after = finite_past(before), finite_past(after)
+    past_source = bool(past_before or set(before) & {'yesterday', 'ago', 'last'})
+    # Established finite past marking cannot vanish. New past marking needs a
+    # learner-supplied anchor or another finite past verb in the same draft.
+    if past_before - past_after or (not past_source and past_after):
+        return decision(False, 'unsupported_tense_change')
+    def progressive(words):
+        result = Counter()
+        for index, word in enumerate(words):
+            if _lemma(word) != 'be':
+                continue
+            tail = words[index + 1:index + 4]
+            while tail and tail[0] in {'not', 'still', 'always', 'usually'}:
+                tail = tail[1:]
+            if tail and tail[0].endswith('ing') and _verb(tail[0]):
+                result[_verb(tail[0])] += 1
+        return result
+    if progressive(before) - progressive(after):
+        return decision(False, 'progressive_aspect_removed')
 
     def core(words):
         result = []
@@ -338,7 +489,9 @@ def _safe(source, target):
             following = words[index + 1:index + 3]
             if following and following[0] in {'not', 'no'}:
                 following = following[1:]
-            auxiliary = lemma in {'do', 'have'} and following and _lemma(following[0]) in _VERBS
+            # HAVE is retained: "have work" is possession, and "had read"
+            # carries perfect aspect. Only negative DO support is elidable.
+            auxiliary = lemma == 'do' and words[index + 1:index + 2] == ['not'] and following and _verb(following[0])
             if word not in _ARTICLES and word not in _TEMPORAL and lemma != 'be' and not auxiliary:
                 result.append(word)
         return result
@@ -346,23 +499,32 @@ def _safe(source, target):
     left, right = core(before), core(after)
     # All temporal words must remain present. They may move to the sentence end.
     if Counter(word for word in before if word in _TEMPORAL) != Counter(word for word in after if word in _TEMPORAL):
-        return False
+        return decision(False, 'temporal_anchor_changed')
     if len(left) != len(right):
-        return False
+        return decision(False, 'unsupported_content_change')
 
     def matching(a, b):
         return bool(_forms(a) & _forms(b))
 
     if all(matching(a, b) for a, b in zip(left, right)):
-        return True
+        return decision(True, 'bounded_edits')
     # One adjacent verb/object transposition supports learner word order such as
     # "I coffee like". Larger reorders can swap semantic roles and are withheld.
     differences = [index for index, pair in enumerate(zip(left, right)) if not matching(*pair)]
     if len(differences) != 2 or differences[1] != differences[0] + 1:
-        return False
+        return decision(False, 'unsupported_content_or_order_change')
     first, second = differences
-    return (matching(left[first], right[second]) and matching(left[second], right[first])
-            and any(_lemma(word) in _VERBS for word in (left[first], left[second])))
+    swapped = (left[first], left[second], right[first], right[second])
+    allowed = (not set(swapped) & (_NEGATIVES | _SENSITIVE | _PREPOSITIONS | _ARTICLES)
+               and matching(left[first], right[second]) and matching(left[second], right[first])
+               and not _verb(left[first]) and _verb(left[second]) and _verb(right[first]))
+    if allowed:
+        edits.append('adjacent_verb_object_order')
+    return decision(bool(allowed), 'bounded_edits' if allowed else 'unsupported_content_or_order_change')
+
+
+def _safe(source, target):
+    return validate_rewrite(source, target)['accepted']
 
 
 def _object(pairs):
@@ -420,9 +582,13 @@ def parse_rewrite(raw, finished, transcript, history=None):
             or any(any(token in text for token in ('\r', '\n', '<', '>', '```'))
                    for text in (grammar, natural, explanation))):
         return _unavailable(original, 'A complete writing suggestion was unavailable.')
-    grammar_safe, natural_safe = _safe(original, grammar), _safe(original, natural)
+    validation = {'grammar_corrected': validate_rewrite(original, grammar),
+                  'natural': validate_rewrite(original, natural)}
+    grammar_safe, natural_safe = (validation[key]['accepted'] for key in ('grammar_corrected', 'natural'))
     if not grammar_safe and not natural_safe:
-        return _unavailable(original, 'The suggestion could change your meaning or guess an unclear word, so it was withheld.')
+        result = _unavailable(original, 'The suggestion could change your meaning or guess an unclear word, so it was withheld.')
+        result['guard_validation'] = validation
+        return result
     grammar = grammar if grammar_safe else ''
     natural = natural if natural_safe else ''
     grammar_changed = grammar_safe and _tokens(original) != _tokens(grammar)
@@ -447,4 +613,4 @@ def parse_rewrite(raw, finished, transcript, history=None):
             'grammar_format_changed': grammar_format_changed, 'natural_format_changed': natural_format_changed,
             'grammar_status': 'ready' if grammar_safe else 'unavailable',
             'natural_status': 'ready' if natural_safe else 'unavailable',
-            'model_id': 'qwen-base', 'source': 'qwen'}
+            'model_id': 'qwen-base', 'source': 'qwen', 'guard_validation': validation}

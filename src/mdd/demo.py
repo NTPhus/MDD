@@ -412,7 +412,8 @@ class DemoApplication:
         try:
             if self.engine is None:
                 from mdd.demo_inference import LocalInference
-                self.engine = LocalInference(self.root, threads=self.threads)
+                from mdd.demo_model_registry import speech_device_policy
+                self.engine = LocalInference(self.root, threads=self.threads, device=speech_device_policy('phoneme'))
             result = self.engine.analyze(model, audio, text.strip(), reference=reference)
             result_model = dict(result.get("model") or {})
             result_model.update(id=model_id, label=model["label"], kind=model["kind"],

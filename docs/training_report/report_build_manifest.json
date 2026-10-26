@@ -1,7 +1,7 @@
 {
-  "built_at_bangkok": "2026-10-23T09:14:53.213201+07:00",
+  "built_at_bangkok": "2026-10-23T16:04:16.463815+07:00",
   "pdf": "MDD_Bao_cao_huan_luyen_Wav2Vec2_Qwen.pdf",
-  "pdf_sha256": "ed32132db57e47a4d1d160fd49824bd0608e4f4385c32e3953a17b9eafe99473",
+  "pdf_sha256": "f3bd901f09f1aea1e8df12f7215ace797fc59316365cf92a6a02e5629220c2ce",
   "figure_count": 35,
   "figure_ids": [
     13,
@@ -77,7 +77,24 @@
     "34": 21,
     "35": 1
   },
+  "additional_artifact_figures": [
+    {
+      "file": "data/generated/asr-backends-20261023/wer_by_group.png",
+      "label": "A1",
+      "sha256": "b2593f3ff791588881639b19f1f1cd3207bfd816bb6e58f0ade23994c75bb8b9"
+    },
+    {
+      "file": "data/generated/asr-backends-20261023/asr_latency.png",
+      "label": "A2",
+      "sha256": "e6b2985a19536a583ab67bcb7d891dbf7080e85f7b773bd71c417ee35178921d"
+    },
+    {
+      "file": "data/generated/crottc-pilot-20261023/research_metrics.png",
+      "label": "A3",
+      "sha256": "5db7efddc13899c5c3a50ee997f8d4ec8219d01a0cb4a07c73d3f228db2f0b51"
+    }
+  ],
   "source": "report_content.json",
-  "chapters": 14,
+  "chapters": 18,
   "method": "ReportLab; Arial TrueType embedded; saved notebook PNG images unchanged"
 }

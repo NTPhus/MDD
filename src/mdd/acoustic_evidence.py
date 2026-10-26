@@ -10,12 +10,15 @@ import zlib
 import numpy as np
 
 SCHEMA = 'mdd-private-ctc-evidence-v1'
+SEQUENCE_SCHEMA = 'mdd-private-perceived-phones-v1'
 MAX_FRAMES = 2000  # wav2vec2 produces about 50 frames/s for the 30 s demo limit.
 MAX_VOCAB = 256
 MAX_BYTES = MAX_FRAMES * MAX_VOCAB * 4
 
 
 def pack_evidence(evidence):
+    if evidence.get('provider') == 'crottc-if':
+        return _sequence_evidence({**evidence, 'schema': SEQUENCE_SCHEMA})
     matrix = np.asarray(evidence['log_probs'], dtype='<f4')
     if (matrix.ndim != 2 or not 1 <= matrix.shape[0] <= MAX_FRAMES
             or not 2 <= matrix.shape[1] <= MAX_VOCAB or not np.isfinite(matrix).all()):
@@ -32,6 +35,8 @@ def pack_evidence(evidence):
 
 
 def unpack_evidence(packed):
+    if isinstance(packed, dict) and packed.get('schema') == SEQUENCE_SCHEMA:
+        return _sequence_evidence(packed)
     try:
         if not isinstance(packed, dict) or packed.get('schema') != SCHEMA:
             raise ValueError('Unsupported CTC evidence')
@@ -68,3 +73,33 @@ def unpack_evidence(packed):
                 'vocabulary_sha256': packed['vocabulary_sha256']}
     except (KeyError, TypeError, OverflowError, binascii.Error, zlib.error) as error:
         raise ValueError('Stored acoustic evidence is unavailable') from error
+
+
+def _sequence_evidence(value):
+    """Keep the official decoded phones private for text-only reassessment.
+
+    No CTC posterior matrix or word/phone timing is invented for a beam decoder
+    that does not expose them. Its weights have their own calibration identity.
+    """
+    from .phone_sequence_assessment import validate_phones
+    if value.get('provider') != 'crottc-if':
+        raise ValueError('Unsupported perceived-phone provider')
+    result = {'schema': SEQUENCE_SCHEMA, 'provider': 'crottc-if',
+              'phonemes': validate_phones(value), 'duration_sec': value['duration_sec']}
+    for key in ('checkpoint_sha256', 'vocabulary_sha256'):
+        if not isinstance(value.get(key), str) or not re.fullmatch('[a-f0-9]{64}', value[key]):
+            raise ValueError('Missing perceived-phone identity')
+        result[key] = value[key]
+    for key in ('model_id', 'revision', 'word_timing'):
+        item = value.get(key)
+        if item is not None:
+            if not isinstance(item, str) or not 1 <= len(item) <= 160:
+                raise ValueError('Invalid perceived-phone metadata')
+            result[key] = item
+    unresolved = value.get('unresolved_labels', [])
+    if (not isinstance(unresolved, list) or len(unresolved) > 1500
+            or any(not isinstance(label, str) or not 1 <= len(label) <= 32 for label in unresolved)):
+        raise ValueError('Invalid unresolved phone labels')
+    if unresolved:
+        result['unresolved_labels'] = list(unresolved)
+    return result

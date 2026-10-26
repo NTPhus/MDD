@@ -1,0 +1,23 @@
+# Optional CROTTC runtime; install only into .tools/crottc/python using setup_crottc.py.
+# Existing demo torch is reused; torchaudio comes from the matching PyTorch index.
+speechbrain==1.0.3
+HyperPyYAML==1.2.2
+sentencepiece==0.2.1
+ruamel.yaml==0.18.16
+ruamel.yaml.clib==0.2.14
+transformers==4.57.0
+wandb==0.22.2
+librosa==0.11.0
+lazy-loader==0.4
+soxr==1.0.0
+pydantic==2.12.3
+pydantic-core==2.41.4
+annotated-types==0.7.0
+typing-inspection==0.4.2
+gitpython==3.1.45
+gitdb==4.0.12
+smmap==5.0.2
+sentry-sdk==2.42.0
+protobuf==6.33.0
+# flashlight-text/ctc_segmentation are not imported by the released S2S AR beam
+# inference path; no substitute decoder is used. Training dependencies excluded.

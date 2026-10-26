@@ -171,7 +171,7 @@ class ChatRuntimeTests(unittest.TestCase):
                 patch.object(local_chat_process, "_PROCESS", old_process), \
                 patch.object(local_chat_process, "_EVENTS", Queue()), \
                 patch.object(local_chat_process, "_DEVICE_POLICY", "cpu"), \
-                patch.object(local_chat_process, "shutdown", side_effect=stop_worker), \
+                patch.object(local_chat_process, "_shutdown_worker", side_effect=stop_worker), \
                 patch.object(local_chat_process, "_start", side_effect=start_worker), \
                 patch.object(local_chat_process, "_send", side_effect=send_request), \
                 patch.object(local_chat_process.secrets, "token_hex", return_value="request-id"), \

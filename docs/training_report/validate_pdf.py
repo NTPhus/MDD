@@ -38,12 +38,18 @@ for i,page in enumerate(doc):
 joined="\n".join(alltext)
 (qa/"pdf_text.txt").write_text(joined,encoding="utf-8")
 captions=[int(x) for x in re.findall(r"Hình\s+(\d{2})\.",joined)]
+reference_urls={item['url'] for item in json.loads((HERE.parent/'references_20261023.json').read_text(encoding='utf-8'))['references']}
+external_links=[link.get('uri') for page in doc for link in page.get_links() if link.get('uri')]
 result={"pdf":pdf.name,"sha256":hashlib.sha256(pdf.read_bytes()).hexdigest(),
         "pages":len(doc),"unique_image_xrefs":len(images),
         "captions":captions,"missing_captions":sorted(set(range(1,36))-set(captions)),
         "replacement_characters":joined.count("\ufffd"),
         "suspect_text_bounds":sum(len(p["suspect_text_bounds"]) for p in pages),
-        "outline_entries":len(doc.get_toc()),"page_details":pages}
+        "outline_entries":len(doc.get_toc()),
+        "additional_chart_labels":re.findall(r"Biểu đồ\s+(A\d+)\.",joined),
+        "external_link_annotations":len(external_links),
+        "missing_primary_reference_links":sorted(reference_urls-set(external_links)),
+        "page_details":pages}
 (qa/"pdf_validation.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
 font=ImageFont.truetype("C:/Windows/Fonts/arial.ttf",17)
 for start in range(0,len(doc),12):

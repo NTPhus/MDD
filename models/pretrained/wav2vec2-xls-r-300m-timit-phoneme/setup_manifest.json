@@ -1,0 +1,44 @@
+{
+  "model_id": "vitouphy/wav2vec2-xls-r-300m-timit-phoneme",
+  "revision": "efb7ae9b88f13db0d42eac8cedbba19739e2a278",
+  "files": {
+    "model.safetensors": {
+      "bytes": 1261987832,
+      "sha256": "0e3bde20ed7b252a48e69eddf7bd6d7eadc7dbacb06924148514e500ebad4b35"
+    },
+    "README.md": {
+      "bytes": 3444,
+      "sha256": "157102d3d9db69936311fdfe8812cfea651c652fd9f8ed1c9af8c3a27691a577"
+    },
+    "config.json": {
+      "bytes": 2068,
+      "sha256": "17158b6f99c0bef454c7313b021240c7133a4039f229c28d4495ecd207f9f007"
+    },
+    "preprocessor_config.json": {
+      "bytes": 214,
+      "sha256": "60ca5a31e13f69ee2fbf147504c8676db5f6398fd7a6b12294341dff838edfcf"
+    },
+    "special_tokens_map.json": {
+      "bytes": 309,
+      "sha256": "fe9499f3f127cf340419ded12d4175b3a28a58c99c949bf3f8343a6f6b9fa872"
+    },
+    "tokenizer_config.json": {
+      "bytes": 287,
+      "sha256": "3dd1990023adb889ac3029349f80262802c923fe06beb1807118cb1d5e5f8b02"
+    },
+    "vocab.json": {
+      "bytes": 486,
+      "sha256": "12b7de6be6a1bd3132ffdef8d8fe191c8e98f2d70639666e35d9cf6c9d2af77a"
+    },
+    "added_tokens.json": {
+      "bytes": 23,
+      "sha256": "ec58d12af09ef36b4f44ba496b5f3b6cb650b70994ebff692a160f77d2d28c51"
+    }
+  },
+  "license": "apache-2.0",
+  "status": "downloaded_verified",
+  "training": false,
+  "verified_at_utc": "2026-10-24T02:25:28.021583+00:00",
+  "source": "https://huggingface.co/vitouphy/wav2vec2-xls-r-300m-timit-phoneme/tree/efb7ae9b88f13db0d42eac8cedbba19739e2a278",
+  "scope": "General phoneme recognizer trained on TIMIT; not a calibrated MDD error classifier."
+}

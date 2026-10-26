@@ -13,7 +13,10 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
+_LIFECYCLE_LOCK = threading.Lock()
+_SHUTDOWN_EPOCH = 0
+_WARMUPS = set()
 _PROCESS = None
 _EVENTS = None
 _DEVICE_POLICY = None
@@ -27,7 +30,8 @@ def _start(device_policy=None):
     policy = requested_device() if device_policy is None else requested_device({'MDD_CHAT_DEVICE': device_policy})
     env = {**os.environ, "HF_HUB_OFFLINE":"1", "TRANSFORMERS_OFFLINE":"1", "TOKENIZERS_PARALLELISM":"false",
            "OMP_NUM_THREADS":"2", "MKL_NUM_THREADS":"2", "PYTHONIOENCODING":"utf-8", 'MDD_CHAT_DEVICE': policy}
-    if policy == 'cpu':
+    from mdd.demo_model_registry import speech_device_policy
+    if policy == 'cpu' and all(speech_device_policy(key, env) == 'cpu' for key in ('asr', 'phoneme', 'crottc')):
         env['CUDA_VISIBLE_DEVICES'] = ''
     with (folder / "chat-worker.log").open("a", encoding="utf-8") as log:
         process = subprocess.Popen([sys.executable, "-X", "utf8", "-u", str(ROOT / "scripts/local_chat_worker.py")],
@@ -50,7 +54,7 @@ def _send(value):
     _PROCESS.stdin.flush()
 
 
-def shutdown():
+def _shutdown_worker():
     global _PROCESS, _EVENTS, _DEVICE_POLICY
     process = _PROCESS
     if process is None: return
@@ -78,6 +82,30 @@ def shutdown():
         _PROCESS = _EVENTS = _DEVICE_POLICY = None
 
 
+def shutdown():
+    """Cancel queued warmups before waiting for the serialized worker to stop."""
+    global _SHUTDOWN_EPOCH
+    with _LIFECYCLE_LOCK:
+        _SHUTDOWN_EPOCH += 1
+        for cancelled in tuple(_WARMUPS): cancelled.set()
+    with _LOCK:
+        _shutdown_worker()
+
+
+def warmup(cancelled=None):
+    """Load models in the existing worker; callers own and cancel background work."""
+    cancelled = threading.Event() if cancelled is None else cancelled
+    with _LIFECYCLE_LOCK:
+        epoch = _SHUTDOWN_EPOCH
+        _WARMUPS.add(cancelled)
+    try:
+        return _request({'type': 'warmup', 'model_id': 'qwen-base'}, 180.,
+                        on_text=lambda _: None, cancelled=cancelled, shutdown_epoch=epoch)
+    finally:
+        with _LIFECYCLE_LOCK:
+            _WARMUPS.discard(cancelled)
+
+
 def complete(messages, config, max_tokens, timeout, *, on_text, cancelled, on_ready=None):
     if config["device"] not in {'cpu', 'auto', 'cuda'}:
         raise ValueError("Unsupported chat device policy")
@@ -100,13 +128,15 @@ def regenerate_reference(request, *, on_stage, on_speech, on_text, cancelled):
                     on_text=on_text, cancelled=cancelled)
 
 
-def _request(request, timeout, *, on_text, cancelled, on_ready=None, on_stage=None, on_speech=None, device_policy=None):
+def _request(request, timeout, *, on_text, cancelled, on_ready=None, on_stage=None, on_speech=None, device_policy=None,
+             shutdown_epoch=None):
     with _LOCK:
-        if cancelled.is_set(): return {"finish_reason":"cancelled","usage":{}}
+        if cancelled.is_set() or (shutdown_epoch is not None and shutdown_epoch != _SHUTDOWN_EPOCH):
+            return {"finish_reason":"cancelled","usage":{}}
         from mdd.chat_runtime import requested_device
         policy = requested_device() if device_policy is None else requested_device({'MDD_CHAT_DEVICE': device_policy})
         if _PROCESS is None or _PROCESS.poll() is not None or _DEVICE_POLICY != policy:
-            shutdown(); _start(policy)
+            _shutdown_worker(); _start(policy)
         identifier = secrets.token_hex(16)
         _send({**request, "id":identifier})
         sent_cancel = False
@@ -115,17 +145,17 @@ def _request(request, timeout, *, on_text, cancelled, on_ready=None, on_stage=No
             if cancelled.is_set() and not sent_cancel:
                 _send({"type":"cancel","id":identifier}); sent_cancel = True
             if time.monotonic() - started > timeout + 90:
-                shutdown()
+                _shutdown_worker()
                 raise RuntimeError("Local chat worker timed out")
             try:
                 value = _EVENTS.get(timeout=.2)
             except Empty:
                 if _PROCESS.poll() is not None:
-                    shutdown()
+                    _shutdown_worker()
                     raise RuntimeError("Local chat worker stopped; web server remains available") from None
                 continue
             if value is None:
-                shutdown()
+                _shutdown_worker()
                 raise RuntimeError("Local chat worker stopped; web server remains available") from None
             if value.get("id") != identifier: continue
             if value["type"] == "ready" and on_ready: on_ready()

@@ -1,4 +1,4 @@
-"""Local ASR + frozen phoneme B + Qwen English reply/coaching, inference only."""
+"""Local speech and Qwen inference, with bounded CUDA/CPU device policies."""
 from __future__ import annotations
 import hashlib
 import json
@@ -6,11 +6,18 @@ from copy import deepcopy
 from pathlib import Path
 import re
 import sys
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
+
+REPEAT_REQUEST = "Sorry, I didn't catch that. Could you say it again, please?"
+
+
+class UnrecognizedSpeech(ValueError):
+    """ASR completed but produced no usable words, rather than a model failure."""
 
 
 def native_condition(text, reference, phones):
@@ -49,7 +56,7 @@ def conversation_history(request):
 def dialogue_request(request, transcript):
     from mdd.speech_topics import TOPICS
     from scripts.conversation_state import cafe_state, state_note
-    state = cafe_state(request, transcript)
+    state = None if request.get('needs_clarification') is True else cafe_state(request, transcript)
     if state is not None:
         return {**request, 'model_id': 'qwen-base', 'generation_profile': 'conversation',
                 'conversation_state': state,
@@ -57,11 +64,9 @@ def dialogue_request(request, transcript):
                              *list(request.get('history', [])), {'role': 'user', 'content': transcript}],
                 'max_tokens': 96, 'timeout': 45.}
     if request.get('needs_clarification') is True:
-        system = ("Some words in the latest speech transcript are unclear. Ask ONE brief English clarification question. "
-                  "Do not guess the intended words, complete or correct the sentence, or greet. "
-                  "The example shows the style; respond to the actual last message.")
-        examples = [{'role': 'user', 'content': 'The green flerm was narg.'},
-                    {'role': 'assistant', 'content': 'Could you explain what you mean by the last part?'}]
+        system = ("Some words in the latest speech transcript are unclear. Ask the user to say it again. "
+                  "Do not guess the intended words, quote unclear words, correct grammar, or greet.")
+        examples = []
     else:
         system = ("Continue the English conversation from the LAST user message. Use earlier turns for context. "
                   "Add a specific new reaction, answer, or relevant question. One or two short sentences; a question is optional. "
@@ -123,15 +128,29 @@ def follow_up(text, topic_id, turns, *, transcript='', history=()):
 class LocalSpeechEngine:
     def __init__(self):
         self.asr = self.processor = None
+        self.whisper_asr = None
+        self.crottc_pronunciation = None
         self.bert_recovery = None
         from mdd.demo_inference import LocalInference
-        self.phonemes = LocalInference(ROOT, threads=2)
+        from mdd.demo_model_registry import speech_device_policy
+        self.phonemes = LocalInference(ROOT, threads=2, device=speech_device_policy('phoneme'))
 
-    def transcribe(self, waveform):
-        import torch
+    def load_asr(self):
+        """Load the selected ASR once; no audio or inference is performed."""
+        from mdd.demo_model_registry import speech_asr_selection
+        selected = speech_asr_selection(ROOT)
+        if selected.get('provider') == 'whisper':
+            from scripts.whisper_asr import WhisperASR
+            if getattr(self, 'whisper_asr', None) is None:
+                self.whisper_asr = WhisperASR(ROOT, cpu_threads=2, device=selected.get('requested_device', 'cpu'))
+            self.whisper_asr.load()
+            self.asr = self.processor = None
+            self.asr_backend = 'whisper'
+            self.asr_model_id = selected['id']
+            return
         from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, Wav2Vec2Processor
-        from mdd.demo_model_registry import asr_selection
-        selected = asr_selection(ROOT)
+        self.asr_backend = 'wav2vec2'
+        self.whisper_asr = None
         if self.asr is None or getattr(self, 'asr_identity', None) != selected['sha256']:
             path, expected = selected['path'], selected['sha256']
             if hashlib.sha256((path / "model.safetensors").read_bytes()).hexdigest() != expected:
@@ -144,6 +163,122 @@ class LocalSpeechEngine:
                 config=inference_config, attn_implementation="eager").cpu().eval().requires_grad_(False)
             self.asr_identity = expected
             self.asr_model_id = selected['id']
+
+    def _phoneme_model(self):
+        from mdd.demo_model_registry import pronunciation_selection
+        selected = pronunciation_selection(ROOT, getattr(self, '_pronunciation_preference', None))
+        if selected['provider'] == 'crottc-if':
+            return {**selected, 'kind': 'perceived_phones', 'experimental': True,
+                    'label': 'CROTTC-IF'}
+        checkpoint = ROOT / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint"
+        completed = json.loads((checkpoint.parent / "completed.json").read_text(encoding="utf-8"))
+        if completed.get("status") != "completed":
+            raise ValueError("The phoneme checkpoint is incomplete")
+        return {"id": "cascade-B", "label": "wav2vec2 B", "kind": "phoneme",
+                "experimental": False, "path": checkpoint}
+
+    def _crottc_engine(self):
+        from scripts.crottc_pronunciation import CROTTCPronunciation
+        from mdd.demo_model_registry import speech_device_policy
+        if getattr(self, 'crottc_pronunciation', None) is None:
+            self.crottc_pronunciation = CROTTCPronunciation(ROOT, timeout=45., device=speech_device_policy('crottc'))
+        return self.crottc_pronunciation
+
+    def _load_pronunciation(self, cancelled=None):
+        model = self._phoneme_model()
+        if model.get('provider') == 'crottc-if':
+            self._crottc_engine().load(cancelled)
+        else:
+            self.phonemes._get_bundle(model)
+        return model
+
+    def close(self):
+        cancelled = getattr(self, '_pronunciation_cancelled', None)
+        if cancelled is not None:
+            cancelled.set()
+        engine = getattr(self, 'crottc_pronunciation', None)
+        if engine is not None:
+            engine.close()
+        engine = getattr(self, 'whisper_asr', None)
+        if engine is not None:
+            engine.close()
+
+    def _prime_dictionaries(self, cancelled):
+        from mdd import demo_reference, chat_pronunciation, pronunciation_assessment
+        from mdd.phonetic_candidates import _phone_buckets
+        path = (ROOT / 'data/external/cmudict' / demo_reference.COMMIT / 'cmudict.dict').resolve()
+        if not path.is_relative_to(ROOT):
+            raise ValueError('Dictionary is outside the workspace')
+        info = path.stat()
+        identity = (str(path), info.st_mtime_ns, info.st_size)
+        loaders = (
+            lambda: demo_reference._load(*identity),
+            lambda: chat_pronunciation._load(*identity),
+            lambda: pronunciation_assessment._read_dictionary(*identity, demo_reference.DICTIONARY_SHA256),
+            lambda: _phone_buckets(*identity),
+        )
+        for load in loaders:
+            if cancelled.is_set(): return
+            if not load(): raise ValueError('The verified pronunciation dictionary is unavailable')
+
+    def warmup(self, cancelled, qwen):
+        """Load current models and verified lexicons without forwards or generation."""
+        from mdd.demo_model_registry import recovery_selection
+        timings = {}
+        recovery = recovery_selection(ROOT)
+        def load_recovery():
+            if recovery['provider'] == 'bert' and getattr(self, 'asr_backend', 'wav2vec2') != 'whisper':
+                from scripts.bert_transcript_recovery import BertTranscriptRecovery
+                if self.bert_recovery is None:
+                    self.bert_recovery = BertTranscriptRecovery(ROOT)
+                self.bert_recovery._load(cancelled)
+        stages = (
+            ('qwen_load_sec', lambda: qwen.load('qwen-base')),
+            ('asr_load_sec', self.load_asr),
+            ('phoneme_load_sec', lambda: self._load_pronunciation(cancelled)),
+            ('dictionary_load_sec', lambda: self._prime_dictionaries(cancelled)),
+            ('recovery_load_sec', load_recovery),
+        )
+        for name, load in stages:
+            if cancelled.is_set():
+                return {'finish_reason': 'cancelled', 'status': 'cancelled', 'warmup_timings': timings}
+            started = time.monotonic()
+            load()
+            timings[name] = round(time.monotonic() - started, 3)
+        if cancelled.is_set():
+            return {'finish_reason': 'cancelled', 'status': 'cancelled', 'warmup_timings': timings}
+        return {'finish_reason': 'stop', 'status': 'ready', 'warmup_timings': timings,
+                'asr_model_id': self.asr_model_id, 'phoneme_model_id': self._phoneme_model()['id'],
+                'recovery_provider': recovery['provider'] if getattr(self, 'asr_backend', 'wav2vec2') != 'whisper' else None,
+                'qwen_runtime': dict(qwen.runtime),
+                'asr_runtime': ({'device': self.whisper_asr.device, 'compute_type': self.whisper_asr.compute_type,
+                                 'requested_device': self.whisper_asr.requested_device,
+                                 'fallback_reason': self.whisper_asr.fallback_reason}
+                                if getattr(self, 'whisper_asr', None) is not None else {'device': 'cpu'}),
+                'phoneme_runtime': (dict(self.crottc_pronunciation.runtime or {})
+                                    if getattr(self, 'crottc_pronunciation', None) is not None
+                                    else dict(getattr(self.phonemes, 'runtime_info', {}))),
+                'load_only': True}
+
+    def transcribe(self, waveform):
+        # Timings from a previous recording must never label this recording.
+        self.asr_word_intervals = []
+        self.load_asr()
+        if getattr(self, 'asr_backend', 'wav2vec2') == 'whisper':
+            result = self.whisper_asr.transcribe(waveform)
+            text = result['text'].strip()
+            if not text:
+                raise UnrecognizedSpeech('No usable English transcript was recognized')
+            if len(text) > 1000:
+                raise ValueError('No usable English transcript was recognized')
+            self.asr_word_intervals = result['word_intervals']
+            self.asr_word_timing = result.get('word_timing', 'whisper_native')
+            self.asr_raw_transcript = result.get('raw_text', text)
+            self.asr_runtime = {key: result[key] for key in
+                ('model_id', 'revision', 'device', 'compute_type', 'requested_device', 'fallback_reason',
+                 'word_timing', 'text_normalization') if key in result}
+            return text
+        import torch
         inputs = self.processor(waveform, sampling_rate=16000, return_tensors="pt")
         with torch.inference_mode():
             logits = self.asr(**inputs).logits
@@ -151,12 +286,18 @@ class LocalSpeechEngine:
         text = self.processor.batch_decode(ids)[0].strip().lower()
         text = re.sub(r"\bi\b", "I", text)
         text = text[:1].upper() + text[1:]
-        if not text or len(text) > 1000:
+        if not text:
+            raise UnrecognizedSpeech('No usable English transcript was recognized')
+        if len(text) > 1000:
             raise ValueError("No usable English transcript was recognized")
         from mdd.phonetic_candidates import word_intervals
         vocabulary = self.processor.tokenizer.get_vocab()
         self.asr_word_intervals = word_intervals(ids[0].tolist(), {value: key for key, value in vocabulary.items()},
             self.processor.tokenizer.pad_token_id, self.processor.tokenizer.word_delimiter_token, len(waveform) / 16000)
+        self.asr_word_timing = 'approximate_asr_ctc'
+        self.asr_raw_transcript = text
+        self.asr_runtime = {'model_id': self.asr_model_id, 'device': 'cpu', 'compute_type': 'float32',
+                            'word_timing': self.asr_word_timing}
         return text
 
     def analyze(self, audio, reference_text=None):
@@ -175,57 +316,205 @@ class LocalSpeechEngine:
         stage_started = time.monotonic()
         transcript = self.transcribe(waveform)
         timings['asr_sec'] = round(time.monotonic() - stage_started, 3)
+        from mdd.speech_fluency import assess_fluency
+        fluency = assess_fluency(waveform, transcript, getattr(self, 'asr_word_intervals', []))
+        fluency['source'] = ('whisper_word_timestamps' if getattr(self, 'asr_backend', 'wav2vec2') == 'whisper'
+                             else 'approximate_asr_ctc_word_timestamps')
+        fluency['measured_transcript'] = transcript
         stage_started = time.monotonic()
         reference_text = reference_text or transcript
         reference, missing = dictionary_reference(ROOT, reference_text)
         target_words = reference_target_words(ROOT, reference_text, reference)
-        checkpoint = ROOT / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint"
-        completed = json.loads((checkpoint.parent / "completed.json").read_text(encoding="utf-8"))
-        if completed.get("status") != "completed":
-            raise ValueError("The phoneme checkpoint is incomplete")
+        phoneme_model = self._phoneme_model()
         timings['reference_setup_sec'] = round(time.monotonic() - stage_started, 3)
-        stage_started = time.monotonic()
-        evidence = self.phonemes.posterior_evidence({"id": "cascade-B", "label": "wav2vec2 B", "kind": "phoneme",
-                                                   "experimental": False, "path": checkpoint}, audio)
-        timings['phoneme_sec'] = round(time.monotonic() - stage_started, 3)
-        stage_started = time.monotonic()
-        if not evidence["phonemes"]:
-            raise ValueError("The phoneme model did not recognize speech")
-        raw_comparison = canonical_comparison(reference_text, reference, [item['phone'] for item in evidence['phonemes']])
-        assessment = assessment_fields(ROOT, reference_text, evidence, confirmed=provided_reference,
-                                       raw_comparison=raw_comparison)
-        if not assessment.get('target_words'):
-            assessment['target_words'] = target_words
-        timings['assessment_sec'] = round(time.monotonic() - stage_started, 3)
         stage_started = time.monotonic()
         resolution = reference_resolution(ROOT, reference_text)
         if provided_reference and reference is not None:
             resolution['status'] = 'provided'
         timings['reference_resolution_sec'] = round(time.monotonic() - stage_started, 3)
-        stage_started = time.monotonic()
-        from mdd.phonetic_candidates import sound_candidates
-        neighbours = sound_candidates(ROOT, getattr(self, 'asr_word_intervals', []), evidence['phonemes'], transcript)
-        timings['phonetic_candidates_sec'] = round(time.monotonic() - stage_started, 3)
-        return {"transcript": transcript, "reference_text": reference_text, "audio": audio_info,
-                'timings': timings,
+        result = {"transcript": transcript, "reference_text": reference_text, "audio": audio_info,
+                'timings': timings, 'fluency': fluency,
                 "reference_source": "reading_prompt" if provided_reference else "asr",
                 "reference_resolution": resolution,
-                "phonetic_candidates": neighbours,
                 "missing_words": missing, "phone_symbols": ARPABET_IPA,
-                "phonemes": evidence["phonemes"], "reference": reference,
-                '_acoustic_evidence': pack_evidence(evidence), **assessment,
-                "asr_model": getattr(self, 'asr_model_id', 'facebook/wav2vec2-base-960h'), "phoneme_model": "cascade-B",
+                "reference": reference, 'target_words': target_words,
+                "asr_model": getattr(self, 'asr_model_id', 'facebook/wav2vec2-base-960h'), "phoneme_model": phoneme_model['id'],
+                'pronunciation_backend': phoneme_model.get('provider', 'wav2vec2-b'),
+                "asr_backend": getattr(self, 'asr_backend', 'wav2vec2'),
+                "asr_runtime": getattr(self, 'asr_runtime', {}),
+                "asr_raw_transcript": getattr(self, 'asr_raw_transcript', transcript),
                 }
+        # Capture this recording's event and model instance before starting a
+        # thread. A later turn must never replace its cancellation ownership.
+        cancellation_event = getattr(self, '_pronunciation_cancelled', None)
+        crottc_engine = self._crottc_engine() if phoneme_model.get('provider') == 'crottc-if' else None
+        def score_sounds():
+            scores, measured = {}, {}
+            stage_started = time.monotonic()
+            if phoneme_model.get('provider') == 'crottc-if':
+                crottc_engine.load(cancellation_event)
+                evidence = crottc_engine.infer(waveform, cancelled=cancellation_event)
+            else:
+                evidence = self.phonemes.posterior_evidence(phoneme_model, audio)
+            measured['phoneme_sec'] = round(time.monotonic() - stage_started, 3)
+            stage_started = time.monotonic()
+            if not evidence['phonemes']:
+                raise ValueError('The phoneme model did not recognize speech')
+            raw_comparison = canonical_comparison(reference_text, reference, [item['phone'] for item in evidence['phonemes']])
+            scores = assessment_fields(ROOT, reference_text, evidence, confirmed=provided_reference,
+                                       raw_comparison=raw_comparison)
+            if not scores.get('target_words'):
+                scores['target_words'] = target_words
+            measured['assessment_sec'] = round(time.monotonic() - stage_started, 3)
+            stage_started = time.monotonic()
+            from mdd.phonetic_candidates import sound_candidates
+            if evidence.get('provider') == 'crottc-if':
+                neighbours = {'status': 'unavailable', 'words': [], 'diagnostic_only': True,
+                              'reason': 'perceived_phone_timestamps_unavailable', 'timing': 'unavailable'}
+            else:
+                neighbours = sound_candidates(ROOT, getattr(self, 'asr_word_intervals', []), evidence['phonemes'], transcript)
+                neighbours['timing'] = getattr(self, 'asr_word_timing', 'approximate_asr_ctc')
+            measured['phonetic_candidates_sec'] = round(time.monotonic() - stage_started, 3)
+            return {**scores, 'phonemes': evidence['phonemes'], '_acoustic_evidence': pack_evidence(evidence),
+                    'phonetic_candidates': neighbours, 'pronunciation_runtime': evidence.get('runtime', {}),
+                    '_pronunciation_timings': measured}
+        if (phoneme_model.get('provider') == 'crottc-if' and getattr(self, '_defer_pronunciation', False)
+                and getattr(self, 'asr_backend', 'wav2vec2') == 'whisper'):
+            from concurrent.futures import Future
+            future = Future()
+            self._pending_pronunciation = future
+            def score_background():
+                try:
+                    future.set_result(score_sounds())
+                except Exception as error:
+                    future.set_exception(error)
+            threading.Thread(target=score_background, daemon=True, name='chat-pronunciation').start()
+            result.update(phonemes=[], comparison=None, assessment={'status': 'pending'},
+                          sound_candidates={'status': 'pending', 'words': []})
+        else:
+            result.update(score_sounds())
+            result['timings'].update(result.pop('_pronunciation_timings'))
+        return result
+
+    def _finish_pronunciation(self, result, cancelled, emit):
+        """Join optional CPU analysis after publishing the GPU conversation reply."""
+        future = getattr(self, '_pending_pronunciation', None)
+        if future is None:
+            return
+        from concurrent.futures import TimeoutError as Pending
+        emit({'type': 'stage', 'stage': 'analyzing'})
+        try:
+            while not cancelled.is_set():
+                try:
+                    fields = future.result(timeout=.1)
+                    result.setdefault('timings', {}).update(fields.pop('_pronunciation_timings', {}))
+                    result.update(fields)
+                    return
+                except Pending:
+                    if future.done():
+                        raise
+                    continue
+        except Exception as error:
+            result.update(comparison=None, phonemes=[],
+                assessment={'status': 'unavailable', 'reason': 'pronunciation_inference_failed'},
+                sound_candidates={'status': 'unavailable', 'words': [], 'count': 0,
+                                  'reason': 'pronunciation_inference_failed'},
+                pronunciation_runtime={'status': 'unavailable', 'error_type': type(error).__name__})
+        finally:
+            self._pending_pronunciation = None
+
+    def _use_bert_reference(self, result):
+        """Compare the recovered sentence with the original, retained CTC evidence.
+
+        The recovered text is a model inference, never a user confirmation.
+        Rebuilding the reference changes neither audio nor acoustic predictions;
+        the assessment keeps its existing abstention/calibration policy.
+        """
+        from scripts.transcript_normalization import valid_text
+        interpretation = result.get('interpretation')
+        if (result.get('reference_source') != 'asr' or not isinstance(interpretation, dict)
+                or interpretation.get('provider') != 'bert'
+                or interpretation.get('status') not in {'accepted', 'unchanged'}
+                or interpretation.get('original') != result.get('transcript')
+                or interpretation.get('reference_confirmed') is not False
+                or not valid_text(interpretation.get('text'))):
+            return result
+        from mdd.acoustic_evidence import unpack_evidence
+        from mdd.chat_assessment import assessment_fields
+        from mdd.chat_pronunciation import target_words
+        from mdd.chat_reference import reference_resolution
+        from mdd.demo_inference import canonical_comparison
+        from mdd.demo_reference import dictionary_reference
+        started = time.monotonic()
+        text = interpretation['text'].strip()
+        evidence = unpack_evidence(result.get('_acoustic_evidence'))
+        reference, missing = dictionary_reference(ROOT, text)
+        comparison = canonical_comparison(text, reference, [item['phone'] for item in result['phonemes']])
+        fields = assessment_fields(ROOT, text, evidence, confirmed=False, raw_comparison=comparison)
+        if not fields.get('target_words'):
+            fields['target_words'] = target_words(ROOT, text, reference)
+        resolution = reference_resolution(ROOT, text)
+        resolution.update(source='bert_inferred', reference_confirmed=False)
+        if not missing:
+            resolution['status'] = 'inferred'
+        result.update(reference_text=text, reference_source='bert_inferred', reference=reference,
+                      reference_resolution=resolution, missing_words=list(missing), **fields)
+        result['sound_candidates'].update(source='bert_inferred', reference_confirmed=False, provisional=True)
+        result['notice'] = 'Sound suggestions compare the original recording with the recovered English sentence.'
+        interpretation['applied_as_pronunciation_reference'] = True
+        result.setdefault('timings', {})['reference_reassessment_sec'] = round(time.monotonic() - started, 3)
+        return result
 
     def run(self, request, cancelled, emit, qwen):
         import base64
         started = time.monotonic()
         emit({"type": "stage", "stage": "transcribing"})
-        result = self.analyze(base64.b64decode(request["audio_base64"], validate=True), request.get("reference_text"))
+        self._pending_pronunciation = None
+        self._defer_pronunciation = True
+        self._pronunciation_cancelled = cancelled
+        self._pronunciation_preference = request.get('pronunciation_backend')
+        if self._pronunciation_preference == 'crottc-if':
+            # Release the comparison model before loading a second acoustic
+            # encoder. Release unused CUDA cache for CROTTC's memory gate.
+            self.phonemes._cached = self.phonemes._cache_key = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_initialized():
+                torch.cuda.empty_cache()
+        elif self._pronunciation_preference == 'wav2vec2-b' and getattr(self, 'crottc_pronunciation', None) is not None:
+            self.crottc_pronunciation.close()
+        try:
+            result = self.analyze(base64.b64decode(request["audio_base64"], validate=True), request.get("reference_text"))
+        except UnrecognizedSpeech:
+            if cancelled.is_set():
+                return {'finish_reason': 'cancelled'}
+            # No transcript is not a failed model load. Ask for a new recording
+            # without inventing words, a pronunciation result or grammar advice.
+            speech = {'transcript': '', 'reference_text': '', 'reference_source': 'asr',
+                      'pronunciation_reference_ready': False, 'comparison': None, 'missing_words': [],
+                      'transcript_clarity': {'needs_clarification': True, 'reason': 'unrecognized_speech',
+                                             'interpreted': False, 'requires_confirmation': False},
+                      'assessment': {'status': 'unavailable', 'reason': 'unrecognized_speech'},
+                      'sound_candidates': {'status': 'unavailable', 'reason': 'unrecognized_speech', 'words': []},
+                      'rewrite': {'status': 'not_needed'}, 'correction': {'status': 'not_needed'},
+                      'coaching': {'status': 'unavailable', 'feedback': {}},
+                      'spoken_response': REPEAT_REQUEST, 'reply_ready': True}
+            emit({'type': 'stage', 'stage': 'generating'})
+            emit({'type': 'chunk', 'text': REPEAT_REQUEST})
+            emit({'type': 'speech', 'speech': speech})
+            return {'finish_reason': 'stop', 'reply_source': 'clarification_fallback', 'reply_model_used': False,
+                    'fallback_reason': 'unrecognized_speech', 'reply_generation_attempts': 0, 'reply_attempts': [],
+                    'usage': {'prompt_tokens': 0, 'completion_tokens': 0}, 'reply_model_id': 'qwen-base',
+                    'input': 'audio', 'language': 'en-US', 'feedback_order': 'reply_first',
+                    'latency_sec': round(time.monotonic() - started, 3)}
+        finally:
+            self._defer_pronunciation = False
         if request.get('recovery_enabled') is True and not request.get('reference_text'):
-            # A conversational interpretation is never an acoustic reference.
-            # Keep raw ASR, posteriors and pronunciation assessment untouched.
-            emit({'type': 'speech', 'speech': {**result, 'interpretation': {'status': 'pending'}}})
+            # Publish progress without letting the UI use the raw target for
+            # word marks or sentence voice while the selected recovery is pending.
+            emit({'type': 'speech', 'speech': {**result, 'interpretation': {'status': 'pending'},
+                                              'pronunciation_reference_ready': False}})
             emit({'type': 'stage', 'stage': 'correcting'})
             if request.get('recovery_provider') == 'bert':
                 from scripts.bert_transcript_recovery import BertTranscriptRecovery
@@ -239,6 +528,22 @@ class LocalSpeechEngine:
                     history=conversation_history(request))
             result.setdefault('timings', {})['interpretation_sec'] = result['interpretation'].get('latency_sec', 0.)
             if cancelled.is_set(): return {'finish_reason': 'cancelled'}
+            if request.get('recovery_provider') == 'bert':
+                result = self._use_bert_reference(result)
+                # Word rescoring can leave fluent-looking fragments or split
+                # names into dictionary syllables. Recover the meaning from the
+                # whole ORIGINAL transcript before dialogue, independently of
+                # the retained BERT pronunciation target and acoustic evidence.
+                from scripts.sentence_recovery import needs_recovery, recover as recover_sentence
+                if needs_recovery(result['transcript'], result['interpretation'],
+                                  missing_words=result.get('missing_words', [])):
+                    result['conversation_recovery'] = {'status': 'pending', 'original': result['transcript'],
+                                                       'reference_confirmed': False}
+                    emit({'type': 'speech', 'speech': {**result, 'pronunciation_reference_ready': False}})
+                    result['conversation_recovery'] = recover_sentence(result['transcript'], qwen, cancelled,
+                        history=conversation_history(request))
+                    result['timings']['sentence_recovery_sec'] = result['conversation_recovery'].get('latency_sec', 0.)
+                    if cancelled.is_set(): return {'finish_reason': 'cancelled'}
         elif request.get('normalization_enabled') is True and not request.get('reference_text'):
             from scripts.transcript_normalization import normalize
             # Keep all acoustic references/posteriors and the raw transcript.
@@ -248,7 +553,13 @@ class LocalSpeechEngine:
             result['normalization'] = normalize(result['transcript'], qwen, cancelled,
                                                  history=conversation_history(request))
             if cancelled.is_set(): return {'finish_reason': 'cancelled'}
-        return self._respond(request, result, cancelled, emit, qwen, started)
+        result['pronunciation_reference_ready'] = True
+        try:
+            return self._respond(request, result, cancelled, emit, qwen, started)
+        finally:
+            if getattr(self, '_pending_pronunciation', None) is not None:
+                cancelled.set()
+                self._pending_pronunciation = None
 
     def regenerate(self, request, cancelled, emit, qwen):
         """Respond to a server-confirmed edit using the existing recording result.
@@ -270,17 +581,30 @@ class LocalSpeechEngine:
     def _respond(self, request, result, cancelled, emit, qwen, started):
         from scripts.l2arctic_plus_data import messages
         from scripts.conversation_context import prepare_dialogue_context
-        result["reference_source"] = request.get('reference_source') or ("reading_prompt" if request.get("reference_text") else "asr")
-        interpretation = result.get('interpretation') if result['reference_source'] == 'asr' else None
+        requested_source = request.get('reference_source')
+        if result.get('reference_source') != 'bert_inferred' or requested_source not in {None, 'asr'}:
+            result["reference_source"] = (requested_source or result.get('reference_source')
+                                          or ("reading_prompt" if request.get("reference_text") else "asr"))
+        # Pronunciation provenance and dialogue provenance are independent: a
+        # BERT-derived acoustic target is still an ASR interpretation for Qwen.
+        dialogue_source = 'asr' if result['reference_source'] == 'bert_inferred' else result['reference_source']
+        interpretation = result.get('interpretation') if dialogue_source == 'asr' else None
+        sentence = result.get('conversation_recovery')
+        if (dialogue_source == 'asr' and isinstance(sentence, dict)
+                and sentence.get('status') in {'accepted', 'unchanged'}
+                and sentence.get('original') == result['transcript']
+                and sentence.get('reference_confirmed') is False):
+            interpretation = sentence
         if isinstance(interpretation, dict) and interpretation.get('status') in {'accepted', 'unchanged'}:
             from mdd.chat_reference import reference_resolution
             # A copied malformed spelling is not evidence of recovered meaning.
-            # This dictionary check only routes clarification; it never relabels audio.
+            # This dictionary check routes clarification independently of the
+            # selected pronunciation reference and never changes the evidence.
             interpretation['unresolved_words'] = reference_resolution(ROOT, interpretation['text']).get('missing_words', [])
         prepared = prepare_dialogue_context(request, result['transcript'], dialogue_text=request.get('dialogue_text'),
-                                            source=result['reference_source'], missing_words=result.get('missing_words', []),
+                                            source=dialogue_source, missing_words=result.get('missing_words', []),
                                             normalized_text=result.get('normalization', {}).get('text')
-                                                if result['reference_source'] == 'asr' else None,
+                                                if dialogue_source == 'asr' else None,
                                             interpretation=interpretation)
         request, dialogue_text = prepared['request'], prepared['text']
         result['transcript_clarity'] = prepared['clarity']
@@ -345,19 +669,27 @@ class LocalSpeechEngine:
         emit({"type": "stage", "stage": "generating"})
         if cancelled.is_set():
             return {'finish_reason': 'cancelled'}
-        reply_meta = qwen.generate(reply_request, cancelled, model_reply_event)
+        if needs_clarification:
+            # Unresolved recognition is an application state, not a request for
+            # another model guess. Publish the repeat prompt before coaching.
+            reply_event({'type': 'chunk', 'text': REPEAT_REQUEST})
+            reply_meta = {'finish_reason': 'stop', 'usage': {'prompt_tokens': 0, 'completion_tokens': 0},
+                          'reply_source': 'clarification_fallback', 'reply_model_used': False,
+                          'fallback_reason': 'unclear_transcript', 'generation_latency_sec': 0.}
+        else:
+            reply_meta = qwen.generate(reply_request, cancelled, model_reply_event)
         if cancelled.is_set():
             return {"finish_reason": "cancelled"}
         reply_stream.finish()
         policy.finish()
-        attempts = [{'raw_text': reply_stream.raw_text, 'omitted_echoes': list(reply_stream.removed),
+        attempts = [] if needs_clarification else [{'raw_text': reply_stream.raw_text, 'omitted_echoes': list(reply_stream.removed),
                      'blocked_questions': list(policy.blocked),
                      'finish_reason': reply_meta.get('finish_reason')}]
         omitted = list(reply_stream.removed)
         blocked = list(policy.blocked)
         # An echoed statement is a generation failure, not a reason to make the
         # learner repeat a clear recording. Try one fresh contextual reply first.
-        if (not ''.join(chunks).strip() and omitted) or policy.needs_retry:
+        if not needs_clarification and ((not ''.join(chunks).strip() and omitted) or policy.needs_retry):
             retry_messages = [dict(message) for message in reply_request['messages']]
             if state:
                 retry_messages[0]['content'] += '\nAsk only the missing detail specified above. Do not greet or ask for the order again.'
@@ -407,6 +739,8 @@ class LocalSpeechEngine:
                 reply_meta['reply_source'] = 'conversation_unavailable'
                 reply_meta['fallback_reason'] = 'no_valid_model_reply'
         hint, source = follow_up(''.join(chunks), topic_id, turn_count, transcript=dialogue_text, history=context)
+        if needs_clarification:
+            source = 'application'
         result['follow_up'] = {'question': hint['question'], 'source': source}
         if topic_id: result['guidance'] = hint
         reply_meta['follow_up_source'] = source
@@ -467,6 +801,9 @@ class LocalSpeechEngine:
         rewrite_latency = round(time.monotonic() - rewrite_started, 3)
         if cancelled.is_set():
             return {'finish_reason': 'cancelled'}
+        self._finish_pronunciation(result, cancelled, emit)
+        if cancelled.is_set():
+            return {'finish_reason': 'cancelled'}
         coaching_started = time.monotonic()
         coaching = {'status': 'unavailable', 'feedback': {}, 'message': 'Review the available sound estimates below. You can edit the transcript if words were misheard.'}
         comparison = result['comparison']
@@ -505,8 +842,11 @@ class LocalSpeechEngine:
                 'rewrite_model_id': result['rewrite'].get('model_id', 'qwen-base'),
                 'coaching_latency_sec': coaching_latency,
                 'conversation_source': result['conversation_source'],
+                'pronunciation_reference_source': result['reference_source'],
                 'interpretation_status': result.get('interpretation', {}).get('status', 'not_requested'),
                 'interpretation_latency_sec': result.get('interpretation', {}).get('latency_sec', 0.),
+                'conversation_recovery_status': result.get('conversation_recovery', {}).get('status', 'not_requested'),
+                'conversation_recovery_latency_sec': result.get('conversation_recovery', {}).get('latency_sec', 0.),
                 'regenerated_from_reference': request.get('operation') == 'regenerate_reference',
                 'topic_id': topic_id,
                 "input": "audio", "language": "en-US", "latency_sec": round(time.monotonic() - started, 3)}

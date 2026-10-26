@@ -45,11 +45,106 @@ class BertEvaluationTests(unittest.TestCase):
                 "reference_kind": "published_reading_prompt", "source_url": "https://example.org",
                 "split_notes": "synthetic contract fixture, not an evaluation observation"}
 
+    def reference_config(self):
+        return {**self.config(), "pronunciation_reference_policy": "bert_output", "show_raw_asr": False}
+
+    def reference_job(self):
+        job = self.job()
+        speech = job["speech"]
+        speech.update(reference_text=speech["interpretation"]["text"],
+                      reference_source="bert_inferred", pronunciation_reference_ready=True)
+        speech["interpretation"]["applied_as_pronunciation_reference"] = True
+        return job
+
     def test_frozen_config_and_actual_job_agree(self):
         config = frozen_config(self.config())
         self.assertEqual(config["transcript_recovery_revision"], self.revision)
         verify_job_models(self.job())
         verify_job_recovery(self.job(), config)
+
+    def test_authorized_bert_output_can_be_used_for_pronunciation_without_claiming_confirmation(self):
+        config = frozen_config(self.reference_config())
+        self.assertEqual(config["pronunciation_reference_policy"], "bert_output")
+        self.assertIs(config["show_raw_asr"], False)
+        for status in ("accepted", "unchanged"):
+            with self.subTest(status=status):
+                job = self.reference_job()
+                job["speech"]["interpretation"]["status"] = status
+                if status == "unchanged":
+                    job["speech"]["interpretation"]["text"] = job["speech"]["transcript"]
+                    job["speech"]["reference_text"] = job["speech"]["transcript"]
+                verify_job_recovery(job, config)
+                self.assertIs(job["speech"]["interpretation"]["reference_confirmed"], False)
+
+    def test_pronunciation_policy_requires_an_explicit_pinned_bert_provider(self):
+        for key, value in (("transcript_recovery_provider", "qwen"),
+                           ("transcript_recovery_provider", None),
+                           ("transcript_recovery", None),
+                           ("pronunciation_reference_policy", "any_model"),
+                           ("show_raw_asr", "false")):
+            with self.subTest(key=key, value=value):
+                config = self.reference_config(); config[key] = value
+                with self.assertRaises(ValueError):
+                    frozen_config(config)
+        config = self.reference_config(); del config["transcript_recovery"]
+        with self.assertRaisesRegex(ValueError, "requires BERT recovery"):
+            verify_job_recovery(self.reference_job(), config)
+
+    def test_bert_pronunciation_reference_must_match_recovery_and_be_ready(self):
+        for key, value in (("reference_text", "This is not the recovered sentence."),
+                           ("reference_source", "user_confirmed"),
+                           ("reference_source", "asr"),
+                           ("pronunciation_reference_ready", False),
+                           ("pronunciation_reference_ready", None)):
+            with self.subTest(key=key, value=value):
+                job = self.reference_job(); job["speech"][key] = value
+                with self.assertRaisesRegex(ValueError, "BERT pronunciation reference"):
+                    verify_job_recovery(job, self.reference_config())
+        for key, value in (("text", ""), ("text", None),
+                           ("applied_as_pronunciation_reference", False),
+                           ("applied_as_pronunciation_reference", None)):
+            with self.subTest(recovery_key=key, value=value):
+                job = self.reference_job(); job["speech"]["interpretation"][key] = value
+                if key == "text":
+                    job["speech"]["reference_text"] = value
+                with self.assertRaisesRegex(ValueError, "BERT pronunciation reference"):
+                    verify_job_recovery(job, self.reference_config())
+
+    def test_bert_reference_policy_does_not_allow_unbound_or_confirmed_recovery(self):
+        for key, value in (("original", "Another audio transcript"),
+                           ("reference_confirmed", True), ("reference_confirmed", None)):
+            with self.subTest(key=key):
+                job = self.reference_job(); job["speech"]["interpretation"][key] = value
+                with self.assertRaises(ValueError):
+                    verify_job_recovery(job, self.reference_config())
+
+    def test_ambiguous_and_unavailable_recoveries_keep_the_raw_reference(self):
+        for status in ("ambiguous", "unavailable"):
+            for applied in (None, False):
+                with self.subTest(status=status, applied=applied):
+                    job = self.job()
+                    job["speech"]["interpretation"].update(
+                        status=status, applied_as_pronunciation_reference=applied)
+                    verify_job_recovery(job, self.reference_config())
+            job = self.reference_job(); job["speech"]["interpretation"]["status"] = status
+            with self.subTest(status=status, unsafe_reference=True):
+                with self.assertRaisesRegex(ValueError, "ambiguous recovery replaced"):
+                    verify_job_recovery(job, self.reference_config())
+
+    def test_legacy_policy_cannot_silently_apply_a_bert_pronunciation_reference(self):
+        with self.assertRaisesRegex(ValueError, "acoustic reference"):
+            verify_job_recovery(self.reference_job(), self.config())
+        job = self.job()
+        job["speech"]["interpretation"]["applied_as_pronunciation_reference"] = True
+        with self.assertRaisesRegex(ValueError, "acoustic reference"):
+            verify_job_recovery(job, self.config())
+
+    def test_bert_reference_policy_records_the_exact_assessed_text(self):
+        row = record_case(self.case(), self.reference_job())
+        self.assertEqual(row["transcript"], "To day I work")
+        self.assertEqual(row["pronunciation_reference_text"], "Today I work.")
+        self.assertIs(row["pronunciation_reference_ready"], True)
+        self.assertEqual(row["assessment"]["reference_source"], "bert_inferred")
 
     def test_config_rejects_unpinned_or_different_bert(self):
         for key, value in [("transcript_recovery_revision", "main"),
@@ -81,6 +176,11 @@ class BertEvaluationTests(unittest.TestCase):
             with self.subTest(key=key):
                 job = self.job(); job["speech"][key] = value
                 with self.assertRaisesRegex(ValueError, "acoustic reference"):
+                    verify_job_recovery(job, self.config())
+        for value in (True, None):
+            with self.subTest(reference_confirmed=value):
+                job = self.job(); job["speech"]["interpretation"]["reference_confirmed"] = value
+                with self.assertRaisesRegex(ValueError, "cannot claim"):
                     verify_job_recovery(job, self.config())
 
     def test_no_sentence_tts_can_appear_in_an_evaluation_job(self):

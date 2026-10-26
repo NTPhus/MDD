@@ -1,0 +1,82 @@
+{
+  "schema": "independent-comparison-protocol-audit-v1",
+  "audit_date_client": "2026-10-24",
+  "status": "read_only_protocol_recommendations_not_evaluation_results",
+  "scope": "Matched local inference comparisons for grammar/fluency rewriting and pronunciation diagnosis. No training, threshold tuning or automatic production promotion.",
+  "grammar": {
+    "source": "data/processed/grammar-wi-jfleg-v1/test.jsonl",
+    "observed_inventory": {
+      "wi_internal_author_heldout_grammar_sources": 2999,
+      "wi_internal_test_authors": 243,
+      "jfleg_official_test_sources": 747,
+      "wi_any_reference_supports_unchanged_source": 950,
+      "jfleg_any_reference_supports_unchanged_source": 182
+    },
+    "recommended_selection": "Freeze a source-hash and ordered list of 100 grammar_corrected W&I source IDs and 100 natural JFLEG source IDs by deterministic SHA256 ordering before inference. Use all the same ordered sources and references for every model. Do not select by model output or previous failure cases.",
+    "controls": [
+      "Identity/copy-source baseline on exactly the matched rows.",
+      "Qwen3-0.6B original and completed grammar LoRA, each using its documented native JSON contract.",
+      "New Hugging Face model using the author-recommended fixed task instruction and plain text or documented native contract.",
+      "Report observed native-contract validity separately from content quality. A plain text model should not be required to emit JSON unless that was part of its documented instruction task.",
+      "For valid Qwen JSON, score the requested string only. Preserve invalid raw output and count it as an invalid/empty result in all-row service metrics; do not silently substitute the source or repair it heuristically.",
+      "Include both all-row service content scores and optional valid-output-only diagnostics with explicit denominators so format failures cannot be mistaken for English-language failures."
+    ],
+    "metrics": [
+      "Primary for an actual GEC edit benchmark: pinned ERRANT precision, recall and F0.5, extracted with the same tokenizer, package, spaCy model and settings for every prediction and gold reference. If unavailable, label edit diagnostics as project metrics and never as official ERRANT.",
+      "For JFLEG: author GLEU implementation with all four original references and the source, fixed settings/seed and reported implementation revision. NLTK GLEU and BLEU are not interchangeable with JFLEG GLEU.",
+      "Supplemental only: multi-reference chrF, exact reference match, unchanged preservation when at least one published reference is identical to the source, changed-token ratio and inference latency.",
+      "A changed sentence may be a valid alternative even when it does not equal a reference. Unchanged-reference preservation is a conservatism diagnostic, not proof that every rewrite is wrong.",
+      "chrF and exact-reference match are not grammar accuracy, semantic faithfulness or human naturalness ratings. Semantic claims require an explicitly identified human or independently validated assessment."
+    ],
+    "contamination_limitations": [
+      "W&I internal test is drawn from the public official training corpus, so an external GEC checkpoint may have trained on it even though the local Qwen LoRA did not.",
+      "JFLEG official test is excluded from the local grammar LoRA training by the frozen data preparation. A third-party model's possible training/pretraining exposure remains unknown unless its release provenance proves exclusion.",
+      "JFLEG is primarily written learner English. It does not validate end-to-end ASR, spoken dialogue, sentence completion or pronunciation."
+    ],
+    "latency": "Use sequential models and the same input order. Record device, precision, beam/generation settings, warm versus first-load timings, package versions and model revision. Different architectures and precision levels mean a practical service comparison, not a causal architecture or fine-tuning ablation."
+  },
+  "pronunciation": {
+    "sources": [
+      "data/processed/l2arctic-plus-cascade-v1/annotations.jsonl",
+      "data/protocol/l2arctic-plus-cascade-v1/splits.json"
+    ],
+    "observed_inventory": {
+      "expert_test_utterances": 900,
+      "expert_test_speakers": {"NJS": 150, "TLV": 150, "TNI": 150, "TXHC": 150, "YKWK": 150, "ZHAA": 150},
+      "explicit_expert_error_events": 4382,
+      "error_events_with_err_or_unknown_observation": 118
+    },
+    "recommended_selection": "Freeze 120 cases, 20 per six fixed test speakers, using SHA256 ordering with a recorded salt and no label/error-density or prediction-based selection. Keep user audio as a separate qualitative development set without invented expert labels.",
+    "model_inputs": "Audio only for prompt-free recognizers. Canonical text and expert labels are loaded by the scorer only after inference. If a new model explicitly needs reference text, declare that additional input and compare it as a separate reference-conditioned system.",
+    "metrics": [
+      "Use the exact same mdd.metrics canonical-phone-and-ordered-insertion-slots-v1 implementation and micro counters for every model. It is a project metric and does not claim to reproduce each paper's evaluation script.",
+      "Report precision, recall, F1, false rejection on expert-correct phones, false acceptance on expert-error phones, perceived-phone PER, insertion counts, diagnosis-excluded unknown labels, and per-speaker results.",
+      "UI word-review hints are separate from research phone-level F1. Report hint precision, recall, false-positive rate, unavailable/abstained coverage and calibrated-decision count.",
+      "Do not equate abstention, missing dictionary coverage or zero calibrated decisions with correct pronunciation.",
+      "Do not collapse repeated AR decoder phones as if they were undecoded CTC frame labels. Keep unresolved labels as [UNK] for recognition scoring rather than deleting them."
+    ],
+    "inventory_comparisons": {
+      "full_target_panel": "Retain explicit original expert events and their locations when scoring the actual target inventory. Inventory distinctions missing from a new checkpoint are a real capability limitation, not grounds for removing errors from the primary target task.",
+      "optional_common_37_panel": "If a TIMIT checkpoint lacks AO/ZH distinctions, declare a reduced task and apply the same mapping to canonical, perceived, predicted and expert-event phone labels: AO->AA, ZH->SH, DX->T, AX->AH, plus documented stress/distortion removal. Drop only gold substitution events whose mapped expected and observed known labels become exactly equal. Keep addition/deletion events and original positions. Never drop an unknown label merely because both normalize to [UNK]. Report every removed gold-event category and count. This reduced-inventory result is not full-inventory MDD performance."
+    },
+    "limitations": [
+      "The existing 24-expert-case CROTTC pilot is label-stratified and previously inspected. Its results cannot be presented as a new representative 120-case matched run.",
+      "The released CROTTC-IF L2-ARCTIC checkpoint's train/test overlap with local splits is unknown without upstream split provenance. TIMIT-only fine-tuning avoids deliberate local L2-ARCTIC fine-tuning exposure but does not prove all upstream pretraining exclusion.",
+      "Only one of the six fixed test speakers is Vietnamese in this split. A micro result across 120 clips does not establish population-wide Vietnamese-accent accuracy."
+    ]
+  },
+  "evidence_rules": [
+    "Freeze input IDs, content hashes, inference/scoring source hashes, model immutable revisions and weight hashes before model predictions.",
+    "Save raw generated text/phones, errors and latencies per case. Do not omit failures from aggregate denominators.",
+    "Do not tune a model, prompt, threshold or beam on the test outputs. Any later changes require a separately labelled development experiment and a fresh independent evaluation plan.",
+    "Never mix published paper scores with local scores on a plot implying the same data or metric. Link papers as supporting method provenance and show their setting separately."
+  ],
+  "primary_sources": [
+    {"title": "JFLEG: A Fluency Corpus and Benchmark for Grammatical Error Correction", "url": "https://aclanthology.org/E17-2037/", "year": 2017},
+    {"title": "Official JFLEG corpus and GLEU evaluator", "url": "https://github.com/keisks/jfleg"},
+    {"title": "The BEA-2019 Shared Task on Grammatical Error Correction", "url": "https://aclanthology.org/W19-4406/", "year": 2019},
+    {"title": "BEA-2019 official evaluation instructions; ERRANT v3 update dated 30 January 2026", "url": "https://www.cl.cam.ac.uk/research/nl/bea2019st/"},
+    {"title": "Automatic Annotation and Evaluation of Error Types for Grammatical Error Correction", "url": "https://aclanthology.org/P17-1074/", "year": 2017},
+    {"title": "Official ERRANT implementation", "url": "https://github.com/chrisjbryant/errant"}
+  ]
+}

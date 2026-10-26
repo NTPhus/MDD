@@ -1,76 +1,92 @@
 BÁO CÁO TỔNG HỢP THỰC NGHIỆM
-Huấn luyện wav2vec2
-và Qwen trong MDD
-Quy trình · Cấu hình · Kết quả
-Đánh giá và đối chiếu bằng chứng
+Huấn luyện và đánh giá
+mô hình trong MDD
+wav2vec2 · Qwen · Whisper · CROTTC-IF
+Flow hệ thống và đối chiếu nghiên cứu
 MDD – Mispronunciation Detection and Diagnosis
 Phát hiện và chẩn đoán lỗi phát âm tiếng Anh cho người Việt.
 Phạm vi
 Tài liệu
 Mô hình
-wav2vec2-base, wav2vec2-base-960h, Qwen3-0.6B và Projector
+wav2vec2 MDD/ASR, Qwen3-0.6B + LoRA, Projector, Whisper, BERT, CROTTC-IF
 Bằng chứng
-14 notebook; 35 hình gốc; log, checkpoint metadata và metrics đã lưu
+35 hình notebook lịch sử; 3 biểu đồ đối chứng mới; log, checkpoint, 118 ASR và 27 pronunciation
+audio
 Ngày tổng hợp
 23/10/2026 · Giờ Bangkok (UTC+7)
 Phiên bản
-1.0 · Tổng hợp trạng thái cục bộ, không chạy lại huấn luyện
+2.0 · Trạng thái và nguồn nghiên cứu cập nhật; không chạy lại huấn luyện
 Số liệu của từng protocol được trình bày riêng. Ảnh được lấy trực tiếp từ output đã lưu của notebook; các ảnh chưa cập nhật được chú
 thích rõ.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
 2
 Mục lục
-3
-1. Tổng quan và tiến trình thực nghiệm
 4
+1. Tổng quan và tiến trình thực nghiệm
+5
 2. Bài toán, kiến trúc và dữ liệu
-8
+9
 3. Cách huấn luyện wav2vec2 MDD
-10
+11
 4. Kết quả wav2vec2 v1: A/B/C
-12
+13
 5. Kết quả wav2vec2 trong cascade Plus
-14
+15
 6. Qwen cascade: huấn luyện và feedback
-16
+17
 7. Projector: nối audio với Qwen
-18
+19
 8. Qwen ngữ pháp và cách nói tự nhiên
-20
+21
 9. Fine-tune wav2vec2 cho ASR tiếng Anh
-22
+23
 10. Kiểm chứng ngoài miền: SpeechOcean762
-24
+25
 11. Hiệu chỉnh và kiểm tra hệ thống
-29
+30
 12. Môi trường và cách tái lập
-31
+32
 13. Ảnh lịch sử và phần còn thiếu
-33
-14. Chỉ số, nguồn và danh mục hình
-Quy ước đọc tài liệu
-Các tỷ lệ được đổi sang %; chênh lệch giữa hai tỷ lệ dùng điểm phần trăm (đpt). Loss/NLL, perplexity, BLEU và
-ROUGE giữ đúng thang ghi trong nguồn. Dấu — là không có hoặc không xác định, không phải 0.
-Nguồn [Sxx] được giải thích ở danh mục cuối tài liệu. Cell được đánh số từ 1 theo vị trí trong file notebook, không
-theo execution count. Mỗi hình có thêm output index để truy ngược chính xác.
-Ảnh notebook có thể phản ánh thời điểm lưu cũ. Nếu có khác biệt, bảng phân tích dùng artifact thực tế mới hơn
-và chỉ rõ khác biệt. Không xem mẫu smoke, pilot hay validation như kết quả test toàn bộ.
+34
+14. Từ checkpoint đã train tới pipeline web hiện tại
+36
+15. Đối chứng ASR: Whisper small.en và wav2vec2
+38
+16. CROTTC-IF, wav2vec2 B và đánh giá trôi chảy
+40
+17. Đối chiếu nghiên cứu và thiết kế thực nghiệm tiếp theo
+42
+18. Chỉ số, nguồn và danh mục hình
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
 3
+Quy ước đọc tài liệu
+Các tỷ lệ được đổi sang %; chênh lệch giữa hai tỷ lệ dùng điểm phần trăm (đpt). Loss/NLL, perplexity, BLEU và
+ROUGE giữ đúng thang ghi trong nguồn. Dấu — là không có hoặc không xác định, không phải 0.
+Nguồn [Sxx] là artifact local; [R-TÊN] là nghiên cứu/tài liệu gốc và có liên kết ở cuối báo cáo. Cell được đánh số
+từ 1 theo vị trí trong notebook. 35 hình cũ có output index; biểu đồ A1–A3 bổ sung từ kết quả đo mới.
+Ảnh notebook có thể phản ánh thời điểm lưu cũ. Nếu có khác biệt, bảng phân tích dùng artifact thực tế mới hơn
+và chỉ rõ khác biệt. Không xem mẫu smoke, pilot hay validation như kết quả test toàn bộ.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+4
 1. Tổng quan và tiến trình thực nghiệm
-Tài liệu tổng hợp quá trình huấn luyện, cách triển khai, cấu hình và kết quả của các nhánh wav2vec2 và Qwen
-trong dự án MDD. Bằng chứng được lấy từ 14 notebook, metadata checkpoint, cấu hình thực chạy và các tệp
-đánh giá cục bộ tại ngày 23/10/2026. Toàn bộ 35 hình PNG đã nhúng trong notebook được đưa vào tài liệu, giữ
-nguyên nội dung và có nguồn cell/output.
-Kết quả chính: thích ứng wav2vec2 bằng dữ liệu Việt cải thiện F1 trên tập test chung của từng protocol;
-Qwen cascade và Qwen ngữ pháp đã fine-tune xong. Kết quả sinh feedback hiện mới ở pilot; Projector hoàn
-thành alignment nhưng chưa train giai đoạn feedback P1.
+Báo cáo phiên bản 2.0 trình bày toàn bộ bằng chứng huấn luyện và đánh giá đã lưu của dự án MDD đến ngày
+23/10/2026: wav2vec2 phát âm, ASR chữ, Qwen3-0.6B với hai adapter riêng, Projector alignment và các đối
+chứng Whisper/BERT/CROTTC-IF. Phần lịch sử giữ đủ 35 hình gốc của 14 notebook đã kiểm kê; phần cập nhật
+bổ sung bảng và biểu đồ từ hai thực nghiệm 118 audio ASR và 27 audio phát âm. Các nguồn nghiên cứu gốc
+được trích dẫn [Rxx]; bằng chứng thực chạy dùng [Sxx].
+Trạng thái hiện tại: demo nhận transcript bằng Whisper small.en local, trò chuyện bằng Qwen3-0.6B base,
+sửa ngữ pháp bằng adapter riêng và kiểm tra phát âm bằng wav2vec2 B. CROTTC-IF là tùy chọn thử
+nghiệm. Projector mới hoàn tất alignment P0; chưa có P1. Không có một chỉ số ‘độ chính xác hệ thống’ gộp
+các tác vụ này.
 Nhánh
 Đã thực hiện
 Kết quả có thể báo cáo
@@ -93,6 +109,12 @@ Best validation loss 0,184105; probe 16 câu validation
 ASR chữ tiếng Anh
 2 epochs; 1.223 updates
 111 câu TLV: WER 43,01 → 37,93%
+Whisper small.en
+Tải pretrained; không fine-tune
+118 audio; TLV 111: strict WER 27,76%
+CROTTC-IF
+Tải pretrained; không fine-tune
+24 câu có nhãn: F1 19,01%; B cùng pilot 49,47%
 Nguồn: [S03–S13]. Các hàng đo những tác vụ và tập chấm khác nhau.
 Các mốc đã ghi nhận
 Thời gian Bangkok (UTC+7)
@@ -112,10 +134,10 @@ Trạng thái completed của một lượt train không đồng nghĩa mọi ph
 cũ còn có chữ ‘Awaiting’; báo cáo dùng provenance/checkpoint/metrics mới hơn để xác định trạng thái thực tế.
 Không chạy lại training hoặc inference trong quá trình biên soạn.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-4
+5
 2. Bài toán, kiến trúc và dữ liệu
 Vai trò của từng mô hình
 Thành phần
@@ -143,10 +165,11 @@ Audio → văn bản tiếng Anh
 Backbone + CTC ký tự; khác head
 phoneme MDD
 Nguồn: [S01], [S07], [S09], [S11–S13].
-Pipeline cascade: audio → wav2vec2 A/B → greedy CTC phones → căn chỉnh với canonical phones →
-annotation_info dự đoán → Qwen → feedback JSON. Gold perceived phones dùng giám sát train và chấm kết
-quả, không đưa vào decoder hay đầu vào suy luận cascade. Nhánh oracle dùng nhãn phone gold để đo mức ảnh
-hưởng của đầu vào, không phải pipeline triển khai độc lập.
+Pipeline cascade của thực nghiệm training: audio → wav2vec2 A/B → greedy CTC phones → căn chỉnh với
+canonical phones → annotation_info dự đoán → Qwen → feedback JSON. Đây là nhánh benchmark, khác
+luồng chat hiện dùng Whisper ở chương 14. Gold perceived phones dùng giám sát train và chấm kết quả, không
+đưa vào decoder hay đầu vào suy luận cascade. Nhánh oracle dùng nhãn phone gold để đo mức ảnh hưởng của
+đầu vào, không phải pipeline triển khai độc lập.
 Thông số kiến trúc
 Thông số
 wav2vec2 MDD
@@ -178,14 +201,14 @@ Nguồn: config model local và parameter_counts; context train thực tế nh�
 CNN wav2vec2 dùng kernels [10,3,3,3,3,2,2] và strides [5,2,2,2,2,2,2]. Head CTC phoneme được khởi tạo mới
 trên backbone tự giám sát. Vì vậy BASE chưa train head không phải baseline MDD đã có chất lượng; baseline
 trước thích ứng Việt là model A sau source training.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+6
 Qwen trong các lượt train thực tế là Qwen3-0.6B. Qwen2-Audio-7B-Instruct chỉ có metadata và manifest
 ghi weights_downloaded=false; không có bằng chứng weights hoặc run train. Không gán các kết quả bên
 dưới cho Qwen2-Audio.
-
-MDD  /  wav2vec2 & Qwen
-Báo cáo thực nghiệm • 23/10/2026
-Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-5
 Corpus và nhãn
 L2-ARCTIC local có 3.599 câu được gán nhãn thủ công, thuộc 24 người nói; 600 câu của bốn người Việt HQTV,
 PNV, THV, TLV. Bốn người Việt có tổng 4.528 WAV trong phần đọc đầy đủ, nhưng chỉ 600 câu có nhãn lỗi MDD.
@@ -196,10 +219,10 @@ Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 17 · output 1.
 Hình 02. Waveform và phổ STFT của một audio source train; cho thấy tín hiệu đầu vào trước nhận dạng.
 Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 21 · output 1.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-6
+7
 Hình 03. Waveform với khoảng thời gian lỗi từ annotation thủ công; đây là nhãn tham chiếu, không phải dự đoán model.
 Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 23 · output 3.
 Hai protocol MDD cần phân biệt
@@ -233,10 +256,10 @@ train lại theo split mới.
 Hình 04. Số bản ghi train/test công bố và phân bố training speakers của L2-Arctic-plus theo notebook audit.
 Nguồn: notebooks/l2arctic_plus_dataset_audit.ipynb · cell 6 · output 2.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-7
+8
 Hình 05. Số mẫu, phân bố thời lượng và độ dài prompt/target Qwen trên các split cascade.
 Nguồn: notebooks/mdd_cascade_training_comparison.ipynb · cell 8 · output 2.
 Hình 06. Số mẫu theo speaker và loại lỗi phone thủ công trên các split cascade.
@@ -246,11 +269,16 @@ kiểm chứng từng mẫu bởi con người; feedback test được tác gi�
 phone thủ công L2-ARCTIC. Không mô tả toàn bộ feedback train là nhãn chuyên gia.
 Hình 07. Histogram thời lượng audio và phân bố speaker holdout của nhánh Projector, dùng cùng split Plus.
 Nguồn: notebooks/mdd_projector_training_comparison.ipynb · cell 4 · output 2.
+Cơ sở nghiên cứu: wav2vec 2.0 học biểu diễn tự giám sát rồi thích ứng có nhãn [R-WAV2VEC2]; Qwen3 là
+decoder ngôn ngữ [R-QWEN3]. LoRA bổ sung cập nhật hạng thấp vào trọng số đã đóng băng [R-LORA], còn
+QLoRA kết hợp base lượng tử với adapter [R-QLORA]. Recipe dự án chỉ mở q_proj/v_proj, không phải toàn bộ
+attention/MLP. L2-ARCTIC cung cấp nhãn phát âm [R-L2ARCTIC]; L2-Arctic-plus mở rộng phần giải thích/lời
+khuyên [R-ALM].
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-8
+9
 3. Cách huấn luyện wav2vec2 MDD
 Mô hình học chuỗi perceived phones mà người gán nhãn nghe được bằng CTC, thay vì ép mọi audio thành
 canonical phones. Preprocessing đổi audio sang mono 16 kHz, chuẩn hóa phone bỏ silence và stress, giữ dấu
@@ -313,10 +341,10 @@ CNN feature encoder đóng băng; Transformer và phone head cập nhật. Dùng
 attention và GradScaler FP16 để phù hợp RTX 3050 Laptop 4 GiB. Các run chạy tuần tự. Runtime xử lý overflow
 để chỉ tính optimizer update thành công; checkpoint resume lưu optimizer và RNG.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-9
+10
 Hình 08. Learning curves từ log thật của A/B/C v1, gồm train loss và validation; các đường source/Vi validation có tập chấm khác
 nhau.
 Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 49 · output 1. Đường technical smoke màu đỏ chỉ kiểm tra kỹ thuật, không phải scientific
@@ -354,10 +382,10 @@ Hai nhánh B/C có cùng ngân sách tối đa, nhưng best checkpoint được 
 best-validation checkpoint; không tự gọi đó là so sánh weights cuối đúng 400 updates. A/B Plus chọn trên
 những tập validation khác nhau, vì vậy chỉ dùng test chung để kết luận trước/sau.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-10
+11
 4. Kết quả wav2vec2 v1: A/B/C
 Cả ba model được đánh giá trên đúng 150 câu của HQTV, người Việt test fold 1, seed 42. A chỉ source; B thêm
 thích ứng Việt và source replay; C tiếp tục source với cùng ngân sách như B. Đây là một fold đã có kết quả,
@@ -405,10 +433,10 @@ cho biết mức cải thiện trên toàn bộ người Việt hoặc các seed
 Hình 09. Các chỉ số test A/B/C và chênh lệch B−A, B−C trên cùng HQTV fold 1.
 Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 57 · output 3.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-11
+12
 Hình 10. Các lỗi substitution phổ biến từ alignment perceived-gold → predicted của model B; không phải confusion matrix phân loại
 frame độc lập.
 Nguồn: notebooks/mdd_local_demo_comparison.ipynb · cell 59 · output 3.
@@ -442,10 +470,10 @@ cộng từ các counter trước khi chia; không lấy trung bình F1 của t�
 Speaker/audio của test tách khỏi train, nhưng nội dung câu đọc đã xuất hiện ở các người train. Chưa có
 artifact đầy đủ cho fold 2–4 hay nhiều seed; không báo 4-fold mean hoặc ý nghĩa thống kê từ một fold.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-12
+13
 5. Kết quả wav2vec2 trong cascade Plus
 A và B của protocol Plus được train lại để tránh dùng 750 câu test Plus đã từng nằm trong source train v1. Test
 chung có 900 câu, sáu speaker; TLV là người Việt duy nhất trong nhóm test. A tốt nhất tại step 1.750, B tốt nhất
@@ -486,10 +514,10 @@ Word F1 ↑
 +0.38
 Nguồn: data/generated/cascade-l2arctic-plus-seed42/audio/{A,B}/metrics.json; đối chiếu validation summary [S08].
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-13
+14
 Hình 12. Phone F1 của A/B theo từng speaker trên đủ 900 câu test protocol Plus; PER theo speaker được trình bày ở bảng dưới.
 Nguồn: notebooks/mdd_projector_validation.ipynb · cell 6 · output 2.
 Speaker
@@ -541,10 +569,10 @@ Không so 70,85% của B v1 với 49,30% của B Plus để kết luận model m
 câu và test hỗn hợp 900 câu khác nhau. C cascade mới chưa có run hoàn tất; các đối chứng
 A_Q0/A_Q1/B_Q0/B_Q1 đủ 900 feedback cũng chưa hoàn tất.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-14
+15
 6. Qwen cascade: huấn luyện và feedback
 Dữ liệu, prompt và objective
 Qwen3-0.6B được fine-tune riêng để chuyển câu tham chiếu và nhãn phone thành feedback tiếng Anh dạng
@@ -592,10 +620,10 @@ Adapter xuất ở thư mục Q/adapter có SHA256 khớp checkpoint-800 đã ch
 loss không phải trước/sau trên cùng dữ liệu, cũng không phải độ chính xác phát âm. Cả Q0 và Q1 khi đánh giá
 được dùng cùng thiết lập precision/generation cho từng phép đo.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-15
+16
 Kết quả hiện có: pilot 12 feedback
 Pilot cân bằng gồm 12 câu trong test, mỗi speaker hai câu; tất cả đều có lỗi trong feedback tham chiếu. Sinh
 greedy, num_beams=1, seed 42, max_new_tokens=512 cho feedback (pilot transcript ở chương 7 dùng 128).
@@ -650,10 +678,10 @@ vị trí từ.
 false alarm trên câu hoàn toàn đúng. Grounded JSON là kiểm tra cấu trúc/gắn với từ trong câu, không bảo
 đảm lời khuyên đúng ngữ âm hoặc hữu ích cho người học.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-16
+17
 7. Projector: nối audio với Qwen
 Nhánh multimodal đưa feature audio trực tiếp vào embedding của Qwen: wav2vec2 B đóng băng →
 Linear(768,1024) → GELU → Linear(1024,1024) → Qwen3-0.6B. Embedding được ghép prefix → audio frames
@@ -706,10 +734,10 @@ Hình 14. Waveform mẫu train ABA/arctic_a0501 dùng trong notebook Projector; 
 notebook, không hiển thị trên biểu đồ.
 Nguồn: notebooks/mdd_projector_training_comparison.ipynb · cell 6 · output 4.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-17
+18
 Hình 15. Trước/sau alignment và đối chứng tắt audio: NLL trên 900 câu và WER pilot sinh transcript 30 mẫu; perplexity được trình
 bày trong bảng.
 Nguồn: notebooks/mdd_projector_validation.ipynb · cell 8 · output 5.
@@ -735,10 +763,10 @@ nhưng chưa đủ để khẳng định nhận dạng tốt. P0 feedback chỉ 
 Dataset alignment chỉ 2.249 audio/transcript; không gán quy mô hay điểm của kiến trúc/bài báo gốc cho lượt train
 nhỏ này. Random baseline là khởi tạo mới theo seed, không phải file checkpoint chính xác của step 0 đã lưu.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-18
+19
 8. Qwen ngữ pháp và cách nói tự nhiên
 Adapter grammar là lượt fine-tune riêng trên W&I/LOCNESS và JFLEG, không dùng audio và không ghi đè
 adapter phát âm. W&I cung cấp task grammar_corrected; JFLEG cung cấp task natural. Mỗi target là JSON một
@@ -779,10 +807,10 @@ Nguồn: notebooks/qwen_grammar_training.ipynb · cell 6 · output 1.
 Hình 17. Loại sửa được thống kê từ nhãn W&I trong notebook chuẩn bị dữ liệu.
 Nguồn: notebooks/qwen_grammar_training.ipynb · cell 7 · output 1.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-19
+20
 Thông số thực chạy
 Giá trị
 Train / validation; epochs / updates
@@ -831,11 +859,14 @@ control là dấu hiệu cần xem lại mức sửa quá tay. Không suy ra ch�
 Nguồn dữ liệu có giới hạn nghiên cứu/giáo dục phi thương mại và điều kiện phân phối riêng. Báo cáo không đính
 kèm corpus thô. Các artifact runtime/demo không được xem là bằng chứng adapter cải thiện tác vụ hội thoại tự
 do.
+Nguồn W&I+LOCNESS được giới thiệu trong BEA-2019 với đánh giá ERRANT F0.5 [R-WI]; JFLEG tập trung sửa
+fluency của văn viết [R-JFLEG]. Vì vậy chrF/JSON trên 16 probe nội bộ chưa thay thế được benchmark theo hai
+tài liệu này, và fluency văn viết khác tốc độ/ngắt nghỉ khi nói.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-20
+21
 9. Fine-tune wav2vec2 cho ASR tiếng Anh
 Nhánh ASR dùng wav2vec2-base-960h với vocabulary ký tự 32, khác wav2vec2-base + phoneme head 83
 tokens của MDD. Mục tiêu là nhận transcript tiếng Anh từ giọng Việt, giúp cấp câu đối chiếu/hội thoại; không trực
@@ -888,10 +919,10 @@ Test CER
 16.68
 -2.52
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-21
+22
 Hình 19. So sánh WER/CER trước và sau fine-tune trên cùng validation/test ASR.
 Nguồn: notebooks/mdd_asr_vi_finetuning.ipynb · cell 8 · output 2.
 Test có 1.023 reference words: base sai 440 edits, model fine-tuned còn 388, giảm 52 word edits. WER giảm 5,08
@@ -904,10 +935,10 @@ Dù validation/test tách người và normalized prompt, đây là tập nhỏ 
 không chứng minh chất lượng ASR hội thoại tự do hoặc độ chính xác phát âm; không cộng/gộp WER với
 phone F1.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-22
+23
 10. Kiểm chứng ngoài miền: SpeechOcean762
 Notebook external validation kiểm tra A/B/C v1 trên SpeechOcean762 mà không fine-tune thêm. Corpus gồm
 người có tiếng mẹ đẻ Trung nói tiếng Anh, có cả trẻ em; không phải tập giọng bản ngữ/TTS. B được chạy trên đủ
@@ -942,10 +973,10 @@ Từ đúng bị đánh dấu (%)
 44,65
 40,64
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-23
+24
 Hình 21. A/B/C trên 179 câu được cả năm chuyên gia chấm đúng; cột cảnh báo càng cao càng bất lợi.
 Nguồn: notebooks/mdd_external_validation.ipynb · cell 15 · output 1.
 Hình 22. Các phone bị B báo nhầm nhiều nhất trong các vị trí cả năm chuyên gia chấm đúng, với ít nhất 100 vị trí/phone.
@@ -954,10 +985,10 @@ B đánh dấu 173/179 câu hoàn toàn đúng, cho thấy giới hạn lớn kh
 Đây là bằng chứng cần kiểm chứng false alarms trước triển khai; không che khuất kết quả này bằng F1 tốt
 hơn trên HQTV.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-24
+25
 11. Hiệu chỉnh và kiểm tra hệ thống
 Các thí nghiệm sau giữ nguyên trọng số mô hình, nhằm phân tích cách chấm, chuẩn hóa transcript hoặc parser.
 Chúng bổ sung góc nhìn triển khai nhưng không phải các lượt fine-tune mới.
@@ -973,20 +1004,20 @@ quyết định được chấm, không phải 0%.
 Hình 24. Pilot heldout PNV: strict FPR 23,71%, recall 72,63%, coverage 100%; candidate/safe abstain vì artifact ineligible.
 Nguồn: notebooks/mdd_pronunciation_calibration.ipynb · cell 15 · output 2.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-25
+26
 Hình 25. Histogram posterior-margin error score của từ được chấm thủ công đúng/sai trong pilot; hai phân bố chồng lấn. Score chưa
 phải xác suất lỗi đã hiệu chuẩn.
 Nguồn: notebooks/mdd_pronunciation_calibration.ipynb · cell 17 · output 1.
 Hình 26. Tìm cặp ngưỡng trên FIT pilot: trục FPR/FNR, màu coverage; đường đứt FPR=0,10 và FNR=0,20.
 Nguồn: notebooks/mdd_pronunciation_calibration.ipynb · cell 17 · output 5.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-26
+27
 Hình 27. Full-validation heldout PNV: strict FPR 23,46%, recall 69,66%; candidate/safe coverage 0 vì artifact ineligible.
 Nguồn: notebooks/mdd_pronunciation_calibration.ipynb · cell 21 · output 2.
 Hình 28. Tìm cặp ngưỡng trên FIT full-validation: đánh đổi FPR/FNR/coverage; không cặp nào đạt đồng thời policy.
@@ -996,10 +1027,10 @@ của paper. Cách chấm mới và lựa chọn ngưỡng cần được đánh
 mới cho weights đã train.
 Ví dụ audio, parser và ứng viên ngữ âm
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-27
+28
 Hình 29. Đối chiếu bốn audio validation: số từ phát hiện đúng lỗi (TP), báo nhầm (FP) và bỏ sót (FN).
 Nguồn: notebooks/mdd_chat_error_checks.ipynb · cell 5 · output 1.
 Bốn audio validation cho thấy cả TP, FP và FN: HJK/a0028 phát hiện được một từ lỗi; LXC/a0029 bỏ sót bốn từ;
@@ -1008,10 +1039,10 @@ benchmark tổng hợp.
 Hình 30. Số output Qwen được bộ lọc cho phép hiển thị trên ba câu phát triển tăng từ 1/3 lên 3/3 sau sửa parser.
 Nguồn: notebooks/mdd_chat_error_checks.ipynb · cell 20 · output 1. Chỉ sửa parser trên raw Qwen outputs cũ; không train lại hoặc đo grammar accuracy.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-28
+29
 Hình 31. WER của ASR so với intended-text hint do người dùng xác nhận trên ba audio minh họa sound-neighbour retrieval.
 Nguồn: notebooks/phonetic_candidates_validation.ipynb · cell 4 · output 1.
 Các WER 66,67 / 114,29 / 100% trong notebook ứng viên phone là so transcript với hint ở ví dụ phát triển; không
@@ -1025,11 +1056,15 @@ guarded output 16,67%, với 8/12 đề xuất được nhận. Guard chưa cả
 không được báo thành benchmark tăng ASR chung.
 Nguồn: các notebook mdd_pronunciation_calibration, mdd_chat_error_checks, phonetic_candidates_validation và transcript_normalization_validation;
 captions kiểm tra trong qa/figures_notes_vi.json [S15].
+Nghiên cứu CTC-GOP đề xuất điểm phát âm từ mô hình CTC [R-CTCGOP]. Hàm
+ctc_variant_posterior_margin_v1 trong dự án là thử nghiệm riêng; báo cáo không nhận là bản tái hiện phương
+pháp hoặc điểm công bố của CTC-GOP. CMUdict [R-CMU] cung cấp biến thể từ điển, không tự quyết định mọi
+biến thể thực nói có hợp lệ hay không.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-29
+30
 12. Môi trường và cách tái lập
 Môi trường đã ghi trong artifact
 Thành phần
@@ -1075,10 +1110,10 @@ pwsh -File scripts/run_training_sequence.ps1 -Experiment windows-notebook-seed42
 .venv/Scripts/python.exe -X utf8 scripts/train_feedback_model.py --config configs/cascade_feedback_qlora.json --check-data-only
 .venv/Scripts/python.exe -X utf8 scripts/train_feedback_model.py --config configs/cascade_feedback_qlora.json --resume
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-30
+31
 # Projector: trạng thái / validation đã có runner riêng
 .venv/Scripts/python.exe -X utf8 scripts/run_projector_training.py --phase status
 .venv/Scripts/python.exe -X utf8 scripts/run_projector_validation.py --phase all
@@ -1094,10 +1129,10 @@ resume checkpoint, training/validation log, metrics và dự đoán từng câu.
 adapter, prompt/evaluator hash. Dataset/weights/runs/data/generated thường bị Git ignore; Git không phải bản
 sao lưu của chúng.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-31
+32
 13. Ảnh lịch sử và phần còn thiếu
 Hai hình sau được giữ để tài liệu chứa đủ ảnh notebook gốc. Chúng phản ánh trạng thái lúc notebook được lưu,
 không đại diện kết quả cuối. Bảng kết quả cập nhật ở các chương trước dùng log và metrics thực tế.
@@ -1125,10 +1160,10 @@ Không có ngưỡng đạt đồng thời tiêu chí; ineligible
 Qwen2-Audio
 Chỉ metadata, chưa tải weights/train
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-32
+33
 Các giới hạn quyết định cách diễn giải
 • Không gộp F1 phone, word-key F1 feedback, WER, lexical overlap và validation loss thành một ‘độ chính xác
 chung’.
@@ -1145,11 +1180,384 @@ Hình 35. Phân bố số khác biệt model đánh dấu và độ dài 300 b�
 dùng.
 Nguồn: notebooks/feedback_review_and_training.ipynb · cell 7 · output 3.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-33
-14. Chỉ số, nguồn và danh mục hình
+34
+14. Từ checkpoint đã train tới pipeline web hiện tại
+Các lượt train ở chương trước là tài sản thực nghiệm cục bộ. Tệp checkpoint tồn tại chưa có nghĩa mọi request
+web đều chạy checkpoint đó. Bảng sau đối chiếu đường gọi hiện tại trong local_speech_engine.py,
+demo_model_registry.py và worker với các artifact đã kiểm tra [S19–S22].
+Vai trò
+Model / nơi lưu
+Thực tế sử dụng
+Nghe tiếng Anh
+models/pretrained/faster-whisper-small.en
+Whisper small.en; CPU INT8, 2 threads, beam 5; mặc
+định chat
+Đối thoại
+models/pretrained/Qwen3-0.6B
+Qwen base CUDA BF16, lịch sử thật; không phải
+LoRA grammar hay LoRA feedback
+Ngữ pháp / natural
+runs/grammar-qwen3-06b-wi-jfleg-v1/adapter
+Adapter qwen-grammar; chạy riêng trong collapse
+Lỗi phát âm
+runs/cascade-l2arctic-plus-seed42/B/best_chec
+kpoint
+wav2vec2 phoneme B; CPU; so các biến thể CMUdict
+Phát âm thử nghiệm
+.tools/crottc/bundle
+CROTTC-IF/WavLM Large; CPU FP32; chỉ khi được
+chọn
+BERT
+models/pretrained/bert-base-uncased
+Giữ cho ASR wav2vec2 cũ; bypass, không tải trong
+luồng Whisper
+Qwen feedback
+runs/cascade-l2arctic-plus-seed42/Q/adapter
+Có checkpoint và pilot; luồng analyze hiện luôn có
+khóa assessment nên bỏ qua đường coaching cũ
+Projector
+runs/projector-l2arctic-plus-seed42/alignment
+Nhánh offline P0; không nằm trong luồng web
+Giọng trả lời
+Kokoro local; tùy chọn ai33 Sarah
+Kokoro mặc định; ai33 là API ngoài máy nếu chủ động
+chọn
+Trình tự một lượt nói
+Mic/upload → mono 16 kHz → Whisper → transcript → Qwen base → câu trả lời → TTS. Whisper không
+nhận câu mục tiêu, lịch sử, hotwords hay bản sửa Qwen làm prompt. Transcript gốc được giữ trong artifact để
+kiểm tra. Luồng kiểm tra phát âm dùng audio gốc cùng transcript đang được chọn, không dùng câu đã sửa ngữ
+pháp làm nhãn phát âm.
+Hội thoại có thể xuất hiện khi nội dung sẵn, còn ngữ pháp và phát âm tiếp tục xử lý trong collapse. Với CROTTC,
+tác vụ phone CPU được tách để có thể chạy cùng sinh câu trả lời trên GPU. Tùy chọn chờ voice câu mở đầu chỉ
+là điều khiển trình bày; không chứng minh tốc độ sinh voice hoặc model đã tăng.
+Khi người dùng sửa transcript, hệ thống so văn bản mới với cũ: chỉ đổi nội dung thật mới tạo lại câu trả lời; tái
+chấm dùng bằng chứng âm học đã giữ từ bản thu. Sửa transcript không thay đổi audio đã nói. Chỉ các phép
+chuyển số một token rõ nghĩa mới được dùng để tra từ điển; không suy ra câu mới từ ngữ cảnh rồi coi đó là lời
+nói chắc chắn.
+Dropdown Original/Fine-tuned của coaching không đổi Whisper thành wav2vec2 và không tự biến Qwen hội
+thoại thành adapter đã train. coaching_model_id trong metadata cũng chưa đủ chứng minh adapter đã được
+gọi. Muốn kết luận phải đọc đường gọi và runtime check thực sự.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+35
+Những thành phần local và thành phần ngoài máy
+Whisper, Qwen base/adapter, B phoneme, CROTTC, BERT và Kokoro đều có tệp chạy ở máy. Whisper/CROTTC
+tải checkpoint công bố rồi inference, chưa fine-tune trong dự án. Kokoro dùng trọng số local và runtime ONNX
+[R-KOKORO; R-KOKORO-ONNX]. ai33 tạo voice qua API; ngrok chỉ là đường truy cập web. Việc tunnel chạy
+ngoài máy không có nghĩa ASR/Qwen đang dùng API ngoài.
+Danh tính
+Revision / SHA256 trọng số
+Whisper small.en
+revision d1d751a5f8271d482d14ca55d9e2deeebbae577f; model.bin SHA256
+62b2a45b05ee59acb4a5341b33ee35e041395d378d418a18acfe4c9e768ee37a
+Qwen3-0.6B
+revision c1899de289a04d12100db370d81485cdf75e47ca; SHA256
+f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b
+Phoneme B
+SHA256 da000521b31ad4d7445b8eb13d82d8a767d6535e678d727aae9baa8a8b177110
+Grammar adapter
+SHA256 f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e
+CROTTC-IF
+revision 9149e5107b3332b9aa3f5573f6328a4e312006ad; model.ckpt SHA256
+3a9a4a03d2af6c90f71db8972a51dd4ce4559d1e9801f078904a65ce4aa113ef
+Tệp setup/provenance và manifest đã lưu [S19–S22]. Revision nguồn và SHA tệp là hai loại định danh khác nhau.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+36
+15. Đối chứng ASR: Whisper small.en và wav2vec2
+Thực nghiệm cố định gồm 118 recording, tổng 617,55 giây: 111 câu TLV đã dùng làm holdout của nhánh
+char-ASR; bốn người Việt từ Speech Accent Archive [R-SAA] đọc cùng một đoạn; ba recording người dùng đã
+xem trong giai đoạn phát triển. Mọi audio có kết quả hoàn tất cho đủ ba backend. Không BERT, Qwen hoặc TTS
+tham gia chấm ASR [S19].
+Tất cả chạy CPU hai threads: wav2vec2 base và fine-tuned dùng FP32 greedy CTC; Whisper dùng INT8 beam 5
+và native word timestamps. Cùng audio nguyên vẹn và cùng strict tokenization khi tính WER. Reference chỉ dùng
+chấm sau suy luận, không đưa vào decoder. So base → fine-tuned là đối chứng cập nhật trọng số cùng họ model;
+so với Whisper đồng thời thay kiến trúc, pretraining và decoder nên không cô lập nguyên nhân cải thiện.
+Nhóm · strict WER (%) ↓
+wav2vec2 base
+wav2vec2 fine-tuned
+Whisper small.en
+TLV · 111 câu
+42.62
+37.63
+27.76
+SAA · 4 người Việt
+33.33
+30.80
+11.23
+3 recording phát triển
+52.50
+53.75
+26.25
+Nguồn: results.json/groups; micro edit counts; strict WER là thước đo chính [S19].
+Biểu đồ A1. Strict WER và WER chuẩn hóa số đồng nhất theo nhóm; các nhóm không gộp thành một bảng xếp hạng chung.
+Nguồn: data/generated/asr-backends-20261023/wer_by_group.png. asr-backends-20261023; 118 audio × 3 backend đã hoàn tất.
+Trên TLV: 436/1.023 → 385/1.023 → 284/1.023 word edits, tương ứng WER 42,62 → 37,63 → 27,76%. Fine-tune
+giảm 4,99 đpt, còn Whisper thấp hơn fine-tuned 9,87 đpt. Có 42 câu fine-tuned tốt hơn base, 10 câu kém hơn, 59
+bằng; Whisper tốt hơn fine-tuned ở 61 câu, kém ở 17 và bằng ở 33. Số câu khớp tuyệt đối lần lượt 3, 4 và 17/111.
+Số lịch sử ở chương 9 là 440 → 388 edits trên GPU BF16 theo scorer của lượt train. Đợt đối chứng mới dùng
+CPU FP32 và tokenization hiện tại nên cho 436 → 385. Hai artifact cùng được giữ; không cộng các counter giữa
+hai phép đo, không sửa log train để khớp bảng mới.
+ASR giây/audio ↓
+wav2vec2 base
+wav2vec2 fine-tuned
+Whisper small.en
+TLV · 111 câu
+0.559
+0.447
+2.363
+SAA · 4 người Việt
+3.106
+2.949
+4.059
+3 recording phát triển
+1.161
+1.099
+2.786
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+37
+Loại thời gian tải model và decode/resample audio; Whisper bao gồm tạo word timings. Không phải latency toàn hệ thống.
+Biểu đồ A2. Thời gian ASR trung bình và real-time factor; Whisper chính xác hơn về WER trong các nhóm nhưng chậm hơn hai
+CTC backend trên máy này.
+Nguồn: data/generated/asr-backends-20261023/asr_latency.png. Số đo thực trên cùng đợt 23/10; chưa bao gồm Qwen, pronunciation và TTS.
+Kết quả có ích nhưng chưa đủ cho mọi giọng Việt
+TLV chỉ có một người và holdout đã quan sát trước, không phải test hoàn toàn mới sau mọi quyết định. SAA có
+bốn giọng nhưng cùng một bài đọc. Ba recording người dùng là development cases. Split audit không thấy giao
+audio/speaker/prompt với train/validation char-ASR local, nhưng không biết corpus công khai có xuất hiện trong
+pretraining Whisper hay không.
+Whisper vẫn sinh sai ở một số audio phát âm khó: câu đích ‘End of the road for some players’ được nghe thành
+‘And also load for some players.’; câu ‘Zero five eight three’ thành ‘I don't know what to do.’. Reference là câu định
+đọc, chưa có nhãn độc lập về từng từ thực sự phát ra. WER thấp hơn không cho phép dùng Whisper để kết luận
+một âm đã phát âm đúng.
+Whisper là mô hình học audio → transcript theo weak supervision quy mô lớn [R-WHISPER];
+faster-whisper/CTranslate2 cung cấp bản chạy tối ưu cục bộ [R-FASTER-WHISPER]. Dự án đã chọn nó cho ASR
+từ kết quả quan sát, không fine-tune Whisper và không lấy điểm trong paper thay cho bảng đo ở đây.
+BERT đã cải thiện gì trước khi đổi ASR
+Đợt phát triển 10 audio giọng Việt trước đây dùng wav2vec2 char-ASR cho 109/335 word edits (WER 32,54%).
+Sau bước chọn/chuẩn hóa ứng viên bằng BERT-base-uncased, conversation_text còn 104/335 edits (31,04%):
+giảm 1,49 đpt; chưa có câu khớp tuyệt đối và chưa có human semantic review hoàn tất. Tác vụ này không train lại
+BERT. Kết quả chỉ so trước/sau trong cùng probe, không ghép vào 118 audio hoặc suy thành benchmark BERT
+với Whisper [S23].
+Theo bài BERT [R-BERT], masked language modeling giúp học ngữ cảnh chữ. Trong pipeline đã thử, nó chỉ
+chấm ứng viên chữ từ transcript/phone, không nghe waveform và không bảo đảm câu khôi phục là câu người
+dùng thực sự nói. Việc bước này hiện được bypass với Whisper giảm thêm một chặng suy luận; cần benchmark
+riêng nếu muốn bật lại.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+38
+16. CROTTC-IF, wav2vec2 B và đánh giá trôi chảy
+CROTTC-IF được lấy từ checkpoint tác giả công bố [R-CROTTC; R-CROTTC-BUNDLE], gồm WavLM Large
+[R-WAVLM] cùng lớp Conformer/decoder. Dự án chỉ inference, không train thêm. Pilot có 24 câu nhãn chuyên gia
+từ sáu speaker test Plus: mỗi người hai câu nhóm ít lỗi và hai câu nhiều lỗi, chọn hash cố định trước suy luận;
+thêm ba audio người dùng không có nhãn phone gold. Đã hoàn thành đủ 54 lượt model/audio [S20].
+Đây là pilot phân tầng bằng nhãn, chưa ước lượng tần suất lỗi toàn tập. Decoder CROTTC dùng đường AR/CTC
+chính thức, nhận audio không có canonical prompt. Các phone lặp được giữ vì đây đã là chuỗi autoregressive
+được giải mã, không phải frame labels cần CTC-collapse lần nữa. Phiên bản phát hành không trả posterior
+frame/phone timestamps; backend chỉ đối chiếu chuỗi, không tự tạo GOP hoặc thời điểm phone giả.
+24 câu có nhãn · inventory gốc
+wav2vec2 B
+CROTTC-IF
+Phone F1 (%) ↑
+49.47
+19.01
+PER (%) ↓
+18.68
+53.72
+Phone precision (%) ↑
+48.95
+12.62
+Phone recall (%) ↑
+50.00
+38.57
+PER insertions / 819 gold phones
+19
+370
+Inference tổng / trung bình (s)
+9.408 / 0.392
+106.233 / 4.426
+Cùng scorer canonical-phone-and-ordered-insertion-slots-v1. Không phải scorer công bố của paper CROTTC [S20].
+Biểu đồ A3. Phone detection F1/PER trên 24 câu; inventory gốc là chính, chuẩn hóa chung 39-phone là sensitivity analysis.
+Nguồn: data/generated/crottc-pilot-20261023/research_metrics.png. crottc-pilot-20261023; raw và shared_inventory chấm sau inference, không dùng để
+tune.
+Chuẩn hóa chung bỏ stress/dấu distortion, AX → AH và giữ unknown trong PER/detection. B có F1 49,65%, PER
+18,07%; CROTTC có F1 19,01%, PER 53,11%. Thứ tự quan sát ở pilot không đảo chiều, nhưng cách chuẩn hóa
+làm mất thông tin distortion. Không xóa unknown rồi coi phần còn lại là đánh giá đầy đủ cả câu.
+Review theo word_index gold
+wav2vec2 B
+CROTTC-IF
+Hint precision (%)
+74.12
+59.85
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+39
+Review theo word_index gold
+wav2vec2 B
+CROTTC-IF
+Hint recall (%)
+63.00
+82.00
+Từ đúng bị đưa vào review (%)
+17.19
+42.97
+Quyết định đã hiệu chuẩn
+0
+0
+Đây là hành vi danh sách từ cần xem lại của UI, khác research phone F1. Các quyết định hiệu chuẩn đều abstain [S20].
+CROTTC bắt được nhiều từ lỗi hơn trong danh sách review (82% so với 63%) nhưng cũng báo nhiều từ
+đúng hơn (55/128 so với 22/128). Hint F1 gần nhau không triệt tiêu đánh đổi này. B tiếp tục là mặc định;
+CROTTC là tùy chọn nghiên cứu, chưa có cơ sở nâng làm model chính.
+Audio Stella 24,16 giây mất khoảng 223,75 giây khi chạy CROTTC offline, sinh 379 phones có đoạn lặp và đưa
+60/69 từ vào review. Hai mẫu road/digits cũng có bất ổn. Không có nhãn chuyên gia ở ba audio người dùng nên
+chỉ báo đầu ra/latency, không gán precision hay accuracy. Model/worker CROTTC tốn khoảng 2,1 GiB RSS trong
+phiên chạy; lỗi MemoryError ban đầu và việc resume đã được lưu trong execution_notes.json.
+Điểm paper và điểm local đo những gì
+Paper CROTTC-IF báo F1 71,77% trên L2-ARCTIC [R-CROTTC]. Điểm này dùng protocol của tác giả; scorer dự
+án gắn lỗi theo canonical positions và ordered insertion slots. Pilot local chỉ 24 câu đã phân tầng; overlap training
+checkpoint công bố với split local chưa được xác minh. Vì khác scorer, split, decoder và dữ liệu, 19,01% local
+không phải kết quả tái hiện hoặc phủ định trực tiếp 71,77% của paper.
+Trôi chảy: thống kê mô tả từ Whisper
+Module speech_fluency.py dùng native word times của Whisper và độ dài bản thu để báo tốc độ từ/phút, thời gian
+khoảng nói, số pause nội bộ từ 0,25 giây, pause dài nhất và khoảng trống timestamp đầu/cuối. Mốc 0,25 giây là
+quy ước thống kê hiện tại, chưa được hiệu chỉnh bằng chuyên gia. Chỉ số phụ thuộc transcript/timing ASR; khi
+sửa câu đối chiếu, measured_transcript vẫn chỉ rõ transcript thực sự được đo.
+Live check đã lưu chứng minh cả B/CROTTC có thể đi cùng Whisper và module fluency [S21]. Ví dụ road có
+khoảng 94,99 từ/phút và 0 pause nội bộ theo ASR 3,79 giây; TLV/a0018 khoảng 178,57 từ/phút trên 1,68 giây.
+Đây là ví dụ kết nối module, không phải thang IELTS hay điểm fluency đã train. Chưa chấm prosody, lexical
+stress hoặc xác thực correlation với người chấm.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+40
+17. Đối chiếu nghiên cứu và thiết kế thực nghiệm
+tiếp theo
+Tài liệu ngoài dự án hỗ trợ lựa chọn phương pháp, dữ liệu và thước đo. Báo cáo tách ba mức: mô tả phương
+pháp được công bố; checkpoint đã tải/chạy local; và kết quả đủ bằng chứng trong thực nghiệm này. Không xếp
+tất cả mô hình thành một ‘accuracy’ vì ASR, MDD, sửa câu và voice giải quyết những bài toán khác nhau.
+Nghiên cứu / mô hình
+Cơ sở liên quan
+Bằng chứng local / giới hạn
+wav2vec 2.0 [R-WAV2VEC2]
+Biểu diễn audio tự giám sát + fine-tune
+có nhãn
+Có phoneme A/B/C và char-ASR; cải thiện so cùng
+base trên split riêng
+Whisper [R-WHISPER]
+Audio → transcript; weak supervision
+Pretrained small.en thắng WER ba nhóm; chưa
+đánh giá MDD bằng Whisper
+Qwen3 + LoRA/QLoRA
+[R-QWEN3; R-LORA;
+R-QLORA]
+Sinh text; thích ứng ít tham số
+Hai adapter có train; chưa có benchmark hội thoại
+độc lập
+L2-Arctic-plus [R-ALM]
+Nhãn giải thích lỗi, suggestion và ALM
+tuning
+Giữ cascade đối chứng; số ALM lớn trong paper
+không phải điểm Qwen0.6 local
+BERT [R-BERT]
+Encoder masked language modeling
+Không fine-tune; hỗ trợ lexical candidates nhưng
+không bảo đảm khôi phục đúng ý; bypass Whisper
+CTC-GOP [R-CTCGOP]
+Điểm phát âm dựa trên CTC
+Posterior margin local là phương pháp thử riêng;
+calibration chưa đạt
+CROTTC-IF [R-CROTTC;
+R-CROTTC-BUNDLE]
+Prompt-free MDD; acoustic/linguistic
+bias
+Đã tải và thử 27 audio; chưa đạt lựa chọn mặc định
+theo pilot hiện tại
+W&I/JFLEG [R-WI; R-JFLEG]
+Grammar và fluency văn viết có nhãn
+công khai
+Đã train grammar LoRA; chưa chạy đủ ERRANT
+F0.5/GLEU test
+SpeechOcean762
+[R-SPEECHOCEAN]
+Phát âm tiếng Anh; nhiều người chấm
+Kiểm chứng ngoài miền cho thấy false alarm cao;
+khác L1 và rubric
+Giải thích vì sao fine-tune vẫn có thể kém pretrained khác
+Fine-tune tối ưu loss trên dữ liệu, nhãn và ngân sách cụ thể; không tạo bảo đảm vượt mọi model. ASR Việt có
+khoảng 2,49 giờ train gồm source replay, trong khi Whisper bắt đầu từ pretraining khác. Trên 111 TLV, fine-tuned
+wav2vec2 vẫn cải thiện so base của chính nó. Việc Whisper có WER thấp hơn không chứng minh training đã vô
+ích hoặc chỉ khác Transformer là nguyên nhân.
+BERT chọn từ hợp văn cảnh nhưng không nhận trực tiếp audio trong nhánh hiện tại; Qwen cũng có thể sinh câu
+trôi chảy khác nội dung đã nói. Vì vậy câu có nghĩa chưa đủ chứng minh đúng từng chữ. Cần giữ bản thu,
+transcript, câu người dùng xác nhận và câu gợi ý thành các dữ liệu có nguồn riêng; đánh giá edit fidelity và
+unsupported changes thay vì chỉ độ mượt.
+GOPT [R-GOPT] là hướng tham khảo cho đánh giá phát âm nhiều mức. Chưa có checkpoint GOPT chạy trong
+demo và chưa đo correlation với người chấm ở dự án; không đưa điểm công bố của nó vào bảng model local.
+Đây là lựa chọn nghiên cứu sau khi khóa được rubric và tập kiểm chứng độc lập.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+41
+Các bước tiếp theo có thể kiểm chứng được
+Mục tiêu
+Thực nghiệm đề xuất
+Tiêu chí báo cáo
+Giảm báo nhầm MDD
+Thu thêm mẫu người Việt đúng/sai với nhãn phone; fit
+ngưỡng trên validation riêng, khóa test trước
+Precision/recall/F1, FPR, FNR, coverage và tỷ
+lệ abstain; phân tích theo phone/speaker
+Nâng wav2vec2 B
+Đối chứng giữ model/decoder; thử thêm dữ liệu,
+sampling/replay và fine-tune head phát hiện trực tiếp
+có nhãn
+Cùng scorer và test; nhiều seed/speaker;
+không chọn ngưỡng bằng test
+Grammar/natural
+Đánh giá đủ 2.999 grammar + 747 natural heldout,
+multi-reference; kiểm cả câu đúng và câu vô nghĩa
+ERRANT F0.5, GLEU phù hợp nguồn, giữ
+nguyên control, semantic fidelity và JSON
+contract tách riêng
+Hội thoại Qwen
+Tập multi-turn có sửa ASR, ngoài chủ đề, nói thiếu và
+lặp; đánh giá độc lập với grammar
+Tính liên quan câu trước, tỷ lệ lặp/không hiểu,
+hallucination và latency
+CROTTC
+Tái hiện scorer/split tác giả trước; kiểm chuỗi lặp dài,
+memory/timeout; khóa version
+Paper reproduction riêng; sau đó mới
+benchmark cùng policy UI local
+Fluency / tốc độ
+Đối chiếu word timings và pause bằng nhãn; đo
+cold/warm theo từng chặng
+Sai số timing, correlation/rubric nếu có người
+chấm; p50/p95/RSS/VRAM thay vì một số
+trung bình
+Đây là kế hoạch nghiên cứu tiếp theo, chưa phải kết quả đã đạt và không tự khởi động training. Bản báo cáo
+này chỉ đọc lại output có sẵn; người dùng chủ động chạy các lệnh train khi quyết định.
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+42
+18. Chỉ số, nguồn và danh mục hình
 Định nghĩa chỉ số
 Scorer MDD của dự án dùng canonical-phone-and-ordered-insertion-slots-v1: vị trí canonical cùng insertion slots
 theo thứ tự trong cùng gap. TA: âm đúng được chấp nhận; FR: âm đúng bị từ chối; FA: lỗi bị chấp nhận; TR: lỗi bị
@@ -1211,10 +1619,10 @@ runs/windows-notebook-seed42-{B,C}-fold1-test-fold1/metrics.json
 [S05] Protocol Plus. data/protocol/l2arctic-plus-cascade-v1/{protocol,splits}.json; 
 data/generated/cascade-l2arctic-plus-seed42/data_readiness.json
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-34
+43
 [S06] Train audio Plus. runs/cascade-l2arctic-plus-seed42/{A,B}/ — config, completed, training_log, validation_log, 
 best_checkpoint/metadata
 [S07] Train Qwen cascade. runs/cascade-l2arctic-plus-seed42/Q/training_provenance.json; 
@@ -1238,19 +1646,82 @@ notebooks/phonetic_candidates_validation.ipynb; notebooks/transcript_normalizati
 [S17] Scorer. src/mdd/metrics.py; scripts/published_feedback_metrics.py; scripts/evaluate_grammar_model.py
 [S18] Các model/nhánh chưa train. models/pretrained/Qwen2-Audio-7B-Instruct/source_manifest.json; 
 data/feedback/drafts-20261021-cef406b.manifest.json
+[S19] Đối chứng ASR 118 audio. data/generated/asr-backends-20261023/{manifest,results}.json; metrics.csv; per_case.csv; 
+notebooks/whisper_vs_wav2vec2.ipynb
+[S20] CROTTC/B pilot 27 audio. data/generated/crottc-pilot-20261023/{manifest,results,execution_notes}.json; 
+notebooks/crottc_pronunciation_pilot.ipynb
+[S21] Kiểm tra pipeline sống và fluency. data/generated/crottc-live-20261023/verification.json; scripts/local_speech_engine.py; 
+src/mdd/speech_fluency.py
+[S22] Luồng chọn model hiện tại. src/mdd/demo_model_registry.py; src/mdd/demo_chat.py; scripts/local_speech_engine.py; 
+scripts/local_chat_worker.py
+[S23] BERT trên 10 audio phát triển. data/generated/vi-voice-pipeline-v1/bert-v2/results.json; metrics.csv; 
+notebooks/vi_voice_bert_validation.ipynb
+Tài liệu nghiên cứu và tài liệu triển khai gốc
+Trích dẫn [R-TÊN] bên trong các chương chỉ phương pháp hoặc nguồn dữ liệu liên quan. Chúng không thay thế
+bằng chứng thực chạy [Sxx]. Các đường dẫn dưới đây là bài báo, trang dữ liệu hoặc mã/tài liệu chính thức; ngày
+tra cứu 23/10/2026.
+[R-WAV2VEC2] Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli (2020). wav2vec 2.0: A Framework for 
+Self-Supervised Learning of Speech Representations. https://arxiv.org/abs/2006.11477
+[R-WHISPER] Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever (2022). Robust Speech 
+Recognition via Large-Scale Weak Supervision. https://arxiv.org/abs/2212.04356
+[R-FASTER-WHISPER] SYSTRAN and faster-whisper contributors (tài liệu cập nhật). faster-whisper: Faster Whisper transcription 
+with CTranslate2. https://github.com/SYSTRAN/faster-whisper
+[R-QWEN3] An Yang et al. (Qwen Team) (2025). Qwen3 Technical Report. https://arxiv.org/abs/2505.09388
+[R-BERT] Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova (2019). BERT: Pre-training of Deep Bidirectional 
+Transformers for Language Understanding. https://aclanthology.org/N19-1423/
+
+MDD  /  Huấn luyện và đánh giá mô hình local
+Báo cáo thực nghiệm • 23/10/2026
+Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
+44
+[R-LORA] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen (2021). 
+LoRA: Low-Rank Adaptation of Large Language Models. https://arxiv.org/abs/2106.09685
+[R-QLORA] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer (2023). QLoRA: Efficient Finetuning of Quantized 
+LLMs. https://arxiv.org/abs/2305.14314
+[R-L2ARCTIC] Guanlong Zhao, Sinem Sonsaat, Alif Silpachai, Ivana Lucic, Evgeny Chukharev-Hudilainen, John Levis, Ricardo 
+Gutierrez-Osuna (2018). L2-ARCTIC: A Non-native English Speech Corpus. https://psi.engr.tamu.edu/l2-arctic-corpus/
+[R-ALM] Hongfu Liu, Zhouying Cui, Xiangming Gu, Ye Wang (2026). Unlocking Large Audio-Language Models for Interactive 
+Language Learning. https://aclanthology.org/2026.findings-eacl.190/
+[R-WI] Christopher Bryant, Mariano Felice, Øistein E. Andersen, Ted Briscoe (2019). The BEA-2019 Shared Task on Grammatical 
+Error Correction. https://aclanthology.org/W19-4406/
+[R-JFLEG] Courtney Napoles, Keisuke Sakaguchi, Joel Tetreault (2017). JFLEG: A Fluency Corpus and Benchmark for 
+Grammatical Error Correction. https://aclanthology.org/E17-2037/
+[R-CMU] Carnegie Mellon University Speech Group and CMUSphinx contributors (tài liệu cập nhật). CMU Pronouncing 
+Dictionary. https://github.com/cmusphinx/cmudict
+[R-CROTTC] Haopeng Geng, Longfei Yang, Xi Chen, Haitong Sun, Daisuke Saito, Nobuaki Minematsu (2026). Beyond Acoustic 
+Sparsity and Linguistic Bias: A Prompt-Free Paradigm for Mispronunciation Detection and Diagnosis. 
+https://arxiv.org/abs/2604.22133
+[R-CROTTC-BUNDLE] Haopeng Geng / Haopeng (2026). CROTTC-IF for L2-ARCTIC: standalone inference bundle. 
+https://huggingface.co/Haopeng/CROTTC-IF-l2-arctic
+[R-WAVLM] Sanyuan Chen et al. (2022). WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing. 
+https://arxiv.org/abs/2110.13900
+[R-CTCGOP] Xinwei Cao, Zijian Fan, Torbjørn Svendsen, Giampiero Salvi (2024). A Framework for Phoneme-Level Pronunciation 
+Assessment Using CTC. https://www.isca-archive.org/interspeech_2024/cao24b_interspeech.html
+[R-GOPT] Yuan Gong, Ziyi Chen, Iek-Heng Chu, Peng Chang, James Glass (2022). Transformer-Based Multi-Aspect 
+Multi-Granularity Non-Native English Speaker Pronunciation Assessment. https://arxiv.org/abs/2205.03432
+[R-SPEECHOCEAN] Junbo Zhang, Zhiwen Zhang, Yongqing Wang, Zhiyong Yan, Qiong Song, Yukai Huang, Ke Li, Daniel Povey, 
+Yujun Wang (2021). speechocean762: An Open-Source Non-native English Speech Corpus for Pronunciation Assessment. 
+https://openslr.org/101/
+[R-KOKORO] hexgrad / Kokoro authors (2025). Kokoro-82M: model card and weights. https://huggingface.co/hexgrad/Kokoro-82M
+[R-KOKORO-ONNX] thewh1teagle and kokoro-onnx contributors (tài liệu cập nhật). kokoro-onnx: TTS with Kokoro and ONNX 
+Runtime. https://github.com/thewh1teagle/kokoro-onnx
+[R-SAA] Steven H. Weinberger, Matthew C. Kelley / George Mason University (tài liệu cập nhật). The Speech Accent Archive. 
+https://accent.gmu.edu/
 Kiểm kê 14 notebook ghi nhận 298 outputs và không có saved output_type=error; điều đó không bảo đảm mọi
 notebook đã chạy toàn bộ. Có 35/35 PNG khác nhau, được kiểm byte, SHA256 và PNG CRC; không tìm thấy ảnh
 liên kết Markdown/HTML bị bỏ sót. train_mdd_colab.ipynb có 0 hình/output thực thi nên không tạo hình thay thế.
 Các tệp đi cùng báo cáo
-figures_manifest.json chứa nguồn, cell, output, kích thước và SHA256 của từng hình. evidence_wav2vec.json và
-evidence_qwen.json lưu chi tiết đối chiếu. report_content.json là bản nội dung có thể chỉnh sửa; author_report.py
-tạo bảng từ nguồn, build_report.py dựng PDF. report_build_manifest.json và qa/pdf_validation.json ghi thông tin
-xuất/kiểm tra tài liệu.
+figures_manifest.json chứa nguồn, cell, output, kích thước và SHA256 của 35 hình lịch sử.
+evidence_wav2vec.json và evidence_qwen.json lưu chi tiết train; evidence_current_comparisons.json khóa danh
+tính các artifact mới. report_content.json là bản nội dung có thể chỉnh sửa;
+author_report.py/current_report_update.py tạo bảng từ nguồn, build_report.py dựng PDF.
+report_build_manifest.json và qa/pdf_validation.json ghi thông tin xuất/kiểm tra. docs/references_20261023.json
+lưu bibliography dùng chung với báo cáo pipeline.
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-35
+45
 Danh mục đủ 35 hình notebook
 Hình
 Notebook / cell / output
@@ -1334,10 +1805,10 @@ mdd_asr_vi_finetuning.ipynb
 cell 8 · output 2
 Matched before/after results
 
-MDD  /  wav2vec2 & Qwen
+MDD  /  Huấn luyện và đánh giá mô hình local
 Báo cáo thực nghiệm • 23/10/2026
 Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD
-36
+46
 Hình
 Notebook / cell / output
 Chủ đề

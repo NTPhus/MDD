@@ -1,9 +1,8 @@
 TÀI LIỆU KIẾN TRÚC & VẬN HÀNH
 Pipeline hiện tại
 của hệ thống MDD
-Cấu trúc hệ thống
-Model nào làm việc gì
-Workflow từ audio đến phản hồi
+Whisper · wav2vec2 B · Qwen3 · Kokoro
+Training, workflow và kết quả đối chứng
 MDD – Phát hiện và chẩn đoán lỗi phát âm tiếng Anh
 Tài liệu đồng hành với báo cáo huấn luyện wav2vec2 và Qwen.
 Phạm vi
@@ -13,7 +12,7 @@ Chat giọng nói hiện tại; thêm đường luyện phát âm và cấu trú
 Nguồn
 Code, model registry, artifact readiness và GET /api/chat/config
 Thời điểm
-23/10/2026 09:45:11 (UTC+7)
+23/10/2026 16:05:21 (UTC+7)
 Định dạng
 PDF để đọc/chia sẻ; DOCX có cùng nội dung để chỉnh sửa
 Sơ đồ phản ánh đường chạy trong source đang có. Nhánh nghiên cứu, nhánh legacy và model đã train nhưng chưa gọi trong luồng chính
@@ -25,469 +24,443 @@ Snapshot từ code và config thực tế; đường chat và practice được 
 2
 Mục lục
 3
-1. Pipeline hiện tại trong một trang
+1. Tổng quan và kết luận có bằng chứng
 4
-2. Kiến trúc hệ thống và cấu trúc code
-6
-3. Model nào phụ trách việc gì?
+2. Cơ sở khoa học và lựa chọn kiến trúc
+5
+3. Kiến trúc và các model đang ở local
 7
-4. Workflow một lượt nói
+4. Dữ liệu, nhãn và ranh giới test
+8
+5. Đã train gì và trọng số nào thay đổi?
 9
-5. Nhánh âm thanh và chấm phát âm
-10
-6. Qwen: routing, grammar và thiết bị
-12
-7. Khi sửa câu ASR hoặc luyện câu mẫu
+6. Workflow từ bản thu đến reply và collapse
+11
+7. Phát âm, fluency và xác nhận câu nói
+13
+8. So sánh ASR: base, fine-tuned và Whisper
 14
-8. API, trạng thái UI, history và voice
+9. B, CROTTC-IF và external pronunciation test
 16
-9. Workspace practice và cấu trúc triển khai
+10. Qwen, grammar và chất lượng hội thoại
 18
-10. Ví dụ sử dụng và các trường hợp ngoại lệ
+11. Voice, highlight, latency và phần local
 19
-11. Nguồn đối chiếu và phạm vi snapshot
+12. API, triển khai và tái tạo tài liệu
+20
+13. Giới hạn và cải thiện ưu tiên
+21
+14. Tài liệu tham khảo và dấu vết tái lập
 Cách đọc tài liệu
 “Đang dùng” chỉ đường gọi có trong workflow hiện tại. “Ready” cho biết artifact/config đủ điều kiện nạp; không
 đồng nghĩa một lượt xử lý đã thực sự gọi model đó. Device=auto là chính sách chọn thiết bị, khác device thực tế
 được ghi cho mỗi lần sinh.
-Các sơ đồ kiến trúc được dựng từ code để giải thích pipeline, không phải đồ thị kết quả huấn luyện. Tham chiếu
-[Pxx] chỉ đến danh mục file/hàm ở cuối tài liệu.
+Sơ đồ dựng từ code; số đo local lấy từ artifact [Lxx]. Trích dẫn [R-…] dẫn bài báo và tài liệu chính thức ở cuối. So
+sánh luôn giữ riêng tác vụ, tập dữ liệu và evaluator.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 3
-1. Pipeline hiện tại trong một trang
-Hệ thống MDD hiện có hai workspace chính: Luyện phát âm để đọc câu/từ và xem đối chiếu âm; Đối thoại AI để
-thu audio, nhận câu trả lời bằng tiếng Anh và xem feedback khi cần. Tài liệu tập trung đường đối thoại giọng nói
-đang có trong code, rồi mô tả riêng đường practice, phần triển khai và các nhánh nghiên cứu.
-Luồng chat chính: audio → wav2vec2 ASR → wav2vec2 phoneme B + assessment → Qwen base chuẩn
-hóa hình thức → Qwen base trả lời → công bố reply_ready → Qwen grammar viết lại → hoàn tất job. Voice
-có thể đọc reply đã chốt khi feedback còn chờ.
-Thành phần
-Hiện làm việc gì
-Trạng thái trong chat
-wav2vec2 ASR đã thích ứng
-Việt
-Nghe audio thành văn bản tiếng Anh, ước lượng thời
-gian từng từ
-Đang dùng; CPU
-wav2vec2 phoneme
-cascade-B
-Ước lượng chuỗi phone và posterior để đối chiếu phát
-âm
-Đang dùng; CPU
-CMUdict + scorer/rules
-Tạo âm chuẩn, biến thể phát âm, alignment và gợi ý
-tạm tính
-Đang dùng; không phải LLM
-Qwen3-0.6B base
-Chuẩn hóa hình thức transcript và trả lời hội thoại
-Đang dùng
-Qwen + LoRA grammar
-Sinh grammar_corrected và natural bằng hai lượt riêng
-Đang dùng khi không có câu đọc cố
-định
-Qwen + LoRA feedback
-Coach phát âm từ nhãn lỗi dạng text
-Có sẵn; nhánh legacy bị bỏ qua khi
-có assessment mới
-Browser voice hoặc ai33
-Đọc câu trả lời đã chốt; nghe mẫu cần thao tác riêng
-Tùy lựa chọn/cấu hình
-Nguồn: [P01–P07], [P12].
-Ba phân biệt quan trọng
-• Hai wav2vec2 là hai checkpoint/head khác nhau. Model ASR xuất chữ; model MDD B xuất phone. Không dùng
-transcript ASR như kết luận phát âm đúng.
-• Qwen dùng chung một backbone trong worker và bật/tắt adapter theo tác vụ. Không cần ba bản Qwen
-backbone độc lập cho base, grammar và feedback.
-• Đã train và ready không đồng nghĩa đang được gọi. Projector, Qwen2-Audio và thí nghiệm benchmark không
-nằm trong đường chat audio hiện tại.
-Trạng thái đã đối chiếu bằng GET /api/chat/config: ASR=wav2vec2-vi-en-v1, grammar=qwen-grammar,
-reply=qwen-base, acoustic_device=cpu, device policy=auto; speech_ready=true. Base và feedback adapter đều
-được công bố ready. Đây là snapshot config, không phải một phép chạy inference mới.
+1. Tổng quan và kết luận có bằng chứng
+Dự án xây dựng môi trường luyện nói tiếng Anh có hội thoại, phản hồi ngữ pháp và đối chiếu phát âm. Báo cáo
+được viết lại theo mã nguồn và artifact ngày 23/10/2026: hệ thống chạy thế nào, đã train thành phần nào, model
+nào thực sự được gọi và kết quả nào đã đo.
+Luồng mặc định: audio → Whisper small.en → văn bản tiếng Anh → Qwen3-0.6 B base trả lời; Qwen LoRA
+ngữ pháp bổ sung feedback. Nhánh âm học wav2vec2 B đối chiếu phát âm; Kokoro local tạo voice.
+CROTTC-IF là lựa chọn thử nghiệm. BERT và Projector không nằm trong luồng Whisper mặc định.
+Câu hỏi
+Kết luận hiện có
+ASR nào tốt hơn?
+111 audio TLV: WER wav2vec2 base 42,62%; sau fine-tune 37,63%; Whisper 27,76%. Whisper tốt
+hơn trong phép thử này nhưng chậm hơn.
+Fine-tune có tác dụng
+không?
+Có cải thiện trên test chung của từng protocol. Nhận dạng chữ và phát hiện lỗi âm dùng hai
+checkpoint/head khác nhau.
+Phát âm đã đáng tin chưa?
+Calibration chưa đạt policy. Sound details là gợi ý cần xem lại; thiếu cảnh báo không có nghĩa phát
+âm đúng.
+CROTTC thay B chưa?
+Chưa. Pilot 24 audio chuyên gia cho nhiều cảnh báo nhầm hơn B; giữ B mặc định.
+Qwen đã train phần nào?
+Hai adapter: feedback từ phone-text và grammar/natural wording. Dialogue vẫn dùng base; chưa có
+benchmark hội thoại do người đánh giá.
+Local hết chưa?
+Mặc định ASR, Qwen, scorer, Kokoro chạy local. ai 33 là API ngoài tùy chọn; ngrok là đường truy
+cập qua mạng.
+Nguồn cục bộ [L01–L10]; phép đo chi tiết ở Chương 8–11.
+WER đo sai khác chữ; phone F1 đo phát hiện lỗi âm; JSON hợp lệ đo đúng định dạng. Các chỉ số này không thay
+thế nhau và không được gọi chung là độ chính xác hệ thống. Số công bố trong bài báo được tách khỏi số đo
+local.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 4
-2. Kiến trúc hệ thống và cấu trúc code
-Browser: demo/chat.js
-Mic / upload · hội thoại · feedback · phát voice
-HTTP server: demo.py + ChatService
-POST audio → job; GET polling → text/speech snapshot
-JSONL IPC: local_chat_process.py
-Một worker riêng; event stage / speech / chunk / done
-Worker: local_chat_worker.py
-ASR chữ: wav2vec2-vi-en-v1
-Audio → transcript + word intervals
-CPU
-Phoneme: cascade-B
-Audio → phone CTC posteriors
-CMU variants + assessment · CPU
-Một Qwen3-0.6B base dùng chung
-Base: normalize + dialogue
-LoRA grammar: 2 task viết lại
-LoRA feedback: có sẵn, nhánh legacy
-Runtime Qwen: auto / cpu / cuda
-Hình 1. Kiến trúc đường chat: browser → HTTP/job controller → worker riêng. Các khối bên trong thể hiện trách nhiệm; thứ tự thực
-thi xem Hình 2.
-Nguồn: demo/chat.js; demo.py; demo_chat.py; local_chat_process.py; local_chat_worker.py [P01], [P02], [P10].
-Browser quản lý mic/upload, lịch sử hiển thị, polling và phát voice. HTTP server phục vụ static UI và kiểm tra
-request, tạo job, giữ snapshot cùng revision. Tính toán chat được chuyển qua stdin/stdout JSONL đến worker
-Python tồn tại lâu, nơi cache ASR, phoneme model và Qwen. Worker xử lý lần lượt, không chạy ba tác vụ Qwen
-song song.
+2. Cơ sở khoa học và lựa chọn kiến trúc
+Thành phần
+Tài liệu gốc
+Áp dụng trong dự án
+wav2vec 2.0
+Học biểu diễn âm tự giám sát rồi fine-tune CTC
+[R-WAV2VEC2].
+Head phone MDD và head ký tự ASR tách biệt.
+Whisper
+Encoder–decoder ASR, weak supervision quy mô lớn
+[R-WHISPER].
+small.en qua faster-whisper/CTranslate2; không
+nhận đáp án chuẩn.
+Qwen3-0.6 B
+Decoder ngôn ngữ; technical report và model card
+[R-QWEN3].
+Text-only; base dialogue và LoRA riêng theo tác
+vụ.
+BERT-base-uncased
+Masked language modeling hai chiều [R-BERT].
+Xếp hạng ứng viên ASR cũ; không tự nghe
+audio.
+CROTTC-IF
+MDD không dùng canonical prompt khi inference
+[R-CROTTC].
+Checkpoint công bố, chưa train local; pilot và UI
+thử nghiệm.
+LoRA / QLoRA
+Adapter hạng thấp, base frozen; QLoRA dùng base
+lượng tử hóa [R-LORA], [R-QLORA].
+Train Qwen trên GPU 4 GiB; inference có thể
+nạp base BF16.
+ASR tìm từ người nói định truyền đạt; MDD giữ bằng chứng âm thực phát ra. ASR có thể nhận đúng từ dù âm
+chưa chuẩn. Whisper nhận đúng “three” không chứng minh /θ/ đúng. Qwen cascade nhận chữ và metadata nên
+không nghe lại được tín hiệu đã mất sau ASR.
+Vì sao BERT chưa giải quyết triệt để ASR?
+BERT xếp hạng từ theo ngữ cảnh chữ. Transcript thiếu nhiều âm hoặc tách từ sai có thể khiến model chọn câu
+phổ biến nhưng khác câu đã nói. Whisper mặc định bỏ bước phục hồi này. Câu khôi phục bằng model phải ghi
+inferred, không coi là user-confirmed. Đây là suy luận thiết kế từ đặc tính MLM và probe local, không phải kết luận
+BERT kém trong mọi tác vụ [R-BERT].
+Hướng nghiên cứu liên quan
+CTC-GOP cung cấp hướng điểm âm học và calibration [R-CTCGOP]; scorer margin/variant hiện tại chưa tái lập
+đầy đủ công thức đó. GOPT nghiên cứu điểm phát âm nhiều mức trên SpeechOcean762 [R-GOPT], nhưng chưa
+cài/đo ở máy này. Tương quan PCC trong bài báo không phải phần trăm phát hiện lỗi.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 5
-Bản đồ thư mục cần đọc
-MDD/
-  demo/                         Giao diện HTML/CSS/JavaScript
-    chat.js                     Đối thoại, mic, polling, reference, voice
-    app.js                      Workspace luyện phát âm
-  src/mdd/
-    demo.py                     HTTP routes, static files, practice API
-    demo_chat.py                ChatService, jobs, readiness, revisions
-    demo_model_registry.py      Chọn ASR/grammar checkpoint
-    chat_runtime.py             Chính sách CPU/CUDA cho Qwen
-    demo_inference.py           Nạp/chạy wav2vec2 và CTC
-    pronunciation_assessment.py Scorer posterior/variant cho chat
-    chat_assessment.py          Calibration gate và output assessment
-    chat_reference.py           Sửa reference và reassess
-  scripts/
-    serve_demo.py               Entry point server
-    local_chat_process.py       Vòng đời worker và JSONL IPC
-    local_chat_worker.py        Qwen engine, adapter switching, event loop
-    local_speech_engine.py      Điều phối toàn lượt audio chat
-    grammar_inference.py        Hai task của grammar adapter
-    transcript_normalization.py Guard chuẩn hóa hình thức
-  models/pretrained/            Backbone và tokenizer
-  runs/                         Checkpoint/adapter đã train
-  data/generated/               Calibration/report/voice cache/log
-  notebooks/                    Thực nghiệm, kiểm chứng, visualization
-  deploy/nginx/                 Template reverse proxy
-Posterior runtime nằm trong ChatJob memory ở server.
-Ranh giới giữa các lớp
-Lớp
-Sở hữu / quyết định
-Không suy ra từ lớp này
-UI
-Thu audio, hiển thị, history theo topic/model, yêu
-cầu sửa reference và voice
-Không tự chọn checkpoint path hoặc ngưỡng
-calibration
-ChatService
-Validate, request idempotency, job state, slot,
-reference revision, metadata
-Không coi model_id được chọn là bằng chứng
-model đã generate
-Worker
-Inference, chọn adapter/device, tạo text và acoustic
-outputs
-Không tự mở training hoặc thay weights
-Registry/artifact
-Model path hợp lệ, completed/validated/hash
-Ready không phải benchmark chất lượng
-Notebook/training
-runner
-Tạo weights, đánh giá và report nghiên cứu
-Không được tự chạy khi một request chat tới
-Sự tách worker áp dụng cho chat. Workspace practice có đường LocalInference riêng dưới DemoApplication;
-không nên khái quát rằng mọi inference của toàn ứng dụng đều nằm trong cùng worker chat.
+3. Kiến trúc và các model đang ở local
+Browser: demo/chat.js
+Mic / upload · hội thoại · feedback · phát voice
+HTTP server: demo.py + ChatService
+Jobs/polling → chat worker · Voice → Kokoro local / ai33 API
+JSONL IPC: local_chat_process.py
+Một worker riêng; event stage / speech / chunk / done
+Worker: local_chat_worker.py
+Whisper small.en · CPU INT8
+Audio → English text + word times
+BERT bỏ qua; fluency từ timing
+Phát âm · CPU
+B: CTC posterior + CMU variants
+CROTTC-IF: phone sequence (thử nghiệm)
+Một Qwen3-0.6B dùng chung
+Base: dialogue; live CUDA BF16
+LoRA grammar: 2 task viết lại
+LoRA feedback: nhánh legacy
+Adapter bật/tắt theo request
+Hình 1. Kiến trúc hiện tại: ASR tạo chữ; acoustic branch giữ bằng chứng âm; Qwen sinh text; TTS tạo voice.
+Nguồn: registry, speech engine, worker và TTS registry [L01], [L02].
+Vai trò
+Artifact local
+Trạng thái / thiết bị
+ASR mặc định
+models/pretrained/faster-whisper-small.en
+CPU INT8, 2 threads, beam 5; chưa
+fine-tune local.
+ASR đối chứng
+models/pretrained/wav2vec2-base-960h
+runs/asr-vietnamese-english-v1/best_checkpoint
+Base và thích ứng Việt; CPU FP32 trong so
+sánh mới.
+Phoneme mặc định
+runs/cascade-l2arctic-plus-seed42/B/best_checkpoint
+B Plus; CTC phone; CPU; best step 200.
+Phoneme thử nghiệm
+.tools/crottc/bundle
+CROTTC-IF + WavLM Large; process CPU
+FP32 riêng.
+Text backbone
+models/pretrained/Qwen3-0.6B
+Reply base; live job cuda:0 BF16.
+Grammar LoRA
+runs/grammar-qwen3-06b-wi-jfleg-v1/adapter
+Đã train; grammar_corrected và natural.
+Feedback LoRA
+runs/cascade-l2arctic-plus-seed42/Q/adapter
+Đã train; coach legacy không gọi khi có
+assessment.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 6
-3. Model nào phụ trách việc gì?
-Vai trò / model ID
-Checkpoint hoặc adapter hiện tại
-Đầu vào → đầu ra
-ASR
-wav2vec2-vi-en-v1
-runs/asr-vietnamese-english-v1/best_checkpoint
-Waveform → transcript chữ + word
-intervals
-Phoneme MDD
-cascade-B
-runs/cascade-l2arctic-plus-seed42/B/best_checkpoint
-Audio → CTC phone tokens + log
-probabilities
-Hội thoại/format
-qwen-base
-models/pretrained/Qwen3-0.6B
-Text + history → normalized text hoặc reply
-Sửa câu
-qwen-grammar
-Qwen base + runs/grammar-qwen3-06b-wi-jfleg-v1/ad
-apter
-Text → JSON grammar_corrected; text →
-JSON natural
-Coach legacy
-qwen-trained
-Qwen base + runs/cascade-l2arctic-plus-seed42/Q/ad
-apter
-Sentence + annotation_info → feedback
-JSON theo word key
-Từ điển/scorer
-CMUdict đã cố định hash + code deterministic
-Reference text + posterior → assessment
-và gợi ý
-Nguồn: [P03–P07], [P09].
-Lựa chọn checkpoint và readiness
-• ASR ưu tiên run completed, validation_improved=true, có trained_sha256 và weights. Engine kiểm SHA khi
-nạp. Nếu chưa đủ điều kiện, registry chọn wav2vec2-base-960h pretrained.
-• Phoneme model ở chat là cascade-B Plus best checkpoint, step 200. Không phải B cũ của
-windows-notebook-seed42; code yêu cầu completed.json của run B.
-• Grammar adapter cần completed, dataset_kind đúng, demo_validation passed, adapter SHA khớp provenance
-và file tồn tại. Worker kiểm SHA adapter trước khi nạp.
-• Feedback adapter được công bố sẵn sàng nếu base/adapter files và provenance scientific_training completed
-có mặt; các đường submit/load còn kiểm checksum. Có sẵn không làm thay đổi điều kiện gọi coach legacy.
-UI selection khác model thực trả lời
-Server khai báo default_model_id=qwen-base, nhưng frontend khởi tạo state.model=qwen-trained, sau đó khôi
-phục lựa chọn phiên nếu có; lựa chọn không ready mới fallback base. Vì vậy nhãn “Fine-tuned” trên UI có thể là
-coach được chọn, không phải model đang sinh câu đối thoại. Hàm dialogue_request luôn đặt
-model_id=qwen-base cho speech chat.
-Nhánh legacy coach chỉ gọi Qwen nếu có khác biệt, có reference và không có key assessment. analyze
-hiện luôn trả assessment_fields với key này. Vì thế luồng speech hiện tại bỏ qua lời gọi coach phát âm
-Q0/Q1; coaching mặc định unavailable. metadata coaching_model_id vẫn có thể ghi qwen-trained theo lựa
-chọn. Đây là mô tả code hiện tại, không phải lỗi đã được sửa trong lượt làm tài liệu.
+Vai trò
+Artifact local
+Trạng thái / thiết bị
+Masked LM
+models/pretrained/bert-base-uncased
+Đã tải; nhánh ASR cũ; Whisper path không
+nạp.
+TTS mặc định
+models/pretrained/kokoro-82m + .venv-kokoro
+Kokoro ONNX; CUDAExecutionProvider đã
+kiểm thử.
+Projector
+runs/projector-l2arctic-plus-seed42/alignment
+P0 hoàn tất; ngoài đường chat web.
+Nguồn [L01–L04], [L10]. Ready qua metadata khác với model được gọi ở từng job.
+Revision cố định: Whisper d 1 d 751 a 5 f 8271 d 482 d 14 ca 55 d 9 e 2 deeebbae 577 f; Qwen c 1899 de 289 a
+04 d 12100 db 370 d 81485 cdf 75 e 47 ca; CROTTC 9149 e 5107 b 3332 b 9 aa 3 f 5573 f 6328 a 4 e 312006 ad;
+BERT 86 b 5 e 0934494 bd 15 c 9632 b 12 f 734 a 8 a 67 f 723594. Hash trọng số được lưu ở
+setup/training/benchmark manifests; báo cáo không thay weights.
+Qwen 2-Audio chỉ có metadata/tokenizer/config, thiếu weight shards để inference. Qwen3-0.6 B là model
+text. Projector là nhánh ghép audio embeddings; current cascade chưa phải audio language model
+end-to-end.
+demo/chat.js                         mic/upload, polling, collapse, voice
+src/mdd/demo_chat.py                  jobs, revision, voice, validation
+src/mdd/demo_model_registry.py        ASR / pronunciation / adapters
+scripts/local_chat_process.py        persistent JSONL worker
+scripts/local_chat_worker.py         Qwen load / generate / adapters
+scripts/local_speech_engine.py       orchestration ASR → reply → feedback
+scripts/whisper_asr.py               offline faster-whisper wrapper
+src/mdd/pronunciation_assessment.py   CTC posterior / CMU variants
+src/mdd/phone_sequence_assessment.py  CROTTC sequence review
+src/mdd/speech_fluency.py             descriptive word-time measures
+scripts/kokoro_tts.py                local TTS
+scripts/ai33_tts.py                  optional API TTS
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 7
-4. Workflow một lượt nói
+4. Dữ liệu, nhãn và ranh giới test
+Nguồn
+Nhãn / tác vụ
+Cách dùng và giới hạn
+L 2-ARCTIC [R-L2ARCTI
+C]
+3.599 câu có phone annotation trong bản
+local.
+24 speaker, 6 L 1, 4 người Việt. Phần WAV đầy đủ
+không tự có gold MDD.
+L 2-Arctic-plus [R-ALM]
+Reference, phone annotation và feedback.
+Phone từ L 2-ARCTIC; train feedback do GPT-4 o tạo;
+không phải tất cả được chuyên gia duyệt.
+W&I+LOCNESS [R-WI]
+Bài viết người học và sửa grammar.
+Train grammar LoRA; domain bài viết khác transcript
+hội thoại.
+JFLEG [R-JFLEG]
+Câu và nhiều bản sửa fluency văn bản.
+Task natural; giữ official test 747 câu.
+SpeechOcean762
+[R-SPEECHOCEAN]
+5.000 câu, 250 người giọng Trung, 5
+chuyên gia.
+External test 2.500 câu; khác rubric/domain L
+2-ARCTIC.
+SAA [R-SAA]
+Người nhiều L 1 đọc đoạn Stella.
+4 người Việt ở probe ASR; cùng một prompt.
+3 bản người dùng
+Câu định đọc được người dùng cung cấp.
+Development; không nhãn lỗi phone chuyên gia.
+Nguồn corpus chính thức và manifests [L03–L09].
+Protocol Plus
+Train/validation/test: 2.249/450/900 utterances, tách speaker/utterance. Validation HJK/LXC/PNV; test
+NJS/TLV/TNI/TXHC/YKWK/ZHAA, mỗi người 150 câu. HQTV và THV cung cấp 300 câu train Việt; PNV validation
+Việt, TLV test Việt. Câu đọc có thể trùng giữa speaker; không phải prompt-disjoint.
+Protocol v1 cũ dùng HQTV test, Plus dùng TLV. Có 750/900 audio test Plus từng ở source train v1; A/B Plus đã
+train lại. Không so F1 70,85% trên HQTV với 49,30% trên sáu speaker để kết luận model giảm chất lượng.
+ASR test và calibration
+111 TLV ở so sánh ASR được kiểm tách audio/speaker/prompt khỏi train/validation của lượt fine-tune ASR chữ.
+Đây là previously observed held-out, chưa phải test kín mới thu. Bốn SAA cùng prompt và ba bản người dùng là
+nhóm bổ sung; không trộn để tuyên bố tổng quát mọi giọng Việt. Overlap với pretraining checkpoint công bố chưa
+biết.
+Calibration phát âm fit 300 câu HJK/LXC, holdout 150 PNV. PNV không fit ngưỡng nhưng đã tham gia chọn
+checkpoint B trước đó; chưa độc lập hoàn toàn với quy trình chọn model.
+
+MDD  /  Pipeline hiện tại
+Kiến trúc · Model · Workflow  |  23/10/2026
+Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
+8
+5. Đã train gì và trọng số nào thay đổi?
+Lượt train
+Supervision / loss
+Trọng số thay đổi
+Artifact hoàn tất
+MDD A
+Audio → perceived phones; CTC.
+CNN frozen; Transformer + phone
+head.
+2.000 updates; source baseline.
+MDD B
+300 câu Việt + source replay
+50%; CTC.
+Best A → Transformer + phone
+head.
+400 updates; best Plus step 200.
+MDD C v1
+Source-only tiếp tục; cùng
+budget B.
+Best A → Transformer + phone
+head.
+400 updates v1; chưa C Plus
+hoàn tất.
+ASR Việt
+2.445 clip, gồm 611 source
+replay; char CTC.
+CNN frozen; Transformer + char
+head.
+2 epochs, 1.223 updates; best
+1.050.
+Qwen feedback
+2.249 text phone/error →
+feedback; assistant CE.
+QLoRA rank 8, alpha 16,
+q_proj/v_proj; base frozen.
+3 epochs, 846 steps; best 800;
+val loss 0,378810.
+Qwen grammar
+28.501 records grammar/natural;
+assistant CE.
+Adapter riêng rank 8, alpha 16,
+q_proj/v_proj.
+2 epochs, 3.564 steps; best
+3.500; val loss 0,184105.
+Projector P0
+Audio features → transcript;
+autoregressive CE.
+2 Linear + GELU; encoder/Qwen
+frozen.
+1 epoch, 282 updates; P1 chưa
+train.
+Nguồn provenance/config/completed thực chạy [L03]. Báo cáo training đồng hành trình bày optimizer, learning curves và từng protocol.
+Mỗi adapter Qwen có 1.146.880 tham số trainable, dropout 0,05. Hai adapter là hai tác vụ; chưa có adapter hội
+thoại tự do được train. Loss feedback thấp không tự chứng minh hội thoại tốt hoặc chấm âm đúng. LoRA cập
+nhật các ma trận thích ứng trong Transformer, không toàn bộ base weights [R-LORA], [R-QLORA].
+Vai trò Projector
+Projector ánh xạ hidden vectors wav2vec2 768 chiều qua Linear → GELU → Linear thành embedding Qwen
+1.024 chiều, ghép với text embeddings để Qwen sinh chữ. Ánh xạ ngẫu nhiên phải được học alignment P0. P1
+dự kiến học feedback với Projector + Qwen LoRA nhưng chưa có checkpoint hoàn tất. Ghép P0 với adapter vốn
+train trên text-phone là transfer thử nghiệm, không phải đã train P1.
+Whisper, BERT, CROTTC-IF và Kokoro chỉ tải checkpoint, chưa fine-tune local. Lượng tử hóa inference và thêm
+wrapper không phải training. Biên soạn báo cáo không khởi động lượt train mới.
+
+MDD  /  Pipeline hiện tại
+Kiến trúc · Model · Workflow  |  23/10/2026
+Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
+9
+6. Workflow từ bản thu đến reply và collapse
 1. Nhận audio hợp lệ
 PCM16 WAV mono 16 kHz, 0,25–30 giây → tạo job
-2. wav2vec2 ASR trên CPU
-Sinh raw transcript và khoảng thời gian từ
-3. wav2vec2 cascade-B + assessment trên CPU
-Posterior + reference CMU → assessment → uncertain / gợi ý
-4. Qwen base chuẩn hóa hình thức
-Chỉ hội thoại tự do; lexical guard giữ nội dung đã nói
+2. Whisper small.en CPU INT8
+Sinh transcript + word times; không đưa đáp án vào ASR
+3. Reference + fluency + acoustic evidence
+B đồng bộ: CTC/CMU; CRO tùy chọn: bắt đầu chấm âm nền
+4. Giữ nội dung transcript / câu user xác nhận
+Whisper path bỏ BERT recovery và Qwen normalization
 5. Qwen base sinh câu trả lời
 Sampling hội thoại → lọc lặp / kiểm tra policy / retry tối đa 1
 6. Công bố reply_ready
 Câu trả lời cố định; UI/voice có thể bắt đầu trong khi feedback chờ
 7. Grammar feedback cho hội thoại tự do
 Hai lượt greedy: grammar_corrected rồi natural; guard từng trường
-8. Kết thúc job
-Luồng assessment mới bỏ qua legacy coach → ready / cancelled / error
-Hình 2. Thứ tự thực thi lượt nói trong current speech path. Các bước ASR và phoneme chạy tuần tự; Qwen reply được công bố
-trước feedback viết lại.
-Nguồn: LocalSpeechEngine.run/analyze/_respond; ChatService.submit_speech [P02], [P04], [P05].
-Từ audio đến job
-Browser thu mic hoặc giải mã file upload, trộn mono và resample về 16 kHz, đóng gói PCM16 WAV rồi gửi
-base64. API chat chấp nhận WAV không nén dài 0,25–30 giây, một kênh, sample width 2 bytes; decoded audio
-tối đa 1 MiB. HTTP body chat speech tối đa 2 MiB. Các audio chunks khi thu chỉ lưu ở browser; không truyền mic
-liên tục qua mạng.
-POST /api/chat/speech gửi model_id, request_id, audio_base64, history cùng topic_id hoặc practice_id. Backend
-kiểm role/history, chọn reference, kiểm model ready/hash và giữ một generation slot. Nếu đang có lượt khác sẽ
-trả 409 chat_busy. Request_id cùng nội dung trả lại job cũ; cùng ID nhưng đổi nội dung bị từ chối.
-
-MDD  /  Pipeline hiện tại
-Kiến trúc · Model · Workflow  |  23/10/2026
-Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
-8
-Hội thoại và feedback hoàn tất ở hai mốc
-Sau acoustic analysis, normalization của Qwen base chạy trước dialogue khi không có reference đọc cố định.
-Dialogue nhận user-confirmed text hoặc bản normalization qua lexical guard; grammar rewrite chưa chạy ở bước
-này. Reply được lọc lặp và policy rồi mới phát hành; khi reply_ready=true, text/spoken_response được chốt. Tiếp
-theo worker mới sinh grammar/natural feedback trên cùng lượt.
-Mốc
-Trạng thái thường thấy
-UI có thể làm gì
-Nhận/đang phân tích audio
-transcribing
-Giữ loading; chưa coi đã có câu trả lời
-Chuẩn hóa hình thức
-correcting
-Có acoustic snapshot nhưng reply chưa ready
-Sinh đối thoại
-generating
-Polling nhận text từng phần; chưa tự đọc phần
-chưa chốt
-Reply đã chốt
-speech.reply_ready=true, job có thể
-chưa ready
-Hiện đầy đủ reply; có thể bắt đầu voice
-Sinh grammar feedback
-correcting; rewrite pending
-Reply vẫn giữ nguyên; feedback trong collapse cập
-nhật sau
-Xong/hủy/lỗi
-ready / cancelled / error
-Chốt trạng thái; không tạo thêm lượt để bổ sung
-feedback
-Tên stage correcting có thể xuất hiện cả trước lẫn sau generating vì dùng cho normalization và rewrite. Không thể
-chỉ nhìn tên stage để kết luận hệ thống đang sửa grammar trước reply. Metadata cuối có
-feedback_order=reply_first; các timing riêng ghi audio_decode, ASR, phoneme, assessment, rewrite và tổng lượt.
-
-MDD  /  Pipeline hiện tại
-Kiến trúc · Model · Workflow  |  23/10/2026
-Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
-9
-5. Nhánh âm thanh và chấm phát âm
-Hai model âm thanh độc lập
-ASR dùng Wav2Vec2ForCTC với head ký tự từ wav2vec2-base-960h đã thích ứng Việt. Argmax CTC và
-processor decode tạo raw transcript; frame IDs còn dùng ước lượng word intervals. Phoneme B dùng head 83
-tokens trên backbone wav2vec2-base, trả phone sequence và toàn ma trận log_probs. Cả hai chạy CPU, eval và
-inference_mode; không có Qwen hay Projector trực tiếp nhận audio trong luồng này.
-Ở implementation hiện tại, analyze decode audio để chạy ASR; posterior_evidence đi qua LocalInference và đọc
-lại cùng audio bytes để chạy B. Đây là hai lần chuẩn bị tín hiệu cho hai model, không phải hai bản thu khác nhau.
-Khi chỉ sửa reference, cả hai bước này được bỏ qua nhờ posterior cache.
-Reference và CMUdict
-Chế độ
-Nguồn câu đối chiếu
-Cách dùng
-Hội thoại tự do
-Raw ASR transcript ban đầu
-Tạo canonical phones và gợi ý tạm tính; có thể bị ảnh
-hưởng ASR nghe sai
-Đọc câu mẫu
-Câu đã chọn qua practice_id
-Reference được cung cấp từ server; không lấy grammar
-rewrite thay thế
-Người dùng sửa câu
-Text đã xác nhận cho đúng
-recording/job
-Reassess cùng acoustic evidence và cập nhật provenance
-Grammar/natural
-suggestion
-Một đề xuất viết lại riêng
-Không tự trở thành reference phát âm của audio cũ
-dictionary_reference và target_words tra âm chuẩn trong CMUdict; scorer mới xét các biến thể phát âm, giữ
-metadata stress cho IPA/nghe mẫu nhưng bỏ stress trong chuỗi phone so sánh. Từ ngoài từ điển hoặc alignment
-không đủ sẽ unavailable/uncertain; không tự gán âm của từ bên cạnh. Draft spelling/candidate chỉ là gợi ý, không
-phải gold reference.
-Assessment mới khác decoder edit-distance baseline
-Current chat scorer là ctc_variant_posterior_margin_v1: alignment CTC với các biến thể CMU và margin giữa
-posterior phone tham chiếu với phone cạnh tranh. raw_comparison từ edit distance vẫn tồn tại để diagnostic.
-Scorer này tách với scorer nghiên cứu frozen trong báo cáo train; không phải triển khai đầy đủ công thức
-CTC-GOP công bố.
-Calibration full-validation hiện ineligible, lý do không có cặp ngưỡng đạt policy fit; accept/error
-thresholds=null. Runtime không bật quyết định calibrated đúng/sai. UI vẫn có thể hiện sound candidates
-tạm tính từ khác biệt greedy/biến thể CMU, nhưng không biến chúng thành lỗi đã được xác nhận. Không có
-gợi ý không có nghĩa phát âm đúng.
-Các lớp kiểm tra calibration đối chiếu method, checkpoint/vocab/dictionary hash, split, selection và tiêu chí
-validation. Flag verified do browser gửi không đủ bật chấm. FPR/FNR/coverage và abstention là những khái niệm
-của phép đánh giá scorer, không được tự đổi thành confidence xác suất cho một từ.
-Nguồn: [P04], [P07–P09].
+8. Nhận CROTTC nền nếu có → kết thúc
+Timeout âm không mất reply; coach legacy bỏ qua → ready
+Hình 2. Reply công bố trước grammar. CROTTC có thể chạy nền; B mặc định vẫn chấm âm trước reply.
+Nguồn LocalSpeechEngine.analyze/run/_respond/_finish_pronunciation [L01].
+Browser thu mic/đọc file, trộn mono, resample 16 kHz và đóng gói PCM 16 WAV. API nhận audio 0,25–30 giây,
+một kênh, sample width 2 bytes; audio decoded tối đa 1 MiB, body speech tối đa 2 MiB. Mic chunks giữ ở
+browser, không stream liên tục đến model.
+POST /api/chat/speech trả job cho polling. Whisper chỉ nhận waveform, không nhận reference/history/đáp án; trả
+raw text và word intervals. BERT recovery và Qwen normalization bị tắt khi dùng Whisper. Bước chuẩn hóa số
+đơn giản giữ giá trị phục vụ từ điển, không dựng lại nội dung câu.
+• B mặc định: posterior_evidence đồng bộ sau ASR, CMU variants và scorer chạy trước Qwen reply.
+• CROTTC tùy chọn với Whisper: inference âm CPU ở thread/process riêng; Qwen GPU sinh reply, grammar xử
+lý tiếp rồi nhận kết quả âm. Lỗi/timeout không làm mất reply.
+• Fluency lấy transcript và word times của bản thu ban đầu; không lấy câu grammar để tính lại tốc độ nói.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 10
-6. Qwen: routing, grammar và thiết bị
-Một backbone Qwen3-0.6B
-Cache trong worker; tải model theo runtime policy
-qwen-base
-disable_adapter() nếu PEFT đã nạp
-Normalize transcript
-Sinh dialogue
-Fallback rewrite
-qwen-grammar
-Bật LoRA grammar
-Grammar correction
-Natural wording
-Hai generation riêng
-qwen-trained
-Bật LoRA cascade feedback
-Coach phát âm legacy
-Không gọi trong speech path có
-assessment
-Chọn model ở UI không đổi backbone reply speech
-Trong speech chat, dialogue luôn qwen-base. Metadata coaching_model_id không tự chứng minh adapter đã được gọi.
-Hình 3. Một backbone Qwen dùng chung, tắt/bật LoRA theo tác vụ. Nhánh feedback nét đứt là code legacy, không được gọi trong
-current speech path có assessment.
-Nguồn: QwenChatEngine.load/generate; dialogue_request; grammar_inference.rewrite [P04–P06], [P10].
-Normalization không phải sửa grammar
-Qwen base đề xuất normalized_text để thêm dấu câu/viết hoa và một số apostrophe/compound đã định nghĩa.
-Lexical guard kiểm chuỗi từ, số, phủ định và dấu hiệu câu hỏi. Đề xuất sửa tense, đoán từ OOV, thêm chủ ngữ
-hoặc paraphrase bị từ chối. Invalid JSON, output dở hoặc model failure quay về format_rules. Raw transcript và
-pronunciation reference vẫn giữ riêng.
-Dialogue và hai task grammar
-Speech dialogue luôn dùng base Qwen, enable_thinking=False; profile conversation bật sampling
-temperature=0,7, top_p=0,8, top_k=20, min_p=0. ReplyWithoutEcho lọc nhắc lại lời người học/câu trước;
-GroundedReply xử lý tính phù hợp của phản hồi và state café có giới hạn. Nếu không có đóng góp dùng được
-hoặc policy cần retry, model thử thêm tối đa một lần. Fallback được ghi nguồn riêng.
-Sau reply, grammar_inference gọi qwen-grammar lần lượt cho task grammar_corrected và natural, mỗi task
-JSON một trường, greedy. Parser task và lexical guard kiểm kết quả độc lập. Lỗi một task ghi unavailable cho
-task đó, không coi text giữ nguyên do lỗi là một lần sửa thành công. Nếu grammar adapter không ready, workflow
-dùng base rewrite contract qua sentence_rewrite.
+Qwen base nhận transcript hoặc user-confirmed text cùng history thật, sinh 1–2 câu tiếng Anh. Prompt yêu cầu
+bám lượt cuối, không lặp, không sửa grammar trong reply. Echo filter, policy, một lần retry và fallback đều có
+nguồn riêng. Câu mở đầu soạn sẵn; café có state/rules hỗ trợ, không gán toàn bộ hành vi đó cho model.
+Mốc
+Hành vi
+Ý nghĩa
+ASR
+transcribing; text + word times.
+Chưa có reply.
+Reply
+generating → reply_ready=true.
+Text đã chốt; voice có thể dùng.
+Grammar
+Greedy riêng grammar_corrected và natural.
+Cập nhật collapse, không đổi reference âm.
+CRO pending
+Join sau reply/grammar; có timeout.
+Giữ reply nếu phần âm unavailable.
+Cuối lượt
+ready / cancelled / error.
+Không tự train hoặc gửi lại TTS khi lỗi.
+reply_ready khác voice đã phát: TTS còn tổng hợp, tải/buffer/play. Câu mở đầu bật auto-read đợi voice sẵn rồi
+mới hiện và phát. Reply hiển thị toàn câu, highlight khi đọc; feedback đến sau không thay voice text.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 11
-Grammar aggregate được tính lại sau khi loại trường không dùng được, kèm field_reasons, partial và
-feedback_state: unavailable, partial, suggestions_available hoặc no_change_suggested. Một câu bị model chép
-lại chỉ có nghĩa không đề xuất thay đổi; không phải kết luận câu đúng grammar, đúng nghĩa hoặc tự nhiên.
-Tác vụ
-Model / adapter
-Generation budget trong code
-Chuẩn hóa transcript
-qwen-base; greedy
-192 tokens; timeout 35 giây
-Dialogue thường
-qwen-base; sampling
-160 tokens; timeout 75 giây
-Dialogue state café
-qwen-base; sampling
-96 tokens; timeout 45 giây
-Retry dialogue
-qwen-base; cùng profile
-96 tokens; timeout 35 giây
-Grammar / natural
-qwen-grammar; greedy
-320 tokens; 512 nếu transcript >40 từ; mỗi task 
-timeout 45 giây
-Coach legacy nếu đủ điều kiện
-Model_id đã chọn; structured greedy
-512 tokens; timeout 110 giây
-Đây là inference budgets; khác max_length/epochs/QLoRA trong tài liệu training [P04–P06].
-Một worker, cache model, chuyển adapter
-QwenChatEngine giữ model và tokenizer đã nạp, cache adapter theo identity/mtime/size/SHA. Với request
-qwen-base, disable_adapter() khi base đã bọc PEFT. Grammar bật adapter grammar; feedback legacy bật
-adapter chat. Model inference dùng eval, requires_grad=False. Context giới hạn min(4.096, model
-max_position_embeddings), bao gồm budget output; khi cần bỏ opener assistant hoặc các cặp history cũ, giữ
-system và lượt hiện tại.
-Policy/runtime
-Cách thực thi
-Phạm vi fallback
-cpu
-FP32, eager attention
-Dùng khi chỉ định hoặc auto không đủ điều
-kiện CUDA
-cuda
-cuda:0; BF16 nếu hỗ trợ, nếu không FP16; SDPA
-Chỉ định cuda mà không dùng được sẽ báo lỗi
-auto (mặc định)
-Chọn CUDA nếu available và free memory ≥2 GiB;
-nếu không CPU
-Base load bị CUDA OOM có nhánh fallback
-CPU
-Acoustic
-ASR và phoneme model luôn CPU
-Policy Qwen không tự chuyển chúng sang GPU
-Inference Qwen hiện không dùng NF4: base được nạp regular BF16/FP16 trên CUDA hoặc FP32 trên CPU
-rồi gắn LoRA. NF4/QLoRA thuộc recipe train. GET config trả device=auto chỉ là policy;
-qwen_runtime.device/dtype/attention trong metadata lượt sinh mới cho biết placement thực. Không khẳng
-định generation OOM hoặc adapter-load OOM cũng có cùng fallback.
+7. Phát âm, fluency và xác nhận câu nói
+Reference mặc định là text Whisper nghe được; câu đọc cố định lấy từ server. Người học sửa text trong collapse
+khi nghe nhầm. Grammar/natural suggestion giữ riêng, không tự dùng để kết luận audio cũ sai những từ chưa
+nói. Reference sai có thể làm alignment và cảnh báo sai.
+B dùng ctc_variant_posterior_margin_v 1 với CMUdict variants; greedy edit comparison còn dùng gợi ý. CROTTC
+xuất perceived phones đã decode; không gộp phone lặp như CTC. Sequence scorer căn chỉnh edit-cost với CMU
+variants, không mượn ngưỡng posterior của B. Wrapper checkpoint công bố không có frame posterior hoặc
+phone timestamps tin cậy [R-CROTTC], [R-CMU].
+Calibration B ineligible: không ngưỡng nào đạt đồng thời FPR≤10%, FNR≤20%, coverage≥50% và số quyết
+định tối thiểu. Accept/error thresholds=null. Cả B và CROTTC chưa có pass/fail calibrated trong chat; sound
+candidates là gợi ý xem lại, không phải nhãn chuyên gia.
+Fluency measure
+Công thức / quy ước
+Giới hạn
+Recording rate
+60 × số từ / thời lượng bản thu.
+Tính cả khoảng đầu/cuối.
+Speech-window rate
+60 × số từ / (cuối từ cuối − đầu từ đầu).
+Phụ thuộc word timestamps.
+Articulation duration
+Speech window trừ internal gaps≥0,25 s;
+rate=60×số từ/duration này.
+Không phải forced alignment/silence gold.
+Pause / filler
+Gap count, tổng, dài nhất; filler/từ lặp trong
+transcript.
+ASR có thể bỏ filler; lặp có thể có chủ đích.
+Nguồn speech_fluency.py [L01]. Không có điểm0–100, IELTS, stress/intonation hoặc human-calibrated fluency.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 12
-7. Khi sửa câu ASR hoặc luyện câu mẫu
 POST /api/chat/reference
 Cùng job_id; user xác nhận câu thực sự đã nói
-Posterior cache phía server
-Audio evidence ban đầu
-Kèm checkpoint/vocab hash
+Private evidence cache
+B: posterior; CRO: phones
+Kèm model/revision/hash
 Reassess theo text mới
 Không decode audio, chạy ASR hoặc phoneme model lại
 So spoken_text_key
@@ -502,379 +475,441 @@ Giữ audio evidence
 Regenerate bằng text đã xác nhận
 Qwen base trả lời lại → grammar rewrite
 Cùng lượt; không tạo bản thu mới
-Hình 4. Sửa reference: tái dùng acoustic evidence và chỉ regenerate reply nếu nội dung từ thay đổi.
-Nguồn: ChatService.reference; reassess_reference; LocalSpeechEngine.regenerate [P02], [P08].
-Hai trường hợp sửa reference
-Thay đổi người dùng
-Xử lý acoustic
-Xử lý reply / voice
-Chỉ case, dấu câu hoặc
-khoảng trắng
-Reassess và ghi reference_source=user_conf
-irmed
-Giữ reply và voice trả lời; sentence voice có thể
-reset nếu exact text đổi; không gọi Qwen thêm
-Thay đổi nội dung từ
-Reassess bằng posterior cache, không
-ASR/B lại
-generation_revision++; xóa reply/voice cũ, sinh
-lại bằng text đã xác nhận
-Từ mới ngoài CMUdict
-Giữ nội dung cho hội thoại; pronunciation
-unavailable khi thiếu reference
-Không tự invent phones; feedback cũ không
-được giữ như còn hợp lệ
-POST /api/chat/reference cần job ready còn trong phiên. Server so spoken_text_key để quyết định có đổi lời đã
-nói hay không. Khi đổi từ, reply revision cũ được lưu giới hạn, voice IDs cũ bị vô hiệu, tạo cancel event/revision
-mới và worker regenerate trên cùng job. Các callback kiểm revision để output cũ không ghi đè mới.
-Regenerate chỉ nhận text đã được server xác nhận và context trước lượt sửa. Worker không decode audio,
-không chạy ASR hoặc phoneme B. Base Qwen trả lời theo nghĩa mới rồi grammar rewrite; ứng dụng chèn “Sorry
-for the misunderstanding.” một lần, được ghi là nội dung ứng dụng, không gán thành câu model tự sinh.
+Hình 3. Sửa text tái dùng bằng chứng âm gốc; chỉ regenerate reply khi nội dung từ thay đổi.
+Nguồn chat_reference.py, acoustic_evidence.py và ChatService.reference [L01].
+Private evidence theo job: B là log_probs nén + inventory, CROTTC là phone sequence + model/revision/hash.
+Public polling bỏ _acoustic_evidence. Sửa reference không chạy lại ASR hoặc acoustic model. Chỉ đổi dấu
+câu/hoa thường giữ reply/voice; đổi chuỗi từ tăng revision, sinh reply mới kèm lời xin lỗi do app thêm. Fluency giữ
+measured_transcript ban đầu.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 13
-Cache để đối chiếu lại
-pack_evidence lưu log_probs float32 nén zlib/base64, id_to_phone, blank_id, duration, checkpoint/vocabulary
-SHA trong _acoustic_evidence của ChatJob memory phía server. Giới hạn frame/vocabulary và kích thước được
-kiểm tra khi unpack. poll bỏ các key bắt đầu bằng “_”, nên ma trận posterior riêng không nằm trong public job
-snapshot. Đây không phải database lưu posterior lâu dài qua restart.
-Các trường text phải giữ tách biệt
-Trường
-Ý nghĩa
-Được dùng ở đâu
-transcript
-Kết quả ASR raw ban đầu
-Lưu bằng chứng; so raw/normalized; không
-ghi đè khi sửa grammar
-reference_text / reference_source
-Câu dùng để đối chiếu phát âm và
-nguồn
-CMU + acoustic assessment;
-reading_prompt/asr/user_confirmed
-conversation_text / conversation_sourc
-e
-Nội dung cho đối thoại
-Ưu tiên user-confirmed, rồi normalized có
-guard, rồi raw ASR
-rewrite.grammar_corrected / natural
-Đề xuất học ngôn ngữ
-Hiển thị/nghe theo thao tác; không tự đổi
-reference hoặc history
-job.text / spoken_response
-Câu trả lời của bot đã chốt
-UI và voice reply_only
-Chế độ đọc câu
-Với practice_id, server lấy câu từ PRACTICE_PROMPTS làm reference. Acoustic engine vẫn nhận dạng ASR
-nhưng đối chiếu dùng câu được chọn; bỏ normalization và grammar rewrite của nhánh hội thoại không có
-reference. dialogue_request nhận ngữ cảnh “I just practised reading…”. Điều này khác lấy câu Qwen đã sửa để
-chấm lại chính audio cũ.
-Code còn nhận correction_job_id cho luyện một completion-only sentence đã sẵn sàng, cùng model/topic và có
-server-owned source job. Luồng grammar_and_natural hiện không tự tạo completion-only output. Vì vậy không
-nên mô tả mọi grammar suggestion hiện đều là target luyện lại hợp lệ qua cơ chế legacy này.
+8. So sánh ASR: base, fine-tuned và Whisper
+Hoàn tất 118 audio, khoảng 617,55 giây:111 TLV,4 SAA và 3 người dùng. Cùng audio cho mọi model; không đưa
+reference/history vào decoder, không BERT/Qwen hậu xử lý để tăng điểm.
+WER=(substitutions+deletions+insertions)/số từ reference; thấp hơn tốt hơn.
+Nhóm
+Base WER(%)
+Fine-tuned WER(%)
+Whisper WER(%)
+TLV:111
+42.62
+37.63
+27.76
+SAA:4
+33.33
+30.80
+11.23
+User:3
+52.50
+53.75
+26.25
+Nguồn metrics.csv/results.json [L04]. Strict chuẩn hóa case/punctuation đồng đều; giữ cách viết số.
+TLV:1.023 từ
+Base
+Fine-tuned
+Whisper
+Word edits
+436
+385
+284
+Câu exact /111
+3
+4
+17
+Mean ASR giây
+0.559
+0.447
+2.363
+Latency chỉ inference; không gộp model load, Qwen hay TTS.
+Fine-tune giảm 51 word edits trên TLV (436→385), WER giảm 4,99 điểm phần trăm. Whisper còn 284 edits, hơn
+bản fine-tuned 101 edits;61 câu tốt hơn,17 xấu hơn,33 bằng nhau. Whisper mean 2,363 s so 0,447 s của
+wav2vec2 fine-tuned. Chọn Whisper ưu tiên transcript, không vì nó nhanh hơn.
+Provenance ASR lịch sử GPU BF16 ghi 43,01%→37,93%. So sánh mới CPU FP32 dùng cùng evaluator ghi
+42,62%→37,63%. Đây là phép đo khác execution/scoring; không sửa ngược số lịch sử để ép khớp.
+Số và các ca thất bại
+Secondary metric chuẩn hóa số tiếng Anh đồng đều cho mọi model: Whisper WER 27,65% TLV,7,61%
+SAA,23,38% user. Strict WER vẫn là chỉ số chính. Không chọn chuẩn hóa có lợi riêng cho một model.
+Trong benchmark, Whisper nghe “End of the road for some players” thành “And also load for some players.” và
+“Zero five eight three” thành “I don't know what to do.” Câu trôi chảy vẫn có thể sai ý. Live job khác có output road
+tương tự nhưng không trùng từng ký tự. Người học cần xác nhận câu hoặc nói lại khi chưa hiểu.
+So sánh triển khai: wav2vec2 CPU FP32 greedy với Whisper CPU INT8 beam 5, khác kiến
+trúc/pretraining/decoder. Cặp base→fine-tuned wav2vec2 đo tác động thích ứng trong cùng họ model. Chưa
+đủ để kết luận mọi wav2vec2 kém Whisper hoặc mọi giọng Việt đều được nhận đúng.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 14
-8. API, trạng thái UI, history và voice
-Các API của đường đối thoại
-Method / route
-Chức năng
-Điểm cần phân biệt
-GET /api/chat/config
-Model/voice readiness, topic, prompt
-và policy
-Không load/infer model chỉ để xem cấu hình
-POST /api/chat/topic
-Tạo lời mở đầu chủ đề
-Nội dung biên soạn sẵn, không phải Qwen
-generate mới
-POST /api/chat/speech
-Gửi một audio, history và mode
-HTTP 200 job snapshot; không đợi toàn
-lượt xong
-GET /api/chat/jobs/{id}
-Polling text/speech/status/metadata/voic
-e
-Không SSE hoặc WebSocket
-POST /api/chat/reference
-Xác nhận/sửa câu đối chiếu
-Reassess; chỉ regenerate khi từ thay đổi
-POST /api/chat/cancel
-Hủy lượt đang chạy
-Cooperative cancel, có thể qua cancelling
-POST /api/chat/voice
-Yêu cầu ai33 cho reply/sentence target
-hợp lệ
-Tách khỏi generation reply
-GET /api/chat/audio/{id}
-Lấy voice audio qua opaque ID
-Không trả provider/CDN URL trực tiếp
-POST /api/chat/send
-Endpoint chat text còn trong backend
-Dùng model được chọn; khác speech luôn
-base reply
-Nguồn: [P01], [P02], [P11], [P12].
-Cả speech và reference polling dùng 300 ms khi stage=generating, 700 ms ở stage khác; voice polling hiện 700
-ms. Worker có chunk events qua JSONL; browser nhận các snapshot HTTP chứa partial text chứ không nghe
-trực tiếp stdout hay token stream server. Mic chunks chỉ local; đây không phải realtime network audio stream.
-Hiển thị và lịch sử
-UI giữ nguyên reply sau reply_ready; grammar/coaching đến sau cập nhật collapse của cùng lượt. Nội dung phản
-hồi và voice không bị thay bằng câu grammar. Lịch sử chia theo model/topic; sessionStorage lưu text/metadata
-và lựa chọn, không lưu audioUrl/voice/job quyền điều khiển. Reload có thể khôi phục hội thoại để đọc nhưng
-không phục hồi job cũ cho reassess/ai33.
-history() chỉ gửi các cặp user/assistant đã có assistant ready; user text ưu tiên confirmed, rồi normalized bảo toàn
-từ, rồi raw ASR. Browser giới hạn tối đa 20 messages/12.000 ký tự bằng cách bỏ cả cặp đầu. Backend kiểm role
-xen kẽ và giới hạn riêng; model worker tiếp tục áp dụng token context budget. Rewrite không tự ghi đè lời người
-học trong history.
+9. B, CROTTC-IF và external pronunciation test
+B Plus trên đủ 900 câu
+Chỉ số
+B
+Phạm vi
+Phone precision/recall/F1
+48,77/49,84/49,30%
+Micro test 6 speaker 900 utterances.
+PER
+16,71%
+So perceived-phone gold.
+Word F1
+62,78%
+Research scorer; khác UI variant-review.
+TLV phone F1
+69,77%
+150 câu một người Việt.
+Nguồn Plus audio/B/metrics.json [L05]. A trên cùng test F1 48,38%; TLV64,80%.
+Pilot ghép cặp CROTTC
+27 audio×2 model=54 predictions hoàn tất. Chỉ số đối chiếu lỗi âm chỉ tính 24 audio có nhãn chuyên gia:4
+audio/speaker×6 test speaker, chia tầng mật độ lỗi trước inference.3 audio user chỉ quan sát output/latency. Pilot
+đã được quan sát và chọn theo nhãn để có ít/nhiều lỗi; không đại diện 900 câu hay test kín.
+24 audio chuyên gia
+B
+CROTTC-IF
+Phone F1 scorer dự án(%)
+49.47
+19.01
+PER inventory gốc(%)
+18.68
+53.72
+UI hint precision(%)
+74.12
+59.85
+UI hint recall(%)
+63.00
+82.00
+UI hint FPR(%)
+17.19
+42.97
+Tổng phoneme inference(s)
+9.408
+106.233
+Nguồn research_metrics.csv/ui_review_metrics.csv [L06].0 calibrated decisions ở cả hai; UI hints khác research word-event F1.
+CROTTC có 370 phone insertions trên 819 gold phones. Chuẩn hóa shared inventory bỏ stress/distortion,
+AX→AH: B F1/PER49,65/18,07%; CRO 19,01/53,11%. Khác inventory chưa giải thích hết chênh lệch. Không tự
+gộp phone lặp từ decoder autoregressive vì sẽ đổi hậu xử lý không được checkpoint quy định.
+B báo nhầm22/128 từ đúng; CRO55/128. CRO bắt82/100 từ lỗi so63/100 của B nhưng precision thấp hơn. Giữ B
+mặc định, CRO thử nghiệm. Bản Stella 24,16 s mất 223,75 s CROTTC offline và sinh nhiều chunk lặp; web có
+timeout 45 s cho mỗi request load/infer.
+Đối chiếu với công bố
+Bài báo CROTTC-IF công bố F1 71,77% trên L 2-ARCTIC [R-CROTTC]. Đó là evaluator/protocol tác giả, khác
+24-case local canonical-plus-insertion-slot scorer. Chưa audit trọn split training của checkpoint để loại overlap với
+pilot. Số local thấp không chứng minh bài báo sai; paper-score không chứng minh hệ thống đạt 71,77%.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 15
-Voice và dừng tác vụ
-Đường voice
-Nguồn nội dung
-Thời điểm / giới hạn
-Browser speechSynthesis
-Câu trả lời bot đã chốt
-Bắt đầu sau reply_ready; engine giọng do
-browser/OS quyết định
-ai33
-Reply đã chốt, locale/voice/speed hợp lệ
-Server gọi TTS/cache riêng; có thể dùng API
-credits
-Nghe từ / cả reference sentence
-Từ hoặc câu trong panel
-Playback chỉ khi bấm; ai33 sentence có thể
-được prefetch trước
-Stop voice
-Chỉ dừng phát tiếng
-Không tự hủy job AI
-Stop AI / End room
-Cancel event và dừng phần UI/mic/voice
-phù hợp
-Không khởi động/dừng training hoặc kill GPU
-process ngoài ứng dụng
-Word highlight dùng word boundary của browser khi có; ai33 chưa có timestamp từng từ nên highlight theo
-playhead là ước lượng. Config snapshot ai33_available=true và default_voice_provider=ai33 phản ánh khả năng
-hiện tại; lựa chọn lưu trong phiên có thể khác. Tài liệu không tạo TTS hoặc dùng credits để kiểm tra.
-Code hiện có prefetchSentenceVoice: nếu chọn ai33, tab đang hiển thị, đang ở trong room và đã có transcript,
-browser có thể yêu cầu tạo/buffer audio câu mẫu trước khi bấm nghe, kể cả auto-read đang tắt. Việc tạo audio có
-thể dùng credits; không tự phát câu mẫu. Request được dedup theo job/revision/target/voice/speed/text. Server
-có slot TTS reply và sentence riêng, cho phép một reply và một sentence được tổng hợp đồng thời; sentence có
-thể yêu cầu khi chưa job ready nhưng đã có text hợp lệ.
+External test và calibration
+B chạy 2.500 câu SpeechOcean762: phone F1 21,04%, word F1 22,89%; gold-majority-correct word FPR
+57,68%. Trong 179 câu 5 chuyên gia chấm hoàn toàn đúng,173 có flag. Đây là canonical-position baseline cũ,
+khác UI posterior/variant hiện tại và domain giọng Trung có trẻ em. Kết quả không được gán trực tiếp cho scorer
+UI mới [L07], [R-SPEECHOCEAN].
+Calibration mới không đạt policy:1.389 từ holdout có gold nhưng 0 quyết định, coverage 0%. Precision/FPR trên
+quyết định là undefined, không phải 100% đúng hay 0% sai [L08].
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 16
-9. Workspace practice và cấu trúc triển khai
-Practice là đường gọi riêng với chat
-Đường
-Input / model
-Workflow
-Luyện phát âm /api/analyze
-Audio + model trong catalog + reference
-LocalInference → phone comparison/feature
-→ analysis snapshot
-Luyện theo nhịp /api/analyze-live
-Audio prefix gửi lặp trong lúc thu, final
-flag
-So sánh prefix/câu hoặc từ; chưa phải trạng
-thái cuối khi is_final=false
-/api/reference
-Text và optional sample_id trong practice
-Ưu tiên canonical dataset khi sample/prompt
-khớp, rồi fallback CMUdict
-/api/feedback
-analysis_id do server cấp
-FeedbackService dùng snapshot; optional
-configured LLM/template và TTS
-Đối thoại AI /api/chat/*
-Audio → speech job → worker
-Feedback nằm trong job snapshot; không gọi
-/api/feedback của practice
-Nguồn: DemoApplication, app.js, FeedbackService; khác ChatService [P01], [P13].
-Practice model catalog có BASE chỉ trích đặc trưng và các checkpoint A/B/C đã có. BASE chưa có phone head
-MDD nên can_recognize_phonemes=false. Model được chọn trong practice không thay đường phoneme
-cascade-B cố định của chat. Các sample practice được chọn từ source train hợp lệ, không tự coi chúng là test
-benchmark.
-Topology triển khai có trong project
-Localhost: browser → http://127.0.0.1:8765 → Python app
-LAN qua Nginx: browser → LAN host:80 → Python127.0.0.1:8765
-Ngrok HTTPS: browser → ngrok public HTTPS → Nginx127.0.0.1:8081
-             → Python127.0.0.1:8765
-Chat nội bộ: Python app ↔ JSONL worker ↔ model weights/cache
-Voice tùy chọn: Python app → ai33 TTS → cache → browser
-serve_demo.py mặc định loopback port 8765, HF/Transformers offline cho model weights local. Có --lan với danh
-sách allow-host rõ ràng; topology reverse proxy dùng backend loopback. Nginx proxy các route được app cho
-phép, không dùng repo làm static root. Ngrok control port riêng không thuộc app pipeline. Đây là topology/config
-được hỗ trợ, không khẳng định tất cả đang được mở cùng lúc.
-Mic cần secure context: localhost hoặc HTTPS; LAN HTTP thường vẫn dùng upload/sample nhưng browser
-không cấp mic. Lớp Nginx/ngrok thay cách truy cập, không đổi model, task, weights hay tự thêm realtime
-streaming.
-Entry point và trạng thái đọc được
-# Ví dụ entry point, không thực thi trong quá trình làm tài liệu
-.venv/Scripts/python.exe -X utf8 scripts/serve_demo.py --port 8765
-# MDD_CHAT_DEVICE chỉ chọn placement cho Qwen worker
-# auto (mặc định), cpu hoặc cuda
-# GET /api/status          trạng thái app/model catalog/training artifacts
-# GET /api/chat/config     lựa chọn ASR/grammar và policy chat
-# GET /api/chat/jobs/{id}  metadata thực của lượt còn tồn tại
+10. Qwen, grammar và chất lượng hội thoại
+Một backbone Qwen3-0.6B
+Cache trong worker; tải model theo runtime policy
+qwen-base
+disable_adapter() nếu PEFT đã nạp
+Sinh dialogue
+Whisper path: bỏ normalize
+Legacy: guarded recovery
+qwen-grammar
+Bật LoRA grammar
+Grammar correction
+Natural wording
+Hai generation riêng
+qwen-trained
+Bật LoRA cascade feedback
+Coach phát âm legacy
+Không gọi trong speech path có
+assessment
+Chọn model ở UI không đổi backbone reply speech
+Trong speech chat, dialogue luôn qwen-base. Metadata coaching_model_id không tự chứng minh adapter đã được gọi.
+Hình 4. Một backbone Qwen dùng chung; base reply, grammar LoRA cho collapse, coach legacy bị bỏ qua.
+Nguồn QwenChatEngine, dialogue_request và điều kiện coaching [L01].
+Development probe
+Trước train
+Sau train
+Grammar JSON /8
+0/8
+8/8
+Natural JSON /8
+0/8
+8/8
+Grammar exact /8
+0/8 trong JSON contract
+4/8
+Natural exact /8
+0/8 trong JSON contract
+2/8
+Giữ grammar controls /4
+0/4 trong JSON contract
+4/4
+Giữ natural controls /4
+0/4 trong JSON contract
+1/4
+16 validation records, CPU FP32 greedy; saved paired comparison [L09].
+Grammar chrF 86,95, natural chrF 93,78 sau train ở probe nhỏ. JSON 100% chỉ chứng minh contract. Exact
+match bỏ sót đáp án hợp lệ; chrF cao vẫn có thể đổi nghĩa. Chưa có đầy đủ official ERRANT F0.5, JFLEG GLEU
+hoặc human faithfulness trên test; không công bố grammar 100% chính xác.
+Config/live jobs xác nhận qwen-grammar được nạp cho rewrite. Worker tắt adapter khi reply, bật grammar cho 2
+generation sau. Adapter feedback đã train nhưng legacy coach chỉ chạy khi không có key assessment; current
+analyze luôn có key này. Nhãn Fine-tuned/coaching_model_id không chứng minh adapter đó sinh reply.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 17
-Các tab/status đọc file log/provenance để hiển thị training; inference server không tự chạy train. Cache voice,
-chat-worker.log và report dưới data/generated là artifact vận hành. Job snapshots và quyền thao tác job thuộc
-phiên server; text history ở browser không phải database phục hồi mọi trạng thái.
-Những model/nhánh không nằm trong runtime chat chính
-Nhánh
-Vai trò hiện có
-Trạng thái đối với chat
-Projector → Qwen
-Nghiên cứu ghép feature audio vào embedding
-Qwen
-Không được LocalSpeechEngine gọi
-Qwen2-Audio-7B-Instruct
-Metadata nguồn; chưa có weights train đã xác
-nhận
-Không dùng cho ASR, reply hoặc
-grammar ở chat
-wav2vec2 A/C và B v1 cũ
-Đối chứng/benchmark; có thể hiện trong
-workspace model catalog
-Không thay cascade-B cố định của
-speech chat
-Training scripts/notebooks
-Chuẩn bị dữ liệu, train, đánh giá khoa học
-Ngoài đường inference request
-Nguồn: [P01], [P10], [P13], [P14].
+Chưa có benchmark hội thoại do người đánh giá độc lập. Opening soạn sẵn, echo filter, state café, retry,
+clarification fallback là logic ứng dụng cần tách khỏi raw model output. ASR nghe sai nhưng câu vẫn trôi chảy có
+thể làm Qwen trả lời sai chủ đề; prompt không bảo đảm phục hồi âm thanh đã nghe nhầm.
+Ví dụ live road: transcript “And also load for some players.” khiến Qwen nói “If you're adding load for some
+players, it's important to consider their needs.” Câu trả lời có cấu trúc nhưng không phản ánh đúng câu mục tiêu
+“End of the road for some players”. Đây là giới hạn hội thoại thực tế còn tồn tại, không nên mô tả đã giải quyết
+xong [L02].
+Development checks ghi adapter sửa “I usually wakes up…”→“I usually wake up…”, giữ “Currently I am a
+software engineer”, sửa nhiều lỗi câu “Yesterday I wake up…”. Nhưng với “Banana software yesterday purple.”,
+thêm động từ vẫn chưa tạo ý nghĩa rõ. Case minh họa khác benchmark tổng quát [L09].
+BERT trước Whisper trên 10 audio giọng Việt giảm WER109/335(32,54%)→104/335(31,04%):3 tốt,1 xấu,6
+bằng,0 exact. Stella có 30 word errors tăng 31 sau BERT. Vì vậy giữ BERT đối chứng, mặc định dùng Whisper,
+không dùng cảm nhận vài ca để thay đánh giá ghép cặp [L11].
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 18
-10. Ví dụ sử dụng và các trường hợp ngoại lệ
-Ví dụ 1: một câu hội thoại có lỗi grammar
-Người học nói “Yesterday I go to the park with my friend”. ASR ghi raw text, phoneme B tạo acoustic evidence
-trên bản thu đó. Normalization chỉ có thể đổi hình thức, không được tự đổi go→went. Base Qwen trả lời theo nội
-dung lời người học trước. Sau reply, grammar adapter có thể đề xuất “Yesterday I went…”, nhưng đề xuất không
-tự trở thành câu đối chiếu của audio cũ. Đây là ví dụ minh họa luồng, không phải output mới đã chạy.
-Ví dụ 2: ASR nghe nhầm một từ
-ASR trả một từ không đúng ý người nói. Người dùng sửa reference trên cùng recording. Nếu spoken_text_key
-thay đổi, server reassess từ posterior ban đầu, tăng revision và yêu cầu base Qwen trả lời theo text đã xác nhận.
-Không chạy lại ASR/B, không cần ghi âm lại. Nếu chỉ đổi viết hoa hoặc dấu câu thì giữ reply/voice và không
-generate thêm.
-Ví dụ 3: câu đọc có từ ngoài CMUdict
-Reference có một tên riêng thiếu từ điển. Hệ thống giữ từ đó cho hội thoại, nhưng pronunciation đánh dấu thiếu
-reference/uncertain thay vì gán phone của một từ quen thuộc. Spelling draft hoặc sound-neighbour hint chưa
-được dùng làm ground truth tự động.
-Tình huống
-Hành vi hiện có
-Cách diễn giải
-Một lượt khác đang chạy
-409 chat_busy, không mở parallel generation
-Ứng dụng tối ưu cho inference local tuần
-tự
-Normalization sai JSON/đổi từ
-Reject/fallback format_rules
-Không gọi thay từ là sửa hình thức thành
-công
-Grammar task thất bại
-Trường task unavailable; task khác vẫn có
-thể dùng
-Text giữ nguyên do lỗi khác với “không
-cần sửa”
-Reply chỉ lặp hoặc không hợp lệ
-Retry tối đa một lần; fallback có nguồn riêng
-Không đếm fixed fallback là output model
-thành công
-Calibration chưa đạt
-Uncertain và provisional suggestions
-Không phát sinh pass/fail calibrated
-Worker chết hoặc timeout
-Lượt báo lỗi; HTTP app vẫn có thể phục vụ
-Không tự khẳng định mọi failure đều
-fallback CPU
-Sửa reference khi job không còn
-Không còn quyền reassess job cũ
-Lịch sử khôi phục không thay thế acoustic
-snapshot server
-Tài liệu này chụp trạng thái code/config hiện tại. Các ranh giới còn hạn chế gồm calibration ineligible, coach
-adapter không được gọi trong assessment path, defaults UI/server khác nhau và nhánh completion-only
-legacy. Không có thay đổi code hoặc runtime nào được thực hiện để viết tài liệu.
+11. Voice, highlight, latency và phần local
+Khâu
+Mặc định
+Tùy chọn
+ASR
+Whisper local CPU.
+wav2vec2 khi override.
+Dialogue/grammar
+Qwen local; live CUDA:0 BF16.
+Không cần LLM API cho speech chat.
+Phát âm/fluency
+B, CMUdict, timing local.
+CROTTC local thêm RAM/CPU.
+Voice
+Kokoro ONNX local CUDA.
+ai 33 Sarah là API ngoài; browser do OS/browser
+quyết định.
+Truy cập
+App localhost/reverse proxy.
+Ngrok chuyển request/audio qua tunnel, model vẫn
+local.
+Nguồn code, setup manifests và live verification [L01], [L02], [L10].
+Kokoro 82 M theo model card được export ONNX, runtime riêng [R-KOKORO], [R-KOKORO-ONNX]. Catalog
+web gọn:Heart/Michael/Emma/George. Kokoro af_sarah và Sarah ElevenLabs qua ai 33 là hai voice khác nhau.
+Trùng tên không đồng nghĩa cùng ID hoặc model.
+UI prefetch câu mẫu trong lúc feedback xử lý, dedup theo job/revision/target/voice/speed/text; không tự phát.
+Sound details có nghe từng từ/cả reference sentence. Reply voice chỉ đọc reply đã chốt, không đọc lại user hoặc
+toàn bộ feedback.
+Toàn reply được hiện sẵn, highlight tiến trái→phải theo playhead. Provider audio hiện thiếu timestamp chính xác
+từng từ nên tracker là ước lượng; browser speech có boundary nếu hỗ trợ. Đây chưa phải forced alignment
+text–voice. Không dùng word times audio người học để đồng bộ voice bot.
+Phép đo
+Số đã lưu
+Điều kiện
+Whisper 111 TLV
+Mean ASR 2,363 s.
+CPU INT8 beam 5; không Qwen/TTS.
+B/CRO24pilot
+Tổng 9,408/106,233s.
+CPU, cùng audio; không ASR/Qwen/TTS.
+Kokoro GPU opening
+Warm uncached~0,433 s; cold 3,168 s.
+Một câu;3 warm runs.
+Kokoro CPU trước
+Warm~2,532 s.
+Artifact khác thời điểm.
+ai 33 trước
+Uncached~7,75 s,n=1.
+Khác voice/thời điểm; không benchmark đồng thời.
+Nguồn [L04], [L06], [L10]. Không cộng mean khác thí nghiệm thành end-to-end latency.
+Ba live jobs mới có reply_ready khoảng 3,33–8,03 s, hoàn tất 4,77–24,08 s; không gọi TTS.
+Input/cache/load/sampling khác nhau nên chỉ xác nhận integration, không xếp hạng tốc độ B/CRO. Warmup nạp
+model/từ điển, không train hoặc forward giả [L02].
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 19
-11. Nguồn đối chiếu và phạm vi snapshot
-Tài liệu dựa code đang có trong workspace và model/artifact metadata, thay vì sao chép mô tả README.
-source_snapshot.json ghi thời điểm, SHA256 của 43 source/artifact files và một tập field config được chọn từ
-GET /api/chat/config. Không đọc credentials vào báo cáo, không gửi audio, không chạy model, train hoặc TTS.
-[P01] HTTP server / entry point. src/mdd/demo.py:159 DemoApplication; :525 _dispatch; scripts/serve_demo.py:16 main
-[P02] Chat jobs, voice và revision. src/mdd/demo_chat.py:93 _models; :110 config; :249 submit_speech; :323 reference; :414 
-_generate_speech; :501 poll; :512 cancel; :522 voice
-[P03] Model selection và device policy. src/mdd/demo_model_registry.py:10 asr_selection; :25 grammar_selection; 
-src/mdd/chat_runtime.py:7 requested_device; :15 select_runtime
-[P04] Điều phối acoustic và lượt nói. scripts/local_speech_engine.py:125 LocalSpeechEngine; :129 transcribe; :161 analyze; :219 run; :
-235 regenerate; :252 _respond
-[P05] Normalization và context. scripts/transcript_normalization.py:86 normalization_request; :106 parse_normalization; :128 normalize; 
-scripts/conversation_context.py:22 prepare_dialogue_context
-[P06] Grammar adapter và lexical guard. scripts/grammar_inference.py:7 rewrite; scripts/sentence_rewrite.py:rewrite_request / 
-parse_rewrite; scripts/grammar_data.py:messages
-[P07] Phoneme inference và scorer. src/mdd/demo_inference.py:115 _audio; :152 _load_bundle; :206 analyze; :266 posterior_evidence; 
-src/mdd/chat_assessment.py:118 load_calibration; :154 assessment_fields; src/mdd/pronunciation_assessment.py:assess
-[P08] Reference và private evidence. src/mdd/chat_reference.py:112 reference_resolution; :152 reassess_reference; 
-src/mdd/acoustic_evidence.py:19 pack_evidence; :37 unpack_evidence
-[P09] Từ điển và candidate hints. src/mdd/demo_reference.py:dictionary_reference; src/mdd/chat_pronunciation.py:56 target_words; 
-src/mdd/chat_diagnostics.py:sound_candidates; src/mdd/phonetic_candidates.py:word_intervals / sound_candidates
-[P10] Worker và Qwen inference. scripts/local_chat_process.py:22 _start; :111 _request; scripts/local_chat_worker.py:19 
-generation_options; :34 bounded_inputs; :61 QwenChatEngine; :71 load; :135 generate; :178 main
-[P11] Frontend chat/audio/history. demo/chat.js:state / sessionKey / save / restore / regenerateReference / history / sendAudio / 
-initialize / prefetchSentenceVoice / requestVoiceResource; demo/recorder-worklet.js
-[P12] Voice và reply policy. src/mdd/chat_voices.py; scripts/ai33_tts.py; scripts/conversation_reply.py:ReplyWithoutEcho; 
-scripts/conversation_policy.py:GroundedReply; scripts/conversation_state.py:cafe_state; src/mdd/speech_topics.py
-[P13] Practice và feedback riêng. demo/app.js; src/mdd/demo_realtime.py; src/mdd/demo_feedback.py:FeedbackService; 
-scripts/llm_client.py
-[P14] Triển khai. deploy/nginx/README.md; deploy/nginx/nginx.conf.template; deploy/nginx/ngrok.conf.template; 
-scripts/deploy_demo_nginx.py; scripts/deploy_demo_ngrok.py
-[P15] Trạng thái artifact hiện tại. runs/asr-vietnamese-english-v1/training_provenance.json; 
-runs/cascade-l2arctic-plus-seed42/B/completed.json; runs/grammar-qwen3-06b-wi-jfleg-v1/{training_provenance,demo_validation}.json; 
-data/generated/pronunciation-calibration-v1/full-validation/calibration.json
+12. API, triển khai và tái tạo tài liệu
+API
+Mục đích
+Giới hạn
+GET /api/chat/config
+Catalog, policy, readiness.
+Không chứng minh từng model đã
+generate.
+POST /api/chat/topic
+Opening soạn sẵn.
+Không Qwen generation mới.
+POST /api/chat/speech
+Audio/history/model/pronunciation ID.
+Server map ID; một generation slot.
+GET /api/chat/jobs/{id}
+Polling partial text/snapshot.
+Không WebSocket/SSE.
+POST /api/chat/reference
+Reassess private evidence.
+Regenerate khi đổi chuỗi từ.
+POST /api/chat/voice
+Kokoro/ai33 reply/sentence.
+TTS cache/slot riêng.
+POST /api/chat/cancel
+Cooperative cancel.
+Không dừng training ngoài app.
+Practice giữ /api/analyze, /api/analyze-live, /api/reference, /api/feedback riêng. A/B/C practice không đổi backend
+chat. Analyze-live gửi audio prefix nhiều lần, không phải streaming Whisper. sessionStorage giữ history chữ,
+không phục hồi acoustic evidence sau server restart.
+# Người dùng chủ động chạy demo
+$env:MDD_CHAT_ASR = "whisper-small-en"
+$env:MDD_CHAT_PRONUNCIATION = "wav2vec2-b"
+.venv/Scripts/python.exe -X utf8 scripts/serve_demo.py --port 8765
+# Build báo cáo từ artifact; KHÔNG chạy model
+.venv/Scripts/python.exe -X utf8 docs/pipeline_report/capture_snapshot.py
+.venv/Scripts/python.exe -X utf8 docs/pipeline_report/author_pipeline.py
+.venv/Scripts/python.exe -X utf8 docs/pipeline_report/build_pipeline_documents.py
+.venv/Scripts/python.exe -X utf8 docs/pipeline_report/validate_documents.py
+MDD_CHAT_* là process environment; provider .env loader chỉ đọc một số khóa LLM/ai33, không tự áp dụng mọi
+MDD setting. Whisper strict mặc định: thiếu model báo not ready; lựa chọn auto mới cho phép fallback. Báo
+cáo/snapshot không chứa API keys.
+Local app cổng 8765. Nginx chuyển về loopback; ngrok HTTPS hỗ trợ mic trên browser. LAN HTTP không bảo
+đảm cấp mic. Đây là topology được hỗ trợ; địa chỉ tunnel có thể thay đổi. Training scripts chỉ chạy khi người dùng
+chủ động thao tác.
 
 MDD  /  Pipeline hiện tại
 Kiến trúc · Model · Workflow  |  23/10/2026
 Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
 20
-Các mô tả cũ cần đọc đúng phạm vi
-Tài liệu / nhánh
-Điểm cần chú ý hiện tại
-README phần reference cũ
-Câu mô tả không chạy lại Qwen chỉ đúng với no-op lexical; thay đổi từ hiện
-regenerate reply/rewrites
-README/workspace feedback
-LLMClient/gateway trong practice không phải đường Qwen local speech chat
-docs.md phần chưa cài Torch/inference
-Là trạng thái lịch sử; không đại diện model/readiness hiện có
-Chỉ số/đồ thị trong training_report
-Dùng để biết chất lượng thực nghiệm; không xác định model hiện được gọi ở
-runtime
-Config default_model_id / notice text
-Là config/nhãn; cần kết hợp frontend và call graph, đặc biệt Qwen auto device và
-UI trained selection
-Các tệp đồng hành
-• evidence_acoustic.json: acoustic flow, references, calibration và cache.
-• evidence_models.json: model routing, readiness, device, adapter switching và exception paths.
-• evidence_app.json: UI, API, polling, history/voice và deployment.
-• pipeline_content.json: nguồn nội dung dùng chung cho PDF/DOCX; figures/: bốn sơ đồ PDF vector và PNG cho
-Word.
-• build_manifest.json và qa/: hash đầu ra, kiểm tra tài liệu và preview.
-Các mã nguồn có thể tiếp tục thay đổi sau snapshot. “Đang dùng” trong tài liệu là call path đã đối chiếu tại thời
-điểm chốt, không phải bảo đảm mọi model sẽ giữ nguyên khi registry, checkpoint hoặc app được cập nhật. Báo
-cáo training riêng vẫn là nơi xem dữ liệu train, hyperparameters và test/pilot metrics.
+13. Giới hạn và cải thiện ưu tiên
+Ưu tiên
+Cần làm tiếp
+Bằng chứng để chấp nhận
+1.Phát âm
+Filter hints bằng acoustic evidence; fit ngưỡng trên
+cả đúng/sai và accent variants.
+FPR/FNR/coverage đăng ký trước; holdout mới
+chưa chọn checkpoint.
+2.Cải thiện B
+Thử direct MDD head/multi-task CTC+detection,
+cân bằng đúng/sai, thêm speaker Việt có gold
+phones.
+Cùng split/seed/budget; per-speaker
+precision/recall/FPR/diagnosis.
+3.ASR Việt
+Giữ Whisper baseline; muốn fine-tune cần nhiều
+speaker/thiết bị/nói tự do với text xác nhận.
+WER/insertions/deletions trên test mới; regression
+accent khác.
+4.Grammar
+Official test W&I/JFLEG và kiểm giữ nghĩa 
+transcript.
+ERRANT F0.5/GLEU + human review; JSON
+probe không đủ.
+5.Hội thoại
+Multi-turn cases đổi chủ đề, nghe nhầm,
+clarification; log raw/filter/fallback.
+Human relevance/echo/naturalness; không tính
+fallback là Qwen thành công.
+6.Nghiên cứu
+Audit evaluator/checkpoint CRO; P1 là lượt train
+mới do user khởi chạy.
+Đối chứng rõ và latency/RAM; paper-score không
+thay local-score.
+CTC-GOP và GOPT là hướng tham khảo cho bằng chứng âm và đánh giá nhiều mức [R-CTCGOP], [R-GOPT].
+Chỉ chuyển thành mặc định sau phép đo cùng dữ liệu/scorer. L 2-ARCTIC uy tín giúp kiểm soát nhãn nhưng
+không tự bảo đảm domain spontaneous Vietnamese-English/microphone cá nhân.
+Có bằng chứng thích ứng wav2vec2 cải thiện các test đã nêu, Whisper giảm WER và grammar adapter hoạt
+động. Chưa đủ bằng chứng scorer phát âm calibrated, grammar hoàn hảo hoặc hội thoại tự nhiên mọi tình
+huống. Đây là phạm vi kết luận hiện tại.
+
+MDD  /  Pipeline hiện tại
+Kiến trúc · Model · Workflow  |  23/10/2026
+Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
+21
+14. Tài liệu tham khảo và dấu vết tái lập
+Các mã [R-…] dẫn bài báo/model card/repository chính thức đã tra ngày23/10/2026. Tài liệu nghiên cứu giải thích
+phương pháp; số local lấy từ [L…]. Thông số local ưu tiên config/checkpoint thực có, không suy từ tên model.
+Bài báo và tài liệu gốc
+[R-WAV2VEC2] Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli (2020). wav2vec 2.0: A Framework for 
+Self-Supervised Learning of Speech Representations.
+[R-WHISPER] Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever (2022). Robust Speech 
+Recognition via Large-Scale Weak Supervision.
+[R-FASTER-WHISPER] SYSTRAN and faster-whisper contributors (tài liệu cập nhật). faster-whisper: Faster Whisper transcription with 
+CTranslate2.
+[R-QWEN3] An Yang et al. (Qwen Team) (2025). Qwen3 Technical Report.
+[R-BERT] Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova (2019). BERT: Pre-training of Deep Bidirectional Transformers 
+for Language Understanding.
+[R-LORA] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen (2021). LoRA: 
+Low-Rank Adaptation of Large Language Models.
+[R-QLORA] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer (2023). QLoRA: Efficient Finetuning of Quantized LLMs.
+[R-L2ARCTIC] Guanlong Zhao, Sinem Sonsaat, Alif Silpachai, Ivana Lucic, Evgeny Chukharev-Hudilainen, John Levis, Ricardo 
+Gutierrez-Osuna (2018). L2-ARCTIC: A Non-native English Speech Corpus.
+[R-ALM] Hongfu Liu, Zhouying Cui, Xiangming Gu, Ye Wang (2026). Unlocking Large Audio-Language Models for Interactive Language 
+Learning.
+[R-WI] Christopher Bryant, Mariano Felice, Øistein E. Andersen, Ted Briscoe (2019). The BEA-2019 Shared Task on Grammatical Error 
+Correction.
+[R-JFLEG] Courtney Napoles, Keisuke Sakaguchi, Joel Tetreault (2017). JFLEG: A Fluency Corpus and Benchmark for Grammatical 
+Error Correction.
+[R-CMU] Carnegie Mellon University Speech Group and CMUSphinx contributors (tài liệu cập nhật). CMU Pronouncing Dictionary.
+[R-CROTTC] Haopeng Geng, Longfei Yang, Xi Chen, Haitong Sun, Daisuke Saito, Nobuaki Minematsu (2026). Beyond Acoustic Sparsity 
+and Linguistic Bias: A Prompt-Free Paradigm for Mispronunciation Detection and Diagnosis.
+[R-CROTTC-BUNDLE] Haopeng Geng / Haopeng (2026). CROTTC-IF for L2-ARCTIC: standalone inference bundle.
+[R-WAVLM] Sanyuan Chen et al. (2022). WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing.
+[R-CTCGOP] Xinwei Cao, Zijian Fan, Torbjørn Svendsen, Giampiero Salvi (2024). A Framework for Phoneme-Level Pronunciation 
+Assessment Using CTC.
+[R-GOPT] Yuan Gong, Ziyi Chen, Iek-Heng Chu, Peng Chang, James Glass (2022). Transformer-Based Multi-Aspect Multi-Granularity 
+Non-Native English Speaker Pronunciation Assessment.
+[R-SPEECHOCEAN] Junbo Zhang, Zhiwen Zhang, Yongqing Wang, Zhiyong Yan, Qiong Song, Yukai Huang, Ke Li, Daniel Povey, Yujun 
+Wang (2021). speechocean762: An Open-Source Non-native English Speech Corpus for Pronunciation Assessment.
+[R-KOKORO] hexgrad / Kokoro authors (2025). Kokoro-82M: model card and weights.
+[R-KOKORO-ONNX] thewh1teagle and kokoro-onnx contributors (tài liệu cập nhật). kokoro-onnx: TTS with Kokoro and ONNX Runtime.
+[R-SAA] Steven H. Weinberger, Matthew C. Kelley / George Mason University (tài liệu cập nhật). The Speech Accent Archive.
+Artifact và mã nguồn
+[L01] Code điều phối. scripts/local_speech_engine.py; scripts/local_chat_worker.py; src/mdd/demo_chat.py; 
+src/mdd/demo_model_registry.py; src/mdd/chat_reference.py; src/mdd/acoustic_evidence.py; src/mdd/speech_fluency.py; demo/chat.js
+[L02] Live integration. data/generated/crottc-live-20261023/verification.json; reference-reassessment.json; các job snapshot cùng thư 
+mục
+
+MDD  /  Pipeline hiện tại
+Kiến trúc · Model · Workflow  |  23/10/2026
+Snapshot từ code và config thực tế; đường chat và practice được mô tả riêng
+22
+[L03] Provenance training. runs/cascade-l2arctic-plus-seed42/{A,B}/completed.json; Q/training_provenance.json; 
+runs/grammar-qwen3-06b-wi-jfleg-v1/training_provenance.json; runs/asr-vietnamese-english-v1/training_provenance.json; 
+runs/projector-l2arctic-plus-seed42/alignment/training_provenance.json
+[L04] ASR118. data/generated/asr-backends-20261023/{manifest,results}.json; metrics.csv; report.html; 
+notebooks/whisper_vs_wav2vec2.ipynb
+[L05] MDD Plus900. data/generated/cascade-l2arctic-plus-seed42/audio/{A,B}/metrics.json
+[L06] CRO pilot27. data/generated/crottc-pilot-20261023/{manifest,results,execution_notes}.json; research_metrics.csv; 
+ui_review_metrics.csv; report.html; notebooks/crottc_pronunciation_pilot.ipynb
+[L07] SpeechOcean762. data/generated/external/speechocean762/20261021T024600Z/B-full/metrics.json; 
+configs/external_speechocean762.json
+[L08] Calibration. data/generated/pronunciation-calibration-v1/full-validation/{calibration,report}.json
+[L09] Grammar probes. data/generated/grammar-adapter-demo-v1/comparison.json; 
+runs/grammar-qwen3-06b-wi-jfleg-v1/demo_validation.json; data/generated/sentence-prefetch-qa/grammar-runtime-check.json
+[L10] TTS/latency. models/pretrained/kokoro-82m/setup_manifest.json; data/generated/kokoro-gpu-validation-v1/summary.json; 
+src/mdd/tts_registry.py; scripts/kokoro_tts.py; scripts/ai33_tts.py
+[L11] BERT probes. data/generated/vi-voice-pipeline-v1/bert-v2/results.json; data/generated/user-stella-audio-20261023/result.json; 
+notebooks/vi_voice_bert_validation.ipynb
+Phạm vi snapshot
+source_snapshot.json lưu SHA256/size code và artifact đã đọc cùng config allowlist. Không đọc credentials, gửi
+audio hoặc chạy inference/training/TTS khi biên soạn. build_manifest.json lưu hash PDF/DOCX;
+qa/document_validation.json lưu kiểm tra cấu trúc/bố cục/citations. Hai báo cáo dùng cùng bibliography, mỗi số
+local vẫn gắn protocol riêng.
+• Tài liệu này mô tả pipeline, local model, runtime và kết quả so sánh chính.
+• Báo cáo training giữ optimizer, learning curves, A/B/C v1 và Plus, Qwen/Projector, hình notebook có nguồn cell.
+• HTML/notebook benchmark giữ từng case, counter, manifest và đồ thị. Build tài liệu không chạy lại model.

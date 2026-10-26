@@ -87,6 +87,10 @@ class ChatService:
         self._requests = {}
         self._voices = {}
         self._runner = None
+        self._closed = False
+        self._prewarm_cancelled = threading.Event()
+        self._prewarm_task = None
+        self._prewarm_state = {'status': 'not_started'}
         self.cache_dir = self.root / "data/generated/tts/ai33/chat"
         self.kokoro_cache_dir = self.root / "data/generated/tts/kokoro"
 
@@ -94,6 +98,50 @@ class ChatService:
         if str(self.root) not in sys.path:
             sys.path.insert(0, str(self.root))
         return importlib.import_module("scripts." + name)
+
+    def prewarm(self):
+        """Load the actual speech worker in the background, without generation."""
+        with self._lock:
+            if self._closed or self.generator is not None or self.speech_generator is not None:
+                return None
+            if self._prewarm_task is not None:
+                return self._prewarm_task
+            runner = self._module('local_chat_process')
+            self._runner = runner
+            self._prewarm_state = {'status': 'loading'}
+            def prepare():
+                started = time.monotonic()
+                state = {'status': 'cancelled'}
+                try:
+                    if self._prewarm_cancelled.is_set():
+                        return
+                    metadata = runner.warmup(cancelled=self._prewarm_cancelled)
+                    status = 'cancelled' if self._prewarm_cancelled.is_set() else 'ready'
+                    state = {'status': status, 'elapsed_sec': round(time.monotonic() - started, 3)}
+                    runtime = metadata.get('qwen_runtime') if isinstance(metadata, dict) else None
+                    if isinstance(runtime, dict):
+                        state['qwen_device'] = runtime.get('device', 'unknown')
+                    for key in ('asr_runtime', 'phoneme_runtime'):
+                        if isinstance(metadata, dict) and isinstance(metadata.get(key), dict):
+                            state[key] = deepcopy(metadata[key])
+                    if isinstance(metadata, dict) and metadata.get('load_only') is True:
+                        state['load_only'] = True
+                        timings = metadata.get('warmup_timings', {})
+                        state['timings'] = {key: value for key, value in timings.items()
+                                            if key in {'qwen_load_sec', 'asr_load_sec', 'phoneme_load_sec',
+                                                       'dictionary_load_sec', 'recovery_load_sec'}
+                                            and type(value) in (int, float) and math.isfinite(value) and value >= 0}
+                except Exception as error:
+                    state = {'status': 'cancelled' if self._prewarm_cancelled.is_set() else 'unavailable',
+                             'elapsed_sec': round(time.monotonic() - started, 3)}
+                    if state['status'] == 'unavailable':
+                        logging.getLogger(__name__).warning('Speech prewarm failed: %s', type(error).__name__)
+                finally:
+                    with self._lock:
+                        self._prewarm_state = state
+            self._prewarm_task = threading.Thread(target=prepare, daemon=True, name='speech-prewarm')
+            self._prewarm_task.start()
+            return self._prewarm_task
 
     def _models(self):
         base = self.root / "models/pretrained/Qwen3-0.6B"
@@ -113,17 +161,26 @@ class ChatService:
                                  "adapter": adapter, "expected_sha256": provenance.get("adapter_sha256")}}
 
     def config(self):
-        from mdd.demo_model_registry import asr_selection, grammar_selection, recovery_selection
+        from mdd.demo_model_registry import speech_asr_selection, grammar_selection, recovery_selection, pronunciation_selection, pronunciation_models, speech_device_policy
         from mdd.chat_runtime import requested_device
         capabilities = self.capability_loader()
         english_voices = self.english_voices()
         kokoro = kokoro_status(self.root)
         recovery = recovery_selection(self.root)
+        asr = speech_asr_selection(self.root)
+        pronunciation = pronunciation_selection(self.root)
+        recover_words = asr['provider'] != 'whisper'
         voice_name = os.environ.get("AI33_VOICE_EN_NAME", "").strip()[:120] if capabilities.get("english_voice_configured") else ""
         models = [{key: item[key] for key in ("id", "label", "ready", "description")} for item in self._models().values()]
         return {"models": models, "default_model_id": "qwen-base", "device": requested_device(), "threads": 2,
-                "acoustic_device": "cpu",
-                "asr_model_id": asr_selection(self.root)['id'],
+                "acoustic_device": speech_device_policy('phoneme'),
+                'acoustic_device_is_policy': True,
+                'speech_device_policy': {key: speech_device_policy(key) for key in ('asr', 'phoneme', 'crottc')},
+                "inference_warmup": deepcopy(self._prewarm_state),
+                "asr_model_id": asr['id'], "asr_backend": asr['provider'],
+                "asr_revision": asr.get('revision'), "asr_compute_type": asr.get('compute_type'),
+                'asr_device_is_policy': asr.get('device_is_policy', False),
+                'asr_requested_device': asr.get('requested_device', 'cpu'),
                 "grammar_model_id": grammar_selection(self.root)['id'],
                 "max_message_chars": 2000, "max_new_tokens": 384,
                 "ai33_available": bool(capabilities.get("tts_configured")),
@@ -138,24 +195,32 @@ class ChatService:
                     "ai33" if capabilities.get("tts_configured") and (voice_name or english_voices) else "browser"),
                 "voice_locales": [locale for locale, key in (("vi-VN", "vietnamese_voice_configured"), ("en-US", "english_voice_configured"))
                                   if capabilities.get(key) or (locale == 'en-US' and (kokoro['ready'] or (english_voices and capabilities.get('tts_configured'))))],
-                "speech_ready": (self.root / "models/pretrained/wav2vec2-base-960h/model.safetensors").is_file()
-                    and (self.root / "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/model.safetensors").is_file(),
+                "speech_ready": asr['ready'] and pronunciation['ready'],
+                'phoneme_model_id': pronunciation['id'], 'pronunciation_backend': pronunciation['provider'],
+                'pronunciation_models': pronunciation_models(self.root),
+                'default_pronunciation_model_id': pronunciation['id'],
                 "practice_prompts": [{"id": key, "text": value} for key, value in PRACTICE_PROMPTS.items()],
                 "topics": public_topics(),
                 "max_audio_seconds": 30, "speech_language": "en-US", "reply_model_id": "qwen-base",
                 "sentence_mode": "grammar_and_natural", "rewrite_mode": "grammar_and_natural", "dialogue_policy": "natural_conversation",
-                "pronunciation_method": "ctc_variant_posterior_margin_v1", "pronunciation_uncertainty": True,
+                "pronunciation_method": ('crottc_if_variant_sequence_review_v1' if pronunciation['provider'] == 'crottc-if'
+                                         else 'ctc_variant_posterior_margin_v1'), "pronunciation_uncertainty": True,
+                'fluency_method': 'word_timing_fluency_v1', 'fluency_calibrated': False,
                 "pronunciation_feedback": "collapsed", "voice_content": "reply_only",
                 "reference_confirmation": True,
-                "transcript_normalization": "lexical_preserving_v1",
-                "transcript_recovery": recovery['version'],
-                "transcript_recovery_provider": recovery['provider'],
-                "transcript_recovery_model": recovery['model_id'],
-                "transcript_recovery_revision": recovery['revision'],
+                "transcript_normalization": "lexical_preserving_v1" if recover_words else None,
+                "transcript_recovery": recovery['version'] if recover_words else None,
+                "transcript_recovery_provider": recovery['provider'] if recover_words else None,
+                "transcript_recovery_model": recovery['model_id'] if recover_words else None,
+                "transcript_recovery_revision": recovery['revision'] if recover_words else None,
+                "conversation_recovery": "bounded_sentence_recovery_v1" if recover_words and recovery['provider'] == 'bert' else None,
+                "conversation_recovery_model": "qwen-base" if recover_words and recovery['provider'] == 'bert' else None,
+                "pronunciation_reference_policy": "bert_output" if recover_words and recovery['provider'] == 'bert' else 'asr',
+                "show_raw_asr": False,
                 "reference_regenerates_reply": True,
                 "reference_regenerates_only_on_change": True,
                 "pronunciation_review": "immediate_provisional",
-                "notice": "Audio is processed locally on CPU. Speech replies and pronunciation practice use English."}
+                "notice": "Audio is processed locally. Speech replies and pronunciation practice use English."}
 
     def english_voices(self):
         voices = load_voices(self.root)
@@ -270,9 +335,18 @@ class ChatService:
             return self.poll(job.identifier)
 
     def submit_speech(self, payload):
-        allowed = {"model_id", "request_id", "audio_base64", "history", "practice_id", "topic_id", "correction_job_id"}
+        allowed = {"model_id", "request_id", "audio_base64", "history", "practice_id", "topic_id", "correction_job_id", 'pronunciation_model_id'}
         if not isinstance(payload, dict) or set(payload) - allowed:
             raise ChatError(400, "invalid_speech", "Send a recording or audio file, not a text message.")
+        from mdd.demo_model_registry import pronunciation_selection, speech_asr_selection
+        pronunciation_choices = {'cascade-B': 'wav2vec2-b', 'crottc-if-l2-arctic': 'crottc-if'}
+        selected_pronunciation = payload.get('pronunciation_model_id')
+        if 'pronunciation_model_id' in payload and (not isinstance(selected_pronunciation, str)
+                or selected_pronunciation not in pronunciation_choices):
+            raise ChatError(400, 'invalid_pronunciation_model', 'Choose an available pronunciation model.')
+        pronunciation = pronunciation_selection(self.root, pronunciation_choices.get(selected_pronunciation))
+        if selected_pronunciation and not pronunciation['ready']:
+            raise ChatError(503, 'pronunciation_model_unavailable', 'The selected pronunciation model is unavailable.')
         history = payload.get("history", [])
         if not isinstance(history, list) or len(history) % 2:
             raise ChatError(400, "invalid_speech_history", "The conversation history is invalid.")
@@ -323,24 +397,30 @@ class ChatService:
             model = self._models()[model_id]
             if not model["ready"] or (model["adapter"] and hashlib.sha256((model["adapter"] / "adapter_model.safetensors").read_bytes()).hexdigest() != model.get("expected_sha256")):
                 raise ChatError(503, "speech_model_unavailable", "The selected coaching model is unavailable.")
-            if not self.speech_generator and not self.config()["speech_ready"]:
+            if not self.speech_generator and (not speech_asr_selection(self.root)['ready'] or not pronunciation['ready']):
                 raise ChatError(503, "speech_unavailable", "The local speech recognition models are not ready.")
             if not self._generation_slot.acquire(blocking=False):
                 raise ChatError(409, "chat_busy", "Another recording is being processed. Please wait.")
             job = ChatJob(model_id, status="transcribing", speech={"coaching": {"status": "pending"}},
-                          metadata={'reference_revision': 0},
+                          metadata={'reference_revision': 0, 'pronunciation_model_id': pronunciation['id']},
                           speech_context={'history': deepcopy(cleaned[1:-1]), 'topic_id': topic_id,
-                                          'model_id': model_id, 'rewrite_enabled': True})
+                                          'model_id': model_id, 'rewrite_enabled': True,
+                                          'pronunciation_model_id': pronunciation['id']})
             self._jobs[job.identifier] = job
             self._requests[request_id] = (fingerprint, job.identifier)
             self._prune()
         request = {"audio_base64": encoded, "history": cleaned[1:-1],
+                   'pronunciation_backend': pronunciation['provider'],
                    'rewrite_enabled': True, 'normalization_enabled': True, 'recovery_enabled': True,
                    "reference_text": corrected_reference or PRACTICE_PROMPTS.get(practice_id), "model_id": model_id, "topic_id": topic_id,
                    'reference_source': 'corrected_sentence' if corrected_reference else 'reading_prompt' if practice_id else 'asr'}
-        from mdd.demo_model_registry import grammar_selection, recovery_selection
+        from mdd.demo_model_registry import grammar_selection, recovery_selection, speech_asr_selection
         request['grammar_model_id'] = grammar_selection(self.root)['id']
         request['recovery_provider'] = recovery_selection(self.root)['provider']
+        if speech_asr_selection(self.root)['provider'] == 'whisper':
+            # Whisper already produces orthographic English. Keep this acoustic
+            # hypothesis intact; grammar suggestions still run separately below.
+            request['recovery_enabled'] = request['normalization_enabled'] = False
         threading.Thread(target=self._generate_speech, args=(job, request), daemon=True, name="local-speech-job").start()
         return self.poll(job.identifier)
 
@@ -574,6 +654,8 @@ class ChatService:
             job = self._job(payload["job_id"])
             if (target == "sentence" or job.speech is not None or job.metadata.get('input') == 'topic') and payload["locale"] != "en-US":
                 raise ChatError(400, "speech_voice_language", "Speech practice uses an English voice.")
+            if target == 'sentence' and (job.speech or {}).get('pronunciation_reference_ready') is False:
+                raise ChatError(409, 'sentence_reference_pending', 'Chờ xử lý câu đã nói xong rồi nghe đọc mẫu.')
             reply_available = (target == "reply" and job.status in {"generating", "correcting", "coaching"}
                                and (job.speech or {}).get('reply_ready') is True and bool(job.text.strip()))
             sentence_available = (target == 'sentence' and job.status in {
@@ -723,6 +805,8 @@ class ChatService:
 
     def close(self):
         with self._lock:
+            self._closed = True
+            self._prewarm_cancelled.set()
             for job in self._jobs.values(): job.cancelled.set()
         if self._runner:
             self._runner.shutdown()

@@ -197,7 +197,7 @@ def main():
         try:
             for line in sys.stdin:
                 value = json.loads(line)
-                if value.get("type") in {"generate", "speech", "regenerate_reference"}:
+                if value.get("type") in {"generate", "speech", "regenerate_reference", "warmup"}:
                     identifier = value["id"]
                     with lock:
                         event = events.setdefault(identifier, threading.Event())
@@ -215,17 +215,21 @@ def main():
     from mdd.chat_runtime import requested_device
     engine = QwenChatEngine(device=requested_device())
     speech_engine = LocalSpeechEngine()
+    import atexit
+    atexit.register(speech_engine.close)
     while True:
         item = queue.get()
         if item is None: break
         request, event = item
         identifier = request["id"]
         try:
-            faulthandler.dump_traceback_later(300 if request["type"] in {'speech', 'regenerate_reference'} else 150, repeat=False)
+            faulthandler.dump_traceback_later(300 if request["type"] in {'speech', 'regenerate_reference', 'warmup'} else 150, repeat=False)
             if request["model_id"] not in {"qwen-base", "qwen-trained", "qwen-grammar"}:
                 raise ValueError("invalid_model")
             emit = lambda value: write({"id":identifier, **value})
-            if request['type'] == 'speech':
+            if request['type'] == 'warmup':
+                metadata = speech_engine.warmup(event, engine)
+            elif request['type'] == 'speech':
                 metadata = speech_engine.run(request, event, emit, engine)
             elif request['type'] == 'regenerate_reference':
                 metadata = speech_engine.regenerate(request, event, emit, engine)
@@ -237,6 +241,7 @@ def main():
         finally:
             faulthandler.cancel_dump_traceback_later()
             with lock: events.pop(identifier, None)
+    speech_engine.close()
 
 
 if __name__ == "__main__":

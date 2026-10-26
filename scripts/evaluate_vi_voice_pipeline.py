@@ -24,8 +24,10 @@ from scripts.benchmark_demo_latency import LocalDemoClient, encode_audio, local_
 from scripts.evaluate_transcript_normalization import distance, words
 
 EXPECTED_MODELS = {"asr_model_id": "wav2vec2-vi-en-v1", "grammar_model_id": "qwen-grammar", "reply_model_id": "qwen-base"}
+SUPPORTED_ASR = {'wav2vec2-vi-en-v1', 'facebook/wav2vec2-base-960h', 'whisper-small-en'}
 CONFIG_KEYS = (*EXPECTED_MODELS, "device", "threads", "acoustic_device", "transcript_normalization", "transcript_recovery",
                "transcript_recovery_provider", "transcript_recovery_model", "transcript_recovery_revision",
+               "pronunciation_reference_policy", "show_raw_asr", "asr_backend", "asr_revision", "asr_compute_type",
                "feedback_order", "inference_device")
 SAFE_ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}\Z")
 
@@ -46,6 +48,9 @@ def runtime_source_hashes(config=None):
     # A configured BERT deployment must freeze the actual implementation bytes.
     if bert_module.is_file() or (config or {}).get('transcript_recovery_provider') == 'bert':
         result['scripts/bert_transcript_recovery.py'] = digest(bert_module)
+    for relative in ('scripts/whisper_asr.py', 'scripts/sentence_recovery.py'):
+        if (ROOT / relative).is_file():
+            result[relative] = digest(ROOT / relative)
     return result
 
 
@@ -87,6 +92,8 @@ def load_manifest(path, root=ROOT):
 
 def frozen_config(config):
     for key, expected in EXPECTED_MODELS.items():
+        if key == 'asr_model_id' and config.get(key) in SUPPORTED_ASR:
+            continue
         if config.get(key) != expected:
             raise ValueError(f"Expected {key}={expected}; got {config.get(key)!r}")
     if config.get("speech_ready") is not True:
@@ -96,24 +103,43 @@ def frozen_config(config):
             raise ValueError('BERT recovery must identify its configured pretrained model')
         if not re.fullmatch(r'[0-9a-f]{40}', config.get('transcript_recovery_revision') or ''):
             raise ValueError('BERT recovery must freeze an exact Hugging Face revision')
+    reference_policy = config.get('pronunciation_reference_policy')
+    if reference_policy not in (None, 'asr', 'bert_output'):
+        raise ValueError('Unknown pronunciation reference policy')
+    if reference_policy == 'bert_output' and (
+            config.get('transcript_recovery_provider') != 'bert' or not config.get('transcript_recovery')):
+        raise ValueError('The bert_output pronunciation reference policy requires BERT recovery')
+    if 'show_raw_asr' in config and not isinstance(config['show_raw_asr'], bool):
+        raise ValueError('show_raw_asr must be a boolean')
     return {key: config[key] for key in CONFIG_KEYS if key in config}
 
 
-def verify_job_models(job):
+def verify_job_models(job, config=None):
     speech, metadata = job.get("speech") or {}, job.get("metadata") or {}
     actual = {"asr_model_id": speech.get("asr_model"),
               "grammar_model_id": (speech.get("rewrite") or {}).get("model_id"),
               "reply_model_id": metadata.get("reply_model_id")}
-    if actual != EXPECTED_MODELS:
+    expected = {**EXPECTED_MODELS, 'asr_model_id': (config or {}).get('asr_model_id', EXPECTED_MODELS['asr_model_id'])}
+    if actual != expected:
         raise ValueError("Completed job did not use the frozen pipeline models: " + repr(actual))
 
 
 def verify_job_recovery(job, config):
     """Check the completed inference against its frozen, server-owned provider."""
-    if not config.get('transcript_recovery'):
-        return
     speech = job.get('speech') or {}
     recovery = speech.get('interpretation') or {}
+    if (job.get('sentence_voice') or {}).get('status') != 'not_requested':
+        raise ValueError('Unexpected sentence TTS on an evaluation-owned job')
+    if not config.get('transcript_recovery'):
+        if config.get('pronunciation_reference_policy') == 'bert_output':
+            raise ValueError('The bert_output pronunciation reference policy requires BERT recovery')
+        if config.get('pronunciation_reference_policy') == 'asr' and (
+                speech.get('reference_text') != speech.get('transcript')
+                or speech.get('reference_source') != 'asr'
+                or speech.get('pronunciation_reference_ready') is not True
+                or recovery.get('applied_as_pronunciation_reference') not in (None, False)):
+            raise ValueError('The pronunciation reference does not match the selected ASR transcript')
+        return
     if (recovery.get('version') != config['transcript_recovery']
             or recovery.get('original') != speech.get('transcript')):
         raise ValueError('The job did not preserve the configured recovery provenance')
@@ -125,10 +151,29 @@ def verify_job_recovery(job, config):
             raise ValueError('Recovery model identity differs from frozen config: ' + config_key)
     if config.get('transcript_recovery_provider') == 'bert' and recovery.get('device') != 'cpu':
         raise ValueError('The configured BERT recovery did not report CPU inference')
-    if speech.get('reference_text') != speech.get('transcript') or speech.get('reference_source') != 'asr':
+    if config.get('transcript_recovery_provider') == 'bert' and recovery.get('reference_confirmed') is not False:
+        raise ValueError('BERT recovery cannot claim an inferred transcript was confirmed')
+    reference_policy = config.get('pronunciation_reference_policy')
+    if reference_policy == 'bert_output':
+        if config.get('transcript_recovery_provider') != 'bert':
+            raise ValueError('The bert_output pronunciation reference policy requires BERT recovery')
+        if recovery.get('status') in {'accepted', 'unchanged'}:
+            recovered_text = recovery.get('text')
+            if (not isinstance(recovered_text, str) or not recovered_text.strip()
+                    or speech.get('reference_text') != recovered_text
+                    or speech.get('reference_source') != 'bert_inferred'
+                    or speech.get('pronunciation_reference_ready') is not True
+                    or recovery.get('applied_as_pronunciation_reference') is not True):
+                raise ValueError('BERT pronunciation reference does not match the authorized recovery')
+        elif (speech.get('reference_text') != speech.get('transcript')
+              or speech.get('reference_source') != 'asr'
+              or recovery.get('applied_as_pronunciation_reference') not in (None, False)):
+            raise ValueError('An unavailable or ambiguous recovery replaced the acoustic reference')
+    elif (reference_policy not in (None, 'asr')
+          or speech.get('reference_text') != speech.get('transcript')
+          or speech.get('reference_source') != 'asr'
+          or recovery.get('applied_as_pronunciation_reference') not in (None, False)):
         raise ValueError('An unconfirmed inference replaced the acoustic reference')
-    if (job.get('sentence_voice') or {}).get('status') != 'not_requested':
-        raise ValueError('Unexpected sentence TTS on an evaluation-owned job')
 
 
 class RecordingClient:
@@ -177,6 +222,8 @@ def record_case(case, job, timing=None, error=None):
         error=error or job.get("error"), job_id=job.get("id"), transcript=transcript,
         normalized=normalized, conversation_text=conversation, normalization=normalization,
         interpretation=speech.get('interpretation') or {},
+        pronunciation_reference_text=speech.get('reference_text'),
+        pronunciation_reference_ready=speech.get('pronunciation_reference_ready'),
         conversation_source=speech.get('conversation_source') or metadata.get('conversation_source'),
         reply=job.get("text") or "", rewrite=speech.get("rewrite") or {},
         assessment={"status": assessment.get("status"), "counts": comparison.get("counts") or {},
@@ -268,7 +315,9 @@ def main(argv=None):
             "Selection is fixed before inference; this is exploratory evaluation, not threshold fitting.",
             "WER/CER ignore capitalization and punctuation; no semantic accuracy score is inferred.",
             "Recovery and Qwen conversation receive recognized text and configured local acoustic candidates, never the published reference.",
-            "An inferred recovery is not proof of the realized spoken words; raw pronunciation references remain unchanged unless confirmed.",
+            ("Accepted BERT output is used as the pronunciation reference under the explicit bert_output policy; it is inferred and not user-confirmed."
+             if config.get('pronunciation_reference_policy') == 'bert_output'
+             else "An inferred recovery is not proof of the realized spoken words; raw pronunciation references remain unchanged unless confirmed."),
             "No AI33 or other speech synthesis is measured. Timing includes local polling overhead."]}
     jobs_dir = args.output / "jobs"
     jobs_dir.mkdir(exist_ok=True)
@@ -291,7 +340,7 @@ def main(argv=None):
                 if audio["source_sha256"] != case["audio_sha256"]:
                     raise ValueError("Audio changed during encoding")
                 timing, job = run_once(recording, encoded, index, .15, args.timeout)
-                verify_job_models(job)
+                verify_job_models(job, config)
                 verify_job_recovery(job, config)
                 timing["submission_wait_sec"] = round(recording.busy_wait_sec, 3)
                 row = record_case(case, job, timing)

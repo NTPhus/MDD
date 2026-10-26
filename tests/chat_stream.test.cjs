@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest, voiceResourceKey,
+const { LiveReply, replyReady, chatPollDelay, prepareOpeningAudio, sharedVoiceRequest, voiceResourceKey,
   conversationInterpretation, conversationUserText, updateUserSpeech, microphoneConstraints } = require('../demo/chat.js');
 
 test('microphone request selects the chosen device and uses the selected processing mode', () => {
@@ -14,6 +14,14 @@ test('microphone request selects the chosen device and uses the selected process
     channelCount: { ideal: 1 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false,
   } });
   assert.deepEqual(microphoneConstraints({}, '', 'clear'), { audio: {} });
+});
+
+test('every pending speech stage checks promptly for a completed reply, then backs off for coaching', () => {
+  for (const status of ['transcribing', 'correcting', 'analyzing', 'generating', 'coaching']) {
+    assert.equal(chatPollDelay({ status, speech: { reply_ready: false } }), 150);
+  }
+  assert.equal(chatPollDelay({ status: 'coaching', speech: { reply_ready: true } }), 700);
+  assert.equal(replyReady({ status: 'coaching', speech: { reply_ready: false } }), false);
 });
 
 test('accepted interpretation drives conversation text while retaining the raw ASR and confirmation state', () => {

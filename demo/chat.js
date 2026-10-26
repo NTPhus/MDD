@@ -6,6 +6,11 @@ function replyReady(job) {
   return job?.status === 'ready' || (job?.speech?.reply_ready === true
     && !['error', 'cancelled', 'cancelling'].includes(job?.status));
 }
+function chatPollDelay(job) {
+  // Any speech stage can finish the reply between polls. Observe that gate
+  // promptly; later pronunciation-only updates need less frequent polling.
+  return replyReady(job) ? 700 : 150;
+}
 
 class LiveReply {
   constructor({ onUpdate = () => {}, onVoice = () => {}, onError = () => {}, speak = null,
@@ -144,22 +149,69 @@ function voiceSelection(config, provider, voiceId, speed) {
 function voiceDescription(voice) {
   return `${voice?.locale === 'en-GB' ? 'Anh' : 'Mỹ'} · ${voice?.gender === 'male' ? 'Nam' : 'Nữ'}`;
 }
+function pronunciationModels(config) {
+  if (!Array.isArray(config?.pronunciation_models)) return [];
+  const seen = new Set();
+  return config.pronunciation_models.filter(model => model && ['cascade-B', 'crottc-if-l2-arctic'].includes(model.id)
+    && !seen.has(model.id) && seen.add(model.id)).map(model => ({ id: model.id,
+    label: typeof model.label === 'string' && model.label.trim() ? model.label.slice(0, 160)
+      : model.id === 'cascade-B' ? 'wav2vec2 B' : 'CROTTC-IF · Thử nghiệm', ready: model.ready === true }));
+}
+function preferredPronunciationModel(config, preference) {
+  const models = pronunciationModels(config);
+  // Installing an experimental model must not silently change existing speech
+  // checks. It is used only after an explicit, still-available user selection.
+  return models.some(model => model.id === preference && model.ready) ? preference : 'cascade-B';
+}
+function pronunciationRequest(config, preference) {
+  const selected = preferredPronunciationModel(config, preference);
+  return pronunciationModels(config).some(model => model.id === selected && model.ready)
+    ? { pronunciation_model_id: selected } : {};
+}
 function conversationInterpretation(speech) {
+  if (!pronunciationReferenceReady(speech) || speech.conversation_recovery?.status === 'pending') return null;
+  const selected = speech.conversation_source === 'asr_interpreted' ? speech.conversation_text : null;
+  const recovery = speech.conversation_recovery;
+  if (['accepted', 'unchanged'].includes(recovery?.status) && recovery.original === speech.transcript
+    && recovery.reference_confirmed === false && typeof recovery.text === 'string'
+    && recovery.text.trim() && recovery.text.length <= 1000
+    && typeof selected === 'string' && selected.trim() === recovery.text.trim()) return recovery;
   const interpretation = speech?.interpretation;
-  if (speech?.conversation_source !== 'asr_interpreted' || !['accepted', 'unchanged'].includes(interpretation?.status)
-    || typeof interpretation.text !== 'string' || !interpretation.text.trim() || interpretation.text.length > 1000
-    || typeof speech.conversation_text !== 'string' || speech.conversation_text.trim() !== interpretation.text.trim()) return null;
+  if (!['accepted', 'unchanged'].includes(interpretation?.status)
+    || typeof interpretation.text !== 'string' || !interpretation.text.trim() || interpretation.text.length > 1000) return null;
+  // The dialogue text can differ from the pronunciation target. Older saved
+  // turns without dialogue metadata still use their selected BERT reference.
+  const fallback = selected ?? (!recovery && !speech.conversation_source && speech.reference_source === 'bert_inferred'
+    ? pronunciationReferenceText(speech) : null);
+  if (typeof fallback !== 'string' || fallback.trim() !== interpretation.text.trim()) return null;
   return interpretation;
 }
+function pronunciationReferenceReady(speech) {
+  return Boolean(speech) && speech.pronunciation_reference_ready !== false;
+}
+function pronunciationReferenceText(speech) {
+  return pronunciationReferenceReady(speech) ? String(speech.reference_text || speech.transcript || '').trim() : '';
+}
 function conversationUserText(turn) {
+  if (turn.confirmedSource === 'user_confirmed' && typeof turn.confirmedText === 'string'
+    && turn.confirmedText.trim() && turn.confirmedText.length <= 1000) return turn.confirmedText;
+  if (turn.pronunciationReferenceReady === false || turn.conversationTextPending === true) return '';
   for (const [source, expected, text] of [[turn.confirmedSource, 'user_confirmed', turn.confirmedText],
     [turn.interpretedSource, 'asr_interpreted', turn.interpretedText], [turn.normalizedSource, 'asr_normalized', turn.normalizedText]]) {
     if (source === expected && typeof text === 'string' && text.trim() && text.length <= 1000) return text;
   }
   return turn.content;
 }
+function conversationUserNote(turn) {
+  if (turn.confirmedSource === 'user_confirmed') return '';
+  if (turn.pronunciationReferenceReady === false || turn.conversationTextPending === true) return 'Đang nhận giọng nói…';
+  return turn.interpretedSource === 'asr_interpreted' && conversationUserText(turn)?.trim() !== turn.content?.trim()
+    ? 'Bản chép lời được khôi phục' : '';
+}
 function updateUserSpeech(turn, speech) {
   if (speech?.transcript) turn.content = speech.transcript;
+  turn.pronunciationReferenceReady = speech?.pronunciation_reference_ready !== false;
+  turn.conversationTextPending = speech?.conversation_recovery?.status === 'pending';
   const interpretation = conversationInterpretation(speech);
   turn.interpretedText = interpretation?.text;
   turn.interpretedSource = interpretation ? 'asr_interpreted' : undefined;
@@ -177,9 +229,63 @@ function microphoneConstraints(supported = {}, deviceId = '', mode = 'clear') {
   }
   return { audio };
 }
-if (typeof module === 'object' && module.exports) module.exports = { LiveReply, replyReady, prepareOpeningAudio, sharedVoiceRequest,
+function fluencyView(speech, pending = false) {
+  const unavailable = { status: 'unavailable', metrics: [], message: 'Chưa có dữ liệu nhịp nói.' };
+  const fluency = speech?.fluency;
+  if (!fluency) return pending ? { status: 'pending', metrics: [], message: 'Đang kiểm tra nhịp nói…' } : unavailable;
+  if (!['ready', 'partial'].includes(fluency.status) || fluency.source !== 'whisper_word_timestamps'
+    || fluency.method !== 'word_timing_fluency_v1') return unavailable;
+  const value = fluency.metrics;
+  const finite = (number, max) => typeof number === 'number' && Number.isFinite(number) && number >= 0 && number <= max;
+  if (!value || !Number.isSafeInteger(value.word_count) || value.word_count < 1 || value.word_count > 10000
+    || !finite(value.audio_duration_sec, 3600) || value.audio_duration_sec === 0
+    || !finite(value.recording_rate_wpm, 1000)) return unavailable;
+  const number = (amount, digits = 0) => amount.toLocaleString('vi-VN', { maximumFractionDigits: digits });
+  const metrics = [{ label: 'Nhịp nói', value: number(value.recording_rate_wpm), unit: 'từ/phút',
+    help: 'Số từ trên toàn thời lượng bản thu, gồm cả khoảng chờ đầu và cuối.' }];
+  if (fluency.status === 'partial') return { status: 'partial', metrics, message: 'Chưa có thời gian từng từ.' };
+  if (!Number.isSafeInteger(value.internal_pause_count) || value.internal_pause_count < 0
+    || value.internal_pause_count > value.word_count - 1
+    || !finite(value.longest_internal_pause_sec, value.audio_duration_sec)
+    || (value.internal_pause_count === 0 && value.longest_internal_pause_sec !== 0)) return unavailable;
+  metrics.push({ label: 'Khoảng nghỉ', value: number(value.internal_pause_count), unit: '',
+    help: 'Khoảng cách từ 0,25 giây giữa các từ theo thời gian Whisper; không tính đầu và cuối bản thu.' },
+  { label: 'Nghỉ dài nhất', value: number(value.longest_internal_pause_sec, 2), unit: 'giây',
+    help: 'Khoảng cách dài nhất giữa các từ; đây không phải điểm đánh giá chuyên gia.' });
+  return { status: 'ready', metrics, message: '' };
+}
+function renderFluency(box, speech, pending = false) {
+  const view = fluencyView(speech, pending), owner = box.ownerDocument;
+  const element = (tag, className, text) => {
+    const item = owner.createElement(tag); item.className = className;
+    if (text !== undefined) item.textContent = text;
+    return item;
+  };
+  // Keep the summary node and details.open state, including keyboard focus.
+  // Updating metrics never scrolls, plays audio or issues requests.
+  let body = [...box.children].find(item => item.className === 'chat-fluency-body');
+  if (!body) {
+    box.replaceChildren(); body = element('div', 'chat-fluency-body');
+    box.append(element('summary', 'chat-pronunciation-title', 'Fluency'), body);
+  }
+  body.replaceChildren(); box.dataset.status = view.status;
+  if (view.metrics.length) {
+    const metrics = element('dl', 'chat-fluency-metrics');
+    for (const metric of view.metrics) {
+      const item = element('div', 'chat-fluency-metric'); item.title = metric.help;
+      const result = element('dd', 'chat-fluency-value', metric.value);
+      if (metric.unit) result.append(element('span', 'chat-fluency-unit', metric.unit));
+      item.append(element('dt', 'chat-fluency-label', metric.label), result); metrics.append(item);
+    }
+    body.append(metrics);
+  }
+  if (view.message) body.append(element('p', 'chat-fluency-note', view.message));
+}
+if (typeof module === 'object' && module.exports) module.exports = { LiveReply, replyReady, chatPollDelay, prepareOpeningAudio, sharedVoiceRequest,
   voiceResourceKey, voiceCatalog, providerAvailable, preferredVoiceProvider, voiceSelection,
-  conversationInterpretation, conversationUserText, updateUserSpeech, microphoneConstraints };
+  pronunciationModels, preferredPronunciationModel, pronunciationRequest,
+  conversationInterpretation, conversationUserText, conversationUserNote, updateUserSpeech, microphoneConstraints, pronunciationReferenceReady, pronunciationReferenceText,
+  fluencyView, renderFluency };
 
 (() => {
   if (typeof document === 'undefined') return;
@@ -198,7 +304,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   const settingsAnchor = document.createComment('chat-settings-home');
   node('chat-settings').before(settingsAnchor);
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  const state = { config: null, model: 'qwen-trained', conversations: {}, rows: new Map(), busy: false,
+  const state = { config: null, model: 'qwen-trained', pronunciationModel: 'cascade-B', conversations: {}, rows: new Map(), busy: false,
     job: null, activeTurn: null, visible: false, recording: false, pending: false, decoding: false,
     stopping: false, context: null, stream: null, source: null, processor: null, sink: null,
     chunks: [], sampleCount: 0, timer: null, flush: null, epoch: 0, micAllowed: () => true,
@@ -218,7 +324,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     .match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu) || []).join('\u0000');
   function diagnosticView(speech) {
     const diagnostic = speech?.sound_candidates;
-    const provisional = diagnostic?.provisional === true && (diagnostic.source === 'asr' || speech.reference_source === 'asr');
+    const provisional = diagnostic?.provisional === true && (['asr', 'bert_inferred'].includes(diagnostic.source)
+      || ['asr', 'bert_inferred'].includes(speech.reference_source));
     const confirmed = diagnostic?.reference_confirmed === true && ['reading_prompt', 'corrected_sentence', 'user_confirmed'].includes(speech?.reference_source);
     const words = diagnostic?.status === 'available' && diagnostic.diagnostic_only === true && (confirmed || provisional)
       ? [...new Map((diagnostic.words || []).filter(word => Number.isSafeInteger(word.index) && word.index >= 0
@@ -257,6 +364,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     try {
       sessionStorage.setItem('am-voice-chat-v2', JSON.stringify(state.conversations, (key, value) => ['audioUrl', 'voice'].includes(key) ? undefined : value));
       sessionStorage.setItem('am-chat-selection-v1', JSON.stringify({ model: state.model, topic: state.topic, inRoom: state.inRoom, mode: node('chat-mode').value,
+        pronunciationModel: state.pronunciationModel,
         voiceId: state.voiceId, voiceSpeed: state.voiceSpeed, voiceProvider: node('chat-voice-provider').value,
         voiceProviderVersion: state.voicePreferenceVersion, autoRead: node('chat-auto-read').checked }));
     } catch {}
@@ -270,6 +378,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       }
       const selection = JSON.parse(sessionStorage.getItem('am-chat-selection-v1') || '{}');
       if (['qwen-base', 'qwen-trained'].includes(selection.model)) state.model = selection.model;
+      if (['cascade-B', 'crottc-if-l2-arctic'].includes(selection.pronunciationModel)) state.pronunciationModel = selection.pronunciationModel;
       if (typeof selection.topic === 'string' && /^[a-z-]+$/.test(selection.topic)) state.topic = selection.topic;
       state.inRoom = selection.inRoom === true;
       if (['conversation', 'reading'].includes(selection.mode)) node('chat-mode').value = selection.mode;
@@ -281,7 +390,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     } catch {}
   }
   function controls() {
-    const ready = state.config?.speech_ready && state.config.models.some(m => m.id === state.model && m.ready);
+    const phonemeModels = pronunciationModels(state.config);
+    const phonemeReady = !phonemeModels.length || phonemeModels.some(model => model.id === state.pronunciationModel && model.ready);
+    const ready = state.config?.speech_ready && phonemeReady && state.config.models.some(m => m.id === state.model && m.ready);
     const locked = state.busy || state.pending || state.decoding || state.stopping || state.starting;
     const audioLocked = state.recording || state.pending || state.stopping || Boolean(state.referenceOperation?.regenerating);
     node('chat-mic').disabled = locked || !ready || !AudioContextClass || !navigator.mediaDevices?.getUserMedia || !window.isSecureContext;
@@ -296,6 +407,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-stop').hidden = !state.busy;
     node('chat-stop').disabled = !state.job || state.activeTurn?.status === 'cancelling';
     for (const id of ['chat-model', 'chat-mode', 'chat-practice', 'chat-new', 'chat-start-new', 'chat-topics']) node(id).disabled = locked || state.recording || !state.config;
+    if (node('chat-pronunciation-model')) node('chat-pronunciation-model').disabled = locked || state.recording || !phonemeModels.length;
     for (const id of ['chat-free-talk', 'chat-open-reading']) node(id).disabled = locked || state.recording || !ready;
     node('chat-availability').hidden = !state.config || ready;
     if (state.config && !ready) node('chat-availability').textContent = !state.config.speech_ready
@@ -377,7 +489,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     const opened = new Set(previousWords.map((word, index) => word.open ? index : -1));
     const focused = previousWords.findIndex(word => word.contains(document.activeElement));
     box.replaceChildren();
-    if (!speech?.transcript || !speech.comparison) return;
+    if (!pronunciationReferenceReady(speech) || !speech?.transcript || !speech.comparison) return;
     const { diagnostic, words: candidateWords } = diagnosticView(speech);
     const unconfirmed = speech.reference_source === 'asr';
     const candidates = new Map(candidateWords.map(word => [word.index, word]));
@@ -428,7 +540,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         box.append(item);
       }
     }
-    const target = String(speech.reference_text || speech.transcript).trim();
+    const target = pronunciationReferenceText(speech);
     if (target) {
       const text = make('p', 'chat-sentence-text'), timing = make('span', 'chat-word-timing');
       const sentenceRow = { text, timing }; timing.hidden = true;
@@ -456,6 +568,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-welcome').hidden = conversations().length > 0;
     const turns = conversations();
     for (const [index, turn] of turns.entries()) {
+      const followingTurn = turn.role === 'user' ? turns[index + 1] : null;
+      const audioLoading = Boolean(turn.audioUrl && followingTurn?.role === 'assistant'
+        && !terminal(followingTurn.status));
       let row = state.rows.get(turn.id);
       if (!row) {
         const item = make('article', 'chat-message ' + turn.role), body = make('div', 'chat-message-body');
@@ -467,6 +582,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         details.open = true;
         const completionExtra = make('details', 'chat-pronunciation chat-completion-extra');
         completionExtra.append(make('summary', 'chat-pronunciation-title', 'Hoàn thiện câu (tùy chọn)'), correction);
+        const fluency = make('details', 'chat-pronunciation chat-fluency');
         const rewriteExtra = make('details', 'chat-rewrite-extra'), rewrite = make('section', 'chat-rewrite');
         rewriteExtra.append(make('summary', 'chat-pronunciation-title', 'Ngữ pháp & cách nói tự nhiên'), rewrite);
         const actions = make('div', 'chat-message-actions'), feedback = make('details', 'chat-turn-feedback');
@@ -474,11 +590,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         summary.append(icon('i-chat'), feedbackLabel);
         summary.title = 'Xem phát âm';
         const content = make('div', 'chat-feedback-content'), notice = make('p', 'chat-feedback-notice', 'Đang nhận giọng nói…');
-        feedback.append(summary, content); content.append(notice, review, details, completionExtra, rewriteExtra);
+        feedback.append(summary, content); content.append(notice, review, details, fluency, completionExtra, rewriteExtra);
         feedback.dataset.turnId = turn.id;
         if (turn.role === 'assistant' && index > 0 && turns[index - 1].role === 'user') node('chat-messages').append(feedback);
         body.append(label, text, timing, meta, actions); node('chat-messages').append(item);
-        row = { item, body, text, timing, meta, details, review, correction, completionExtra, rewrite, rewriteExtra, feedback, feedbackLabel, notice, actions, audio: null, speechKey: '' }; state.rows.set(turn.id, row);
+        row = { item, body, text, timing, meta, details, fluency, review, correction, completionExtra, rewrite, rewriteExtra, feedback, feedbackLabel, notice, actions, audio: null, speechKey: '' }; state.rows.set(turn.id, row);
       }
       row.item.dataset.status = turn.status;
       row.item.classList.toggle('error', turn.status === 'error');
@@ -488,10 +604,13 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       const live = state.liveTurnId === turn.id ? state.liveReply : null;
       const playback = state.playback?.turnId === turn.id ? state.playback : null;
       const openingPending = state.openingPending === turn;
-      paintText(row, openingPending ? '' : turn.role === 'user' ? userConversationText(turn) : playback ? turn.content : live ? live.visibleText : turn.content,
+      const displayText = openingPending ? '' : turn.role === 'user'
+        ? (audioLoading ? 'Audio loading…' : userConversationText(turn))
+        : playback ? turn.content : live ? live.visibleText : turn.content;
+      paintText(row, displayText,
         playback ? playback.range : live?.range, playback ? playback.mode : live?.rangeMode);
       row.meta.textContent = openingPending ? 'Đang chuẩn bị giọng đọc…' : turn.role === 'user'
-        ? turn.confirmedSource !== 'user_confirmed' && turn.interpretedRequiresConfirmation ? 'AI hiểu là' : ''
+        ? conversationUserNote(turn)
         : replyReady(turn) ? '' : turn.error || ({ transcribing: 'Listening…', correcting: 'Preparing suggestions…', analyzing: 'Checking sounds…', generating: 'Replying…', coaching: 'Checking pronunciation…', cancelling: 'Stopping…', cancelled: 'Stopped' }[turn.status] || '');
       row.meta.hidden = !row.meta.textContent;
       const speechKey = JSON.stringify(turn.speech);
@@ -499,6 +618,11 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         row.speechKey = speechKey; row.correctionJobId = turn.jobId;
         sentenceCorrection(row, turn); sentenceRewrite(row, turn); pronunciation(row.details, turn.speech, turn.id); turnReview(row, turn);
       }
+      const fluencyKey = JSON.stringify([turn.speech?.fluency, terminal(turn.status)]);
+      if (fluencyKey !== row.fluencyKey) {
+        row.fluencyKey = fluencyKey; renderFluency(row.fluency, turn.speech, !terminal(turn.status));
+      }
+      row.fluency.hidden = !turn.speech;
       const practise = row.correction.querySelector('.chat-correction-practise');
       if (practise) practise.dataset.jobId = turn.speech?.correction?.mode === 'completion_only' && turn.status === 'ready' ? turn.jobId || '' : '';
       const referenceApply = row.review.querySelector('.chat-reference-apply');
@@ -507,9 +631,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       row.correction.hidden = !completion || completion.status === 'not_needed';
       row.completionExtra.hidden = completion?.status !== 'ready' || !completion.changed;
       row.rewriteExtra.hidden = turn.speech?.rewrite?.mode !== 'grammar_and_natural' || turn.speech?.rewrite?.status === 'not_needed';
-      row.details.hidden = !turn.speech?.comparison;
-      row.review.hidden = !turn.speech?.transcript;
-      row.notice.hidden = Boolean(turn.speech?.transcript);
+      row.details.hidden = !pronunciationReferenceReady(turn.speech) || !turn.speech?.comparison;
+      row.review.hidden = !pronunciationReferenceReady(turn.speech) || !turn.speech?.transcript;
+      row.notice.hidden = pronunciationReferenceReady(turn.speech) && Boolean(turn.speech?.transcript);
       row.notice.textContent = terminal(turn.status) ? 'Chưa có dữ liệu phát âm cho lượt nói này.' : 'Đang kiểm tra phát âm…';
       row.feedbackLabel.textContent = feedbackSummary(turn);
       row.feedback.classList.toggle('is-pending', !terminal(turn.status));
@@ -554,7 +678,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   }
   function feedbackSummary(turn) {
     const speech = turn.speech;
-    if (!speech?.transcript) return terminal(turn.status) ? 'Chưa đủ bằng chứng' : 'Đang kiểm tra phát âm…';
+    if (!pronunciationReferenceReady(speech) || !speech?.transcript) return terminal(turn.status) ? 'Chưa đủ bằng chứng' : 'Đang kiểm tra phát âm…';
     const flagged = speech.reference_source === 'asr' ? 0 : (speech.comparison?.words || []).filter(word => word.status === 'difference').length;
     if (flagged) return `${flagged} từ cần kiểm tra`;
     const count = diagnosticView(speech).words.length;
@@ -642,23 +766,23 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     const pendingReference = state.referenceRequests.get(turn.jobId);
     const editorOpen = row.review.querySelector('.chat-reference-editor')?.open;
     const soundsOpen = row.review.querySelector('.chat-phonetic-choices')?.open;
-    row.review.replaceChildren(); if (!speech?.transcript) return;
+    const originalOpen = row.review.querySelector('.chat-original-transcript')?.open;
+    row.review.replaceChildren(); if (!pronunciationReferenceReady(speech) || !speech?.transcript) return;
     const resolution = speech.reference_resolution || {};
     const { diagnostic, words: candidates } = diagnosticView(speech);
     const unconfirmed = speech.reference_source === 'asr';
     row.feedback.dataset.assessment = candidates.length ? 'candidates' : 'uncertain';
     row.review.dataset.assessment = row.feedback.dataset.assessment;
     const missing = speech.missing_words?.length ? speech.missing_words : resolution.missing_words || [];
-    const target = String(speech.reference_text || speech.transcript).trim();
-    const interpretation = conversationInterpretation(speech);
-    const inferred = interpretation?.requires_confirmation === true && unconfirmed;
-    const original = String(speech.transcript).trim();
-    const showOriginal = inferred || lexicalText(original) !== lexicalText(target);
-    row.review.append(make('span', 'chat-review-label', showOriginal ? 'ASR gốc' : 'Câu đã nói'));
-    row.review.append(make('p', 'chat-target-text', showOriginal ? original : target));
-    if (showOriginal && !unconfirmed) {
-      row.review.append(make('span', 'chat-review-label', 'Câu đã xác nhận'), make('p', 'chat-confirmed-text', target));
-    }
+    const target = pronunciationReferenceText(speech);
+    const targetLabel = speech.reference_source === 'user_confirmed' ? 'Câu đã xác nhận · đối chiếu phát âm'
+      : speech.reference_source === 'reading_prompt' ? 'Câu đọc mẫu · đối chiếu phát âm'
+        : speech.reference_source === 'bert_inferred' ? 'Câu gợi ý để đối chiếu phát âm' : 'Câu đối chiếu phát âm';
+    row.review.append(make('span', 'chat-review-label', targetLabel), make('p', 'chat-target-text', target));
+    const original = make('details', 'chat-original-transcript'); original.open = originalOpen ?? false;
+    original.append(make('summary', 'chat-reference-note', 'Xem bản nhận dạng gốc'),
+      make('p', 'chat-target-text', speech.transcript));
+    row.review.append(original);
     let note = '';
     if (diagnostic?.status === 'unavailable' && diagnostic.reason === 'reference_contains_unknown_words') {
       const unknown = diagnostic.missing_words || missing;
@@ -699,13 +823,14 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     }
     const editor = make('details', 'chat-reference-editor');
     editor.open = editorOpen ?? false;
-    editor.append(make('summary', '', inferred ? 'Xác nhận hoặc sửa câu' : 'Sửa câu'));
+    editor.append(make('summary', '', 'Sửa câu'));
     const input = make('textarea', 'chat-reference-input'); input.rows = 2; input.maxLength = 1000;
     input.setAttribute('aria-label', 'Câu tiếng Anh bạn đã nói trong bản thu');
     input.spellcheck = false;
-    // An interpretation is a draft for the learner to confirm. It never changes
-    // the acoustic reference or the sentence voice until explicitly submitted.
-    if (!row.referenceDirty) row.referenceDraft = String(pendingReference?.referenceText || (unconfirmed && interpretation?.text) || target);
+    // The editor, word choices and sentence voice share the pronunciation
+    // target; the conversation bubble may use a separate recovered transcript.
+    // Keep any manual edit intact while later coaching snapshots arrive.
+    if (!row.referenceDirty) row.referenceDraft = String(pendingReference?.referenceText || target);
     input.value = row.referenceDraft ?? target;
     input.disabled = Boolean(pendingReference);
     input.addEventListener('input', () => { row.referenceDraft = input.value; row.referenceDirty = true; });
@@ -761,7 +886,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       }
       editor.append(choices);
     }
-    const apply = make('button', 'chat-reference-apply', pendingReference ? 'Đang đối chiếu…' : inferred ? 'Xác nhận câu này' : 'Đối chiếu audio này');
+    const apply = make('button', 'chat-reference-apply', pendingReference ? 'Đang đối chiếu…' : 'Đối chiếu audio này');
     apply.type = 'button'; apply.disabled = Boolean(state.busy || state.referenceOperation || pendingReference || row.referenceExpired || turn.status !== 'ready' || !turn.jobId);
     apply.addEventListener('click', async () => {
       if (state.busy || state.referenceOperation || state.recording || state.pending || state.stopping || state.decoding || state.starting
@@ -853,7 +978,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
           update({ ...job, status: 'cancelled' }); break;
         }
         if (update(job) && terminal(job.status)) break;
-        await pause(job.status === 'generating' ? 300 : 700);
+        await pause(chatPollDelay(job));
         try { job = await api('/api/chat/jobs/' + requestedJobId); failures = 0; }
         catch (error) { if (++failures >= 3) throw error; await pause(1000); }
       }
@@ -1155,7 +1280,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     node('chat-scroll').scrollTop = node('chat-scroll').scrollHeight; state.lastScrollTop = node('chat-scroll').scrollTop;
     beginReply(turn); save();
     try {
-      const request = { model_id: state.model, request_id: uuid(), audio_base64: base64(buffer), history: previous, topic_id: state.topic };
+      const request = { model_id: state.model, ...pronunciationRequest(state.config, state.pronunciationModel),
+        request_id: uuid(), audio_base64: base64(buffer), history: previous, topic_id: state.topic };
       if (state.repeatTarget) request.correction_job_id = state.repeatTarget.jobId;
       else request.practice_id = node('chat-mode').value === 'reading' ? node('chat-practice').value : null;
       let job = await api('/api/chat/speech', request);
@@ -1172,7 +1298,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         autoplayReply(turn);
         prefetchSentenceVoice(turn);
         render(); if (terminal(job.status)) break;
-        await pause(job.status === 'generating' ? 300 : 700);
+        await pause(chatPollDelay(job));
         try { job = await api('/api/chat/jobs/' + job.id); pollFailures = 0; }
         catch (error) { if (++pollFailures >= 3) throw error; await pause(1000); }
       }
@@ -1393,7 +1519,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     // Legacy sessions omitted provider and used AI33 voice IDs. Keep their
     // provider explicit rather than sending an AI33 ID to the new local default.
     turn[selectionField].provider ||= 'ai33';
-    const text = sentence ? String(turn.speech?.reference_text || turn.speech?.transcript || '').trim() : turn.content;
+    const text = sentence ? pronunciationReferenceText(turn.speech) : turn.content;
     const revision = turnRevision(turn), target = sentence ? 'sentence' : 'reply';
     return { text, revision, selection: turn[selectionField],
       key: voiceResourceKey(turn.jobId, revision, target, turn[selectionField], text),
@@ -1419,6 +1545,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     return audio;
   }
   async function requestVoiceResource(turn, sentence = false) {
+    if (sentence && !pronunciationReferenceText(turn.speech)) return null;
     const info = voiceRequestInfo(turn, sentence), epoch = state.epoch;
     const current = () => epoch === state.epoch && info.revision === turnRevision(turn) && !state.destroyed
       && !['error', 'cancelled', 'cancelling'].includes(turn.status)
@@ -1464,7 +1591,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   function prefetchSentenceVoice(turn) {
     if (!serverVoiceSelected() || !state.visible || !state.inRoom || !turn.jobId
       || ['error', 'cancelled', 'cancelling'].includes(turn.status)
-      || !String(turn.speech?.reference_text || turn.speech?.transcript || '').trim()) return;
+      || !pronunciationReferenceText(turn.speech)) return;
     const info = voiceRequestInfo(turn, true);
     if (turn.sentencePrefetchKey === info.key) return;
     turn.sentencePrefetchKey = info.key;
@@ -1474,7 +1601,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   }
   async function speak(turn, sentence = false, { opening = false } = {}) {
     if (state.recording || state.pending || state.stopping || (state.referenceOperation?.regenerating && !replyReady(turn))) return;
-    const text = sentence ? String(turn.speech?.reference_text || turn.speech?.transcript || '').trim() : turn.content;
+    const text = sentence ? pronunciationReferenceText(turn.speech) : turn.content;
     const playId = sentence ? 'sentence-' + turn.id : turn.id;
     if (!text) return;
     if (!serverVoiceSelected()) { speakText(text, playId, sentence ? null : turn, { opening }); return; }
@@ -1557,6 +1684,17 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       if (previousSession !== sessionKey()) resetRows();
       node('chat-model').replaceChildren(...state.config.models.map(model => { const option = make('option', '', (model.id === 'qwen-trained' ? 'Qwen · Fine-tuned' : 'Qwen · Original') + (model.ready ? '' : ' · Unavailable')); option.value = model.id; option.disabled = !model.ready; return option; }));
       node('chat-model').value = state.model;
+      const phonemeModels = pronunciationModels(state.config), phonemeSelect = node('chat-pronunciation-model');
+      state.pronunciationModel = preferredPronunciationModel(state.config, state.pronunciationModel);
+      if (phonemeSelect) {
+        phonemeSelect.hidden = !phonemeModels.length;
+        node('chat-pronunciation-model-label').hidden = !phonemeModels.length;
+        phonemeSelect.replaceChildren(...phonemeModels.map(model => {
+          const option = make('option', '', model.label + (model.ready ? '' : ' · Chưa sẵn sàng'));
+          option.value = model.id; option.disabled = !model.ready; return option;
+        }));
+        phonemeSelect.value = state.pronunciationModel;
+      }
       node('chat-practice').replaceChildren(...state.config.practice_prompts.map(prompt => { const option = make('option', '', prompt.text); option.value = prompt.id; return option; }));
       const voice = node('chat-voice-provider').querySelector('option[value="ai33"]'); voice.disabled = !state.config.ai33_available || !state.config.voice_locales.includes('en-US');
       voice.textContent = voice.disabled ? 'ai33 · Unavailable' : state.config.english_voice_name || 'ai33 · Full reply';
@@ -1608,6 +1746,12 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   node('chat-model').addEventListener('change', () => {
     if (state.busy || state.recording) return; stopSpeech(); clearReply(); state.repeatTarget = null; state.model = node('chat-model').value; resetRows(); render(); save();
     if (state.inRoom && state.topic && !conversations().length) startTopic(state.topic);
+  });
+  node('chat-pronunciation-model')?.addEventListener('change', () => {
+    if (state.busy || state.recording || state.pending || state.decoding || state.stopping || state.starting) return;
+    state.pronunciationModel = preferredPronunciationModel(state.config, node('chat-pronunciation-model').value);
+    node('chat-pronunciation-model').value = state.pronunciationModel;
+    controls(); save();
   });
   node('chat-mode').addEventListener('change', () => openFree(node('chat-mode').value));
   node('chat-practice').addEventListener('change', () => { stopSpeech(); state.repeatTarget = null; render(); });

@@ -1,6 +1,7 @@
 """Reviewable report text, with numeric tables read from saved source artifacts."""
 from pathlib import Path
 import json
+import hashlib
 
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[1]
@@ -28,8 +29,8 @@ def pct(v):return "—" if v is None else f"{v*100:.2f}"
 def num(v,d=2):return "—" if v is None else f"{v:.{d}f}"
 
 chapter("1. Tổng quan và tiến trình thực nghiệm",
-    p("Tài liệu tổng hợp quá trình huấn luyện, cách triển khai, cấu hình và kết quả của các nhánh wav2vec2 và Qwen trong dự án MDD. Bằng chứng được lấy từ 14 notebook, metadata checkpoint, cấu hình thực chạy và các tệp đánh giá cục bộ tại ngày 23/10/2026. Toàn bộ 35 hình PNG đã nhúng trong notebook được đưa vào tài liệu, giữ nguyên nội dung và có nguồn cell/output."),
-    note("**Kết quả chính:** thích ứng wav2vec2 bằng dữ liệu Việt cải thiện F1 trên tập test chung của từng protocol; Qwen cascade và Qwen ngữ pháp đã fine-tune xong. Kết quả sinh feedback hiện mới ở pilot; Projector hoàn thành alignment nhưng chưa train giai đoạn feedback P1."),
+    p("Báo cáo phiên bản 2.0 trình bày toàn bộ bằng chứng huấn luyện và đánh giá đã lưu của dự án MDD đến ngày 23/10/2026: wav2vec2 phát âm, ASR chữ, Qwen3-0.6B với hai adapter riêng, Projector alignment và các đối chứng Whisper/BERT/CROTTC-IF. Phần lịch sử giữ đủ 35 hình gốc của 14 notebook đã kiểm kê; phần cập nhật bổ sung bảng và biểu đồ từ hai thực nghiệm 118 audio ASR và 27 audio phát âm. Các nguồn nghiên cứu gốc được trích dẫn [Rxx]; bằng chứng thực chạy dùng [Sxx]."),
+    note("**Trạng thái hiện tại:** demo nhận transcript bằng Whisper small.en local, trò chuyện bằng Qwen3-0.6B base, sửa ngữ pháp bằng adapter riêng và kiểm tra phát âm bằng wav2vec2 B. CROTTC-IF là tùy chọn thử nghiệm. Projector mới hoàn tất alignment P0; chưa có P1. Không có một chỉ số ‘độ chính xác hệ thống’ gộp các tác vụ này."),
     tab(["Nhánh","Đã thực hiện","Kết quả có thể báo cáo"],[
         ["MDD v1 A/B/C","2.000 / 400 / 400 updates","150 câu HQTV: F1 66,37 / 70,85 / 65,20%"],
         ["MDD cascade A/B","2.000 / 400 updates","900 câu: F1 48,38 → 49,30%; TLV: 64,80 → 69,77%"],
@@ -37,6 +38,8 @@ chapter("1. Tổng quan và tiến trình thực nghiệm",
         ["Projector P0","1 epoch alignment; 282 updates","900 câu NLL; sinh transcript 30 mẫu; chưa có P1"],
         ["Qwen grammar","2 epochs; 3.564 updates","Best validation loss 0,184105; probe 16 câu validation"],
         ["ASR chữ tiếng Anh","2 epochs; 1.223 updates","111 câu TLV: WER 43,01 → 37,93%"],
+        ["Whisper small.en","Tải pretrained; không fine-tune","118 audio; TLV 111: strict WER 27,76%"],
+        ["CROTTC-IF","Tải pretrained; không fine-tune","24 câu có nhãn: F1 19,01%; B cùng pilot 49,47%"],
     ],[1.2,1.3,2.6],"Nguồn: [S03–S13]. Các hàng đo những tác vụ và tập chấm khác nhau."),
     h("Các mốc đã ghi nhận"),
     tab(["Thời gian Bangkok (UTC+7)","Diễn biến"],[
@@ -58,7 +61,7 @@ chapter("2. Bài toán, kiến trúc và dữ liệu",
         ["Qwen grammar","Câu văn + task → grammar_corrected hoặc natural","Adapter LoRA riêng với cascade"],
         ["wav2vec2 ASR","Audio → văn bản tiếng Anh","Backbone + CTC ký tự; khác head phoneme MDD"],
     ],[1.1,2.6,1.7],"Nguồn: [S01], [S07], [S09], [S11–S13]."),
-    p("Pipeline cascade: **audio → wav2vec2 A/B → greedy CTC phones → căn chỉnh với canonical phones → annotation_info dự đoán → Qwen → feedback JSON**. Gold perceived phones dùng giám sát train và chấm kết quả, không đưa vào decoder hay đầu vào suy luận cascade. Nhánh oracle dùng nhãn phone gold để đo mức ảnh hưởng của đầu vào, không phải pipeline triển khai độc lập."),
+    p("Pipeline cascade của thực nghiệm training: **audio → wav2vec2 A/B → greedy CTC phones → căn chỉnh với canonical phones → annotation_info dự đoán → Qwen → feedback JSON**. Đây là nhánh benchmark, khác luồng chat hiện dùng Whisper ở chương 14. Gold perceived phones dùng giám sát train và chấm kết quả, không đưa vào decoder hay đầu vào suy luận cascade. Nhánh oracle dùng nhãn phone gold để đo mức ảnh hưởng của đầu vào, không phải pipeline triển khai độc lập."),
     h("Thông số kiến trúc"),
     tab(["Thông số","wav2vec2 MDD","Qwen3-0.6B"],[
         ["Checkpoint gốc","facebook/wav2vec2-base","Qwen/Qwen3-0.6B"],
@@ -368,6 +371,9 @@ chapter("13. Ảnh lịch sử và phần còn thiếu",
     fig(1,"Phân bố số khác biệt model đánh dấu và độ dài 300 bản nháp review; đây là dữ liệu chưa duyệt, chưa phải bộ train đã dùng."),
 )
 
+from current_report_update import update_chapters, bibliography_blocks
+update_chapters(chapters)
+
 sources=[
     ("S01","Kiến trúc và nhận dạng","models/pretrained/wav2vec2-base/config.json; models/pretrained/Qwen3-0.6B/config.json; src/mdd/runtime.py; runs/windows-notebook-seed42-A/parameter_counts.json"),
     ("S02","Protocol v1","data/protocol/l2arctic-v1/{protocol,splits}.json; docs/DATA_SPLIT.md"),
@@ -387,6 +393,11 @@ sources=[
     ("S16","Môi trường","runs/windows-notebook-seed42-A/environment.json; notebooks/mdd_cascade_training_comparison.ipynb cell 4"),
     ("S17","Scorer","src/mdd/metrics.py; scripts/published_feedback_metrics.py; scripts/evaluate_grammar_model.py"),
     ("S18","Các model/nhánh chưa train","models/pretrained/Qwen2-Audio-7B-Instruct/source_manifest.json; data/feedback/drafts-20261021-cef406b.manifest.json"),
+    ("S19","Đối chứng ASR 118 audio","data/generated/asr-backends-20261023/{manifest,results}.json; metrics.csv; per_case.csv; notebooks/whisper_vs_wav2vec2.ipynb"),
+    ("S20","CROTTC/B pilot 27 audio","data/generated/crottc-pilot-20261023/{manifest,results,execution_notes}.json; notebooks/crottc_pronunciation_pilot.ipynb"),
+    ("S21","Kiểm tra pipeline sống và fluency","data/generated/crottc-live-20261023/verification.json; scripts/local_speech_engine.py; src/mdd/speech_fluency.py"),
+    ("S22","Luồng chọn model hiện tại","src/mdd/demo_model_registry.py; src/mdd/demo_chat.py; scripts/local_speech_engine.py; scripts/local_chat_worker.py"),
+    ("S23","BERT trên 10 audio phát triển","data/generated/vi-voice-pipeline-v1/bert-v2/results.json; metrics.csv; notebooks/vi_voice_bert_validation.ipynb"),
 ]
 
 metrics=[
@@ -405,7 +416,7 @@ metrics=[
 manifest=read("docs/training_report/figures_manifest.json")
 figure_order=[b["id"] for c in chapters for b in c["blocks"] if b["type"]=="figure"]
 figure_by_id={f["figure_id"]:f for f in manifest["figures"]}
-chapter("14. Chỉ số, nguồn và danh mục hình",
+chapter("18. Chỉ số, nguồn và danh mục hình",
     h("Định nghĩa chỉ số"),
     p("Scorer MDD của dự án dùng canonical-phone-and-ordered-insertion-slots-v1: vị trí canonical cùng insertion slots theo thứ tự trong cùng gap. TA: âm đúng được chấp nhận; FR: âm đúng bị từ chối; FA: lỗi bị chấp nhận; TR: lỗi bị phát hiện; CD/DE: chẩn đoán đúng/sai trong lỗi đã bắt được."),
     tab(["Chỉ số","Công thức / phép đo","Cách hiểu"],metrics,[1.1,2.1,2.3],"Nguồn: [S17]. Micro metrics cộng counters trước khi chia; mẫu số 0 trả null."),
@@ -413,9 +424,10 @@ chapter("14. Chỉ số, nguồn và danh mục hình",
     h("Danh mục bằng chứng cục bộ"),
     p("Đường dẫn dưới đây tương đối với project root MDD. Các số liệu trình bày là tổng hợp lại từ artifact ở máy hiện tại; tham chiếu này giúp truy ngược và kiểm tra, không giả định tất cả tệp lớn đã được lưu trong Git."),
     *[{"type":"small","text":f"**[{sid}] {label}.** `{path}`"} for sid,label,path in sources],
+    *bibliography_blocks(),
     p("Kiểm kê 14 notebook ghi nhận 298 outputs và không có saved output_type=error; điều đó không bảo đảm mọi notebook đã chạy toàn bộ. Có 35/35 PNG khác nhau, được kiểm byte, SHA256 và PNG CRC; không tìm thấy ảnh liên kết Markdown/HTML bị bỏ sót. train_mdd_colab.ipynb có 0 hình/output thực thi nên không tạo hình thay thế."),
     h("Các tệp đi cùng báo cáo"),
-    p("figures_manifest.json chứa nguồn, cell, output, kích thước và SHA256 của từng hình. evidence_wav2vec.json và evidence_qwen.json lưu chi tiết đối chiếu. report_content.json là bản nội dung có thể chỉnh sửa; author_report.py tạo bảng từ nguồn, build_report.py dựng PDF. report_build_manifest.json và qa/pdf_validation.json ghi thông tin xuất/kiểm tra tài liệu."),
+    p("figures_manifest.json chứa nguồn, cell, output, kích thước và SHA256 của 35 hình lịch sử. evidence_wav2vec.json và evidence_qwen.json lưu chi tiết train; evidence_current_comparisons.json khóa danh tính các artifact mới. report_content.json là bản nội dung có thể chỉnh sửa; author_report.py/current_report_update.py tạo bảng từ nguồn, build_report.py dựng PDF. report_build_manifest.json và qa/pdf_validation.json ghi thông tin xuất/kiểm tra. docs/references_20261023.json lưu bibliography dùng chung với báo cáo pipeline."),
     h("Danh mục đủ 35 hình notebook"),
     tab(["Hình","Notebook / cell / output","Chủ đề"],[[f"{n:02d}",f"{Path(f['notebook']).name}\ncell {f['cell_number_1']} · output {f['output_index_0']+1}",f["nearest_heading"]] for n,f in enumerate([figure_by_id[i] for i in figure_order],1)],[.55,2.5,2]),
 )

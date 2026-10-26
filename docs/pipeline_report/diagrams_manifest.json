@@ -3,24 +3,24 @@
     "id": "architecture",
     "pdf": "figures\\architecture.pdf",
     "png": "figures\\architecture.png",
-    "png_sha256": "edfe51694a2b696cebe598f9dc741b4ee19e63c34af25623b0de7a6dc82808b7"
+    "png_sha256": "3c128c88ced309b85d49ccfd771655ee653cc85d83e8ca550fcf38cd775b9ec4"
   },
   {
     "id": "workflow",
     "pdf": "figures\\workflow.pdf",
     "png": "figures\\workflow.png",
-    "png_sha256": "bdb5797bec6a1d46e199ce747ffe8985d604af17f858b8abd14b62ee09023e68"
+    "png_sha256": "328f2428eedd3741b04dbec69646dbac6b6c1627ba5c34b5586c194242612a7a"
   },
   {
     "id": "routing",
     "pdf": "figures\\routing.pdf",
     "png": "figures\\routing.png",
-    "png_sha256": "9108df4bbac66afa9160c16611e080cf41fcecb413f5c9e52501f7c92c6685ea"
+    "png_sha256": "7d203604fad04c8fb3c56c4574bc5b83033a5fbbe4df3a79931bcc892412c8d5"
   },
   {
     "id": "reference",
     "pdf": "figures\\reference.pdf",
     "png": "figures\\reference.png",
-    "png_sha256": "a21a7ee6c8f00290e746795e2c0943fd55ae8e18d85d35f70e78ca947cf5dd6a"
+    "png_sha256": "2acc081a18a607b9161205d1dd17d198842e24cde2472c78d207fafd36cc11ed"
   }
 ]

@@ -1,4 +1,7 @@
 {
+  "_status": "historical_snapshot_superseded",
+  "_superseded_by": "docs/report_evidence_review_20261023.json and docs/pipeline_report/source_snapshot.json",
+  "_note_vi": "Giữ bằng chứng buổi sáng để truy vết; voice mặc định hiện tại là Kokoro local, xem bản báo cáo viết lại.",
   "scope": "Read-only audit of browser, HTTP/API jobs, UI workflow and deployment templates. No code/runtime changes or API/model/provider calls. No credential files read.",
   "as_of_bangkok": "2026-10-23T09:36:50.926570+07:00",
   "summary_vi": [

@@ -69,6 +69,7 @@ class GroundedReply:
         self.language_request = isinstance(transcript, str) and _asks_about_language(transcript)
         self.pending_language_praise = False
         self.history = history
+        self.transcript = transcript if isinstance(transcript, str) else ''
         self.needs_clarification = needs_clarification
         self.accepted_clarification = False
 
@@ -80,11 +81,32 @@ class GroundedReply:
             wording = _plain(text)
             clarification = ('?' in text and bool(re.search(
                 r'\b(?:clarify|clarification|repeat|rephrase|mishear|misheard)\b|'
-                r'\b(?:what|which).*(?:mean|refer|word|part|said|say)\b|'
+                r'\b(?:what|which).*(?:means?|refers?|word|part|said|say)\b|'
                 r'\b(?:say|read|type|write|explain).*(?:again|sentence|said|mean|last part)\b|'
                 r'\bdid you mean\b|\bnot (?:understand|catch|hear)\b', wording)))
             if not clarification:
                 self.blocked.append({'text': text.strip(), 'reason': 'unresolved_transcript_requires_clarification'})
+                return
+            # Small local models can copy a fictional unclear word from an
+            # instruction example. A question about such a word is fluent but
+            # still invents evidence. Only quote spans from this actual turn.
+            quotes = re.findall(r'''"([^"\n]{1,120})"|“([^”\n]{1,120})”|(?<!\w)'([^'\n]{1,120})'(?!\w)|‘([^’\n]{1,120})’''', text)
+            original = ' ' + _plain(self.transcript) + ' '
+            if any(' ' + _plain(next(part for part in groups if part)) + ' ' not in original
+                   for groups in quotes):
+                self.blocked.append({'text': text.strip(), 'reason': 'clarification_invented_quote'})
+                return
+            if len(wording.split()) > 30:
+                self.blocked.append({'text': text.strip(), 'reason': 'clarification_too_long'})
+                return
+            if self.accepted_clarification:
+                self.blocked.append({'text': text.strip(), 'reason': 'clarification_already_asked'})
+                return
+            prior_questions = {_plain(row['content']) for row in self.history
+                               if isinstance(row, dict) and row.get('role') == 'assistant'
+                               and isinstance(row.get('content'), str) and '?' in row['content']}
+            if wording in prior_questions:
+                self.blocked.append({'text': text.strip(), 'reason': 'clarification_repeated_question'})
                 return
             self.accepted_clarification = True
             self.emit(text)
@@ -122,7 +144,7 @@ class GroundedReply:
     def push(self, text):
         if self.finished:
             raise RuntimeError('The reply policy stream is finished')
-        if self.state is None and not self.contextual_contribution:
+        if self.state is None and not self.contextual_contribution and not self.needs_clarification:
             self.emit(text)
             return
         self.buffer += text

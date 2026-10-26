@@ -1,0 +1,32 @@
+/* A shared input picker beside each recorder; menus live outside clipped cards. */
+.record-input-controls{display:inline-flex;align-items:center;gap:9px;flex-shrink:0}
+.mic-picker{display:inline-flex;align-items:center;flex-shrink:0}
+.mic-picker__toggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-height:32px;padding:6px;border:1px solid var(--line-strong);border-radius:50%;background:var(--surface);color:var(--text);cursor:pointer;transition:background .15s,border-color .15s}
+.mic-picker__toggle svg{width:18px;height:18px;stroke-width:1.7}
+.mic-picker__toggle:hover:not(:disabled),.mic-picker__toggle[aria-expanded=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.mic-picker__toggle:focus-visible,.mic-picker__menu button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.mic-picker__toggle:disabled{opacity:.4;cursor:not-allowed}
+.mic-picker__menu{position:fixed;z-index:1200;width:min(320px,calc(100vw - 24px));max-height:min(400px,calc(100dvh - 24px));overflow-y:auto;overscroll-behavior:contain;padding:14px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:15px;box-shadow:0 14px 42px #17112230;font:14px/1.5 var(--sans);text-align:left}
+.mic-picker__menu[hidden]{display:none!important}
+.mic-picker__title{display:block;margin:0 0 10px;font-size:15px;font-weight:650;color:inherit}
+.mic-picker__options{display:grid;gap:5px}
+.mic-picker__option{display:flex;align-items:center;gap:10px;width:100%;min-height:47px;padding:9px 10px;border:1px solid transparent;border-radius:10px;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.mic-picker__option:hover:not(:disabled){background:var(--surface-hover)}
+.mic-picker__option[aria-checked=true]{border-color:var(--accent);background:var(--accent-soft)}
+.mic-picker__option strong{display:block;font-size:13px;line-height:1.5;font-weight:600;overflow-wrap:anywhere}
+.mic-picker__option small{display:block;font-size:12px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.mic-picker__option svg{width:17px;height:17px;flex-shrink:0;color:var(--accent)}
+.mic-picker__status{font-size:12px;line-height:1.6;color:var(--muted);margin:11px 2px 0;overflow-wrap:anywhere}
+.mic-picker__refresh,.mic-picker__permission{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:7px 9px;margin-top:10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px;line-height:1.4;text-align:left;cursor:pointer}
+.mic-picker__permission{width:100%;background:var(--accent-soft);border-color:var(--accent);color:var(--accent-hover)}
+body.chat-room-open #chat-mic-picker{position:absolute;left:calc(50% + 32px);top:-2px;z-index:2}
+body.chat-page .mic-picker__toggle{background:#2b2334;border-color:#675374;color:#d7c1e8;box-shadow:0 2px 8px #100b1840}
+body.chat-page .mic-picker__toggle:hover:not(:disabled),body.chat-page .mic-picker__toggle[aria-expanded=true]{background:#463052;border-color:#b17ce0;color:#fff}
+body.chat-page .mic-picker__menu{background:#251e2c;border-color:#584465;color:#f0e7f7;box-shadow:0 16px 48px #09060f66}
+body.chat-page .mic-picker__option:hover:not(:disabled){background:#382b42}
+body.chat-page .mic-picker__option[aria-checked=true]{background:#3b284d;border-color:#a66ada}
+body.chat-page .mic-picker__option small,body.chat-page .mic-picker__status{color:#bfb1cb}
+body.chat-page .mic-picker__refresh{background:#302438;border-color:#675374;color:#eee1f7}
+body.chat-page .mic-picker__permission{background:#3b284d;border-color:#a66ada;color:#ead6ff}
+@media(max-width:600px){body.chat-room-open #chat-mic-picker{left:calc(50% + 28px);top:-3px}.mic-picker__menu{padding:12px}.mic-picker__option{min-height:46px}}
+@media(prefers-reduced-motion:reduce){.mic-picker__toggle{transition:none}}

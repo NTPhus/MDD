@@ -311,8 +311,6 @@ async function refreshStatus() {
     renderModels(result.models, result.default_model_id);
     state.training = Array.isArray(result.training) ? result.training : [];
     $('connection-error').hidden = true;
-    $('connection-dot').classList.add('online');
-    $('sidebar-system').textContent = `${state.models.filter((model) => model.ready !== false).length} mô hình · CPU inference`;
     const system = result.system || {};
     const gpu = system.gpu || system.gpu_name || system.cuda_device;
     $('training-device').textContent = typeof gpu === 'string' ? gpu : 'Huấn luyện trên máy';
@@ -321,8 +319,6 @@ async function refreshStatus() {
   } catch (error) {
     $('connection-error').textContent = `Chưa kết nối được demo local. ${error.message}`;
     $('connection-error').hidden = false;
-    $('connection-dot').classList.remove('online');
-    $('sidebar-system').textContent = 'Đang chờ máy chủ local';
     $('last-updated').textContent = 'Mất kết nối · đang thử lại';
   } finally { state.statusPending = false; }
 }

@@ -1,0 +1,160 @@
+{
+  "schema": "read-only-pronunciation-improvement-audit-v1",
+  "date_client": "2026-10-24",
+  "neural_inference_performed": false,
+  "gpu_used": false,
+  "training_performed": false,
+  "production_or_frozen_evaluator_edited": false,
+  "purpose": "Explain observed B false alarms/missed errors and propose a bounded prospective validation-only scoring experiment.",
+  "evidence": {
+    "comparison_manifest": "data/generated/model-comparison-20261024/pronunciation/manifest.json",
+    "comparison_results": "data/generated/model-comparison-20261024/pronunciation/results.json",
+    "comparison_execution_notes": "data/generated/model-comparison-20261024/pronunciation/execution_notes.json",
+    "validation_config": "configs/pronunciation_calibration.json",
+    "validation_selection": "data/generated/pronunciation-calibration-v1/full-validation/selection.json",
+    "validation_cached_posteriors": "data/generated/pronunciation-calibration-v1/full-validation/evidence",
+    "validation_predictions": "data/generated/pronunciation-calibration-v1/full-validation/predictions.jsonl",
+    "validation_words": "data/generated/pronunciation-calibration-v1/full-validation/words.csv",
+    "validation_threshold_grid": "data/generated/pronunciation-calibration-v1/full-validation/threshold_search.csv",
+    "failed_calibration": "data/generated/pronunciation-calibration-v1/full-validation/calibration.json",
+    "scoring_source": "src/mdd/pronunciation_assessment.py",
+    "runtime_calibration_verifier": "src/mdd/chat_assessment.py",
+    "uncalibrated_hint_source": "src/mdd/chat_diagnostics.py",
+    "calibration_experiment_source": "scripts/experiment_pronunciation_calibration.py"
+  },
+  "saved_120_case_B_word_review": {
+    "definition": "Shared full39 dictionary-variant sequence-review panel. Gold uses explicit expert word_index only. This is not the deployed posterior policy or the research scorer's differently mapped WORD counters.",
+    "reference_words": 1165,
+    "expert_error_words": 461,
+    "expert_correct_words": 704,
+    "tp": 261,
+    "fp": 151,
+    "fn": 200,
+    "tn": 553,
+    "coverage": 1.0,
+    "false_positive_rate": 0.21448863636363635,
+    "recall_all_expert_error_words": 0.5661605206073753,
+    "false_positive_event_counts": {"substitution": 93, "deletion": 59, "insertion": 22},
+    "most_common_false_positive_word_forms": {"the": 16, "and": 11, "for": 3, "were": 3, "actual": 3, "fifth": 3, "born": 3},
+    "frequent_events_inside_false_positive_words": [
+      {"kind": "substitution", "expected": "DH", "predicted": "D", "count": 18},
+      {"kind": "deletion", "expected": "D", "predicted": null, "count": 15},
+      {"kind": "deletion", "expected": "T", "predicted": null, "count": 12},
+      {"kind": "deletion", "expected": "R", "predicted": null, "count": 9}
+    ],
+    "frequent_expert_events_inside_false_negative_words": [
+      {"kind": "substitution", "expected": "Z", "observed": "S", "count": 36},
+      {"kind": "substitution", "expected": "DH", "observed": "D", "count": 25},
+      {"kind": "substitution", "expected": "IH", "observed": "IY", "count": 15},
+      {"kind": "substitution", "expected": "OW", "observed": "AO", "count": 12},
+      {"kind": "substitution", "expected": "V", "observed": "F", "count": 11}
+    ],
+    "false_positive_words_with_manual_canonical_sequence_absent_from_all_CMU_variants": {
+      "count": 2,
+      "word_forms": ["second", "fourth"],
+      "scope": "Compared expert canonical phone sequence for each false-positive word against every existing CMU variant. This is not an oracle alignment or proof that the remaining 149 errors originate only in the encoder."
+    },
+    "speaker_counts": {
+      "NJS": {"words": 202, "gold_errors": 81, "tp": 35, "fp": 25, "fn": 46, "tn": 96},
+      "TLV": {"words": 205, "gold_errors": 137, "tp": 103, "fp": 19, "fn": 34, "tn": 49},
+      "TNI": {"words": 195, "gold_errors": 68, "tp": 33, "fp": 37, "fn": 35, "tn": 90},
+      "TXHC": {"words": 186, "gold_errors": 61, "tp": 40, "fp": 30, "fn": 21, "tn": 95},
+      "YKWK": {"words": 194, "gold_errors": 57, "tp": 29, "fp": 27, "fn": 28, "tn": 110},
+      "ZHAA": {"words": 183, "gold_errors": 57, "tp": 21, "fp": 13, "fn": 36, "tn": 113}
+    },
+    "interpretation": [
+      "DH->D and Z->S appear both as false alarms and as missed actual expert errors. Treating those contrasts as always acceptable would hide genuine errors.",
+      "Existing dictionary variants explain only a small measured portion of these false-positive words. More dictionary entries alone are unlikely to resolve the main failure pattern.",
+      "151 false-positive words contain 174 edit events; event counts are not interchangeable with word counts.",
+      "TLV has 20 recordings from one Vietnamese speaker; its FPR is 19/68 and recall 103/137. This cannot establish general Vietnamese-accent population performance.",
+      "Six expert insertion events have no explicit word_index. Shared-review gold omits these six at word level, while phone metrics retain them. Never mix its 461 error-word denominator with research WORD counters."
+    ]
+  },
+  "cached_validation_feasibility": {
+    "posterior_files": 450,
+    "compressed_size_MiB": 23.047836303710938,
+    "format": "NumPy NPZ, log_probs float32 (frames by 83 labels), JSON metadata; allow_pickle=False",
+    "metadata": ["id_to_phone", "blank_id", "duration_sec", "phonemes", "audio", "checkpoint_sha256", "vocabulary_sha256", "source_audio_sha256"],
+    "existing_scorer_hash_still_matches_saved_inference": true,
+    "fit": {
+      "speakers": ["HJK", "LXC"],
+      "utterances": 300,
+      "words": 2816,
+      "gold_labelled_words": 2733,
+      "gold_labelled_score_eligible_words": 2185,
+      "eligible_error_words": 705,
+      "eligible_correct_words": 1480,
+      "margin_feature_AUC_on_eligible_labelled_words": 0.8106852597278129,
+      "score_ineligible_reasons_all_words": {"insertion_or_deletion_not_supported": 549, "reference_contains_unknown_words": 22}
+    },
+    "heldout": {
+      "speakers": ["PNV"],
+      "utterances": 150,
+      "words": 1423,
+      "gold_labelled_words": 1389,
+      "gold_labelled_score_eligible_words": 1119,
+      "eligible_error_words": 447,
+      "eligible_correct_words": 672,
+      "margin_feature_AUC_on_eligible_labelled_words": 0.804550175775008,
+      "score_ineligible_reasons_all_words": {"insertion_or_deletion_not_supported": 262, "reference_contains_unknown_words": 11}
+    },
+    "AUC_scope": "Continuous-score separation among eligible labelled words only, with tied ranks. Not a calibrated probability, deployment accuracy or full-word coverage result.",
+    "registered_policy": {"max_FPR_decided": 0.1, "max_FNR_decided": 0.2, "min_word_decision_coverage": 0.5},
+    "old_grid_audit": {
+      "pairs_meeting_risk_and_minimum_decision_count_constraints": 10,
+      "maximum_coverage_under_these_constraints": 0.2916209293816319,
+      "minimum_FPR_when_coverage_at_least_0_5_and_FNR_at_most_0_2": 0.16314199395770393,
+      "scope": "Read-only analysis of existing validation grid; no new thresholds selected or enabled."
+    },
+    "calibration_status": "failed/ineligible; no accepted thresholds; current categorical policy abstains",
+    "current_method": "ctc_variant_posterior_margin_v1: negative 20th percentile of forced-reference phone mean nonblank-competitor margins",
+    "method_limitations": [
+      "This is an experimental feature, not the exact published CTC-GOP formula.",
+      "A forced reference Viterbi path is not proof that the learner realized that phone. CTC peaks can occupy very few frames.",
+      "Structural insertions/deletions make many words ineligible; a policy ignoring these cases would improve apparent precision while losing error coverage.",
+      "The B checkpoint was selected using all 450 validation utterances. PNV is held out from threshold fitting, not from earlier checkpoint selection."
+    ],
+    "test_posterior_availability": "The 120-case comparison stored decoded phones but discarded posterior matrices. GOP cannot be reconstructed from decoded phones. A separately authorized B forward pass is needed to cache the 120 matrices; the previous 120 inference total was approximately 9.17 GPU seconds, excluding orchestration, I/O and load. No such pass was started in this audit."
+  },
+  "proposed_bounded_experiment": {
+    "status": "proposal_not_executed",
+    "type": "New frozen scoring/calibration comparison on the existing B weights; not neural fine-tuning",
+    "prospective_artifact_directory": "data/generated/pronunciation-confidence-v2",
+    "pre_registration": [
+      "Freeze exact candidate scoring formulas, source revisions, cache hashes, labels, fit/heldout IDs, gating policy, threshold grid and tie-break rules before computing candidate heldout/test scores.",
+      "Use cached HJK/LXC validation posteriors for scorer/threshold selection only. Choose a bounded set of formulas, not an open-ended search.",
+      "One possible bounded set: identical current dictionary-variant edit baseline; current q20 margin; two predeclared margin aggregations such as mean and minimum; a published CTC-GOP implementation only if faithfully ported and tested against its original formula. A truncated/local approximation must be named as a separate experimental scorer.",
+      "Retain all accepted dictionary variants symmetrically. Do not declare DH/D, Z/S, or Vietnamese-accent substitutions always acceptable merely to reduce false positives.",
+      "Keep structural insertion/deletion abstentions explicit until a separately evaluated scorer supports them. Report correct/error coverage separately and retain unknown labels, OOVs and alignment failures in denominator accounting."
+    ],
+    "selection_and_audit": [
+      "Within HJK/LXC, optionally use the two speakers as reciprocal validation folds to pick one registered scorer; refit its scalar thresholds on all 300 fit recordings afterward.",
+      "Freeze that single scorer and thresholds before one PNV audit. If the registered FPR/FNR/coverage criteria fail, mark it ineligible and do not quietly loosen thresholds or continue searching on PNV.",
+      "Only after freezing the method and its eligibility decision, apply it once to the same locked 120 cases. No 120-case labels, top-error word lists or per-speaker test outcomes may set thresholds or choose among scoring candidates.",
+      "The 120 cases and their failure patterns are already observed and have informed this audit; describe the next comparison as exploratory known-test evaluation, not fresh blind confirmatory evidence.",
+      "Do not auto-promote a scorer into the demo. Preserve the existing research baseline and record exactly what improved: false alarms, recall, coverage, unsupported cases and latency."
+    ],
+    "metrics": [
+      "Native expert original-inventory phone F1/PER retained as the recognition baseline; scoring-only changes do not magically improve those decoded phones.",
+      "Word-level TP/FP/FN/TN with one predeclared, shared treatment of unmapped expert insertion events.",
+      "FPR and recall on decided/available words, recall on all expert errors, overall/correct/error coverage, calibrated decision counts and per-speaker breakdown.",
+      "Paired comparison against the same fixed baseline on identical rows, plus individual examples and all raw posterior/feature identities."
+    ],
+    "can_compute_without_neural_inference_now": [
+      "450 cached posterior source/vocabulary/model identity validation.",
+      "Exact same baseline dictionary-variant edit review on 450 validation recordings.",
+      "New deterministic posterior-derived features and their HJK/LXC fit diagnostics, without loading audio encoders.",
+      "Implementation/unit tests of log-sum-exp CTC paths and supported phone edits against small exhaustive synthetic examples.",
+      "Validation-only scalar threshold search and frozen PNV audit after prospective registration."
+    ],
+    "requires_separate_model_inference_slot": [
+      "Caching B posteriors for the fixed 120 test recordings; decoded sequences alone are insufficient.",
+      "Any new Hugging Face pronunciation model comparison or audio feature extraction not already cached."
+    ]
+  },
+  "primary_method_sources": [
+    {"title": "CTC-GOP: An approach to pronunciation assessment based on CTC", "url": "https://www.isca-archive.org/interspeech_2024/cao24b_interspeech.html"},
+    {"title": "Author CTC-based GOP code", "url": "https://github.com/frank613/CTC-based-GOP"},
+    {"title": "L2-ARCTIC corpus source", "url": "https://psi.engr.tamu.edu/l2-arctic-corpus/"}
+  ]
+}

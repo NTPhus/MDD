@@ -26,6 +26,7 @@ from docx.shared import Inches, Pt, RGBColor, Mm
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
 WIDTH=base.WIDTH
 STEM='MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow'
@@ -84,34 +85,34 @@ W=WIDTH
 DIAGRAMS={
  'architecture':dict(height=402,nodes=[
     node(0,352,W,43,'Browser: demo/chat.js','Mic / upload · hội thoại · feedback · phát voice','dark'),
-    node(0,291,W,43,'HTTP server: demo.py + ChatService','POST audio → job; GET polling → text/speech snapshot','accent'),
+    node(0,291,W,43,'HTTP server: demo.py + ChatService','Jobs/polling → chat worker · Voice → Kokoro local / ai33 API','accent'),
     node(0,230,W,43,'JSONL IPC: local_chat_process.py','Một worker riêng; event stage / speech / chunk / done'),
     node(0,16,W,195,'','',kind='normal'),
     node(12,192,W-24,17,'Worker: local_chat_worker.py',font_size=7,leading=7),
-    node(12,132,223,57,'ASR chữ: wav2vec2-vi-en-v1','Audio → transcript + word intervals\nCPU'),
-    node(12,54,223,62,'Phoneme: cascade-B','Audio → phone CTC posteriors\nCMU variants + assessment · CPU'),
-    node(252,54,W-264,135,'Một Qwen3-0.6B base dùng chung','Base: normalize + dialogue\nLoRA grammar: 2 task viết lại\nLoRA feedback: có sẵn, nhánh legacy\nRuntime Qwen: auto / cpu / cuda','accent'),
+    node(12,132,223,57,'Whisper small.en · CPU INT8','Audio → English text + word times\nBERT bỏ qua; fluency từ timing'),
+    node(12,54,223,62,'Phát âm · CPU','B: CTC posterior + CMU variants\nCROTTC-IF: phone sequence (thử nghiệm)'),
+    node(252,54,W-264,135,'Một Qwen3-0.6B dùng chung','Base: dialogue; live CUDA BF16\nLoRA grammar: 2 task viết lại\nLoRA feedback: nhánh legacy\nAdapter bật/tắt theo request','accent'),
  ],edges=[edge((W/2,352),(W/2,334)),edge((W/2,291),(W/2,273)),edge((W/2,230),(W/2,211))]),
  'workflow':dict(height=446,nodes=[
     node(13,392,W-26,45,'1. Nhận audio hợp lệ','PCM16 WAV mono 16 kHz, 0,25–30 giây → tạo job','dark'),
-    node(13,337,W-26,45,'2. wav2vec2 ASR trên CPU','Sinh raw transcript và khoảng thời gian từ'),
-    node(13,282,W-26,45,'3. wav2vec2 cascade-B + assessment trên CPU','Posterior + reference CMU → assessment → uncertain / gợi ý'),
-    node(13,227,W-26,45,'4. Qwen base chuẩn hóa hình thức','Chỉ hội thoại tự do; lexical guard giữ nội dung đã nói'),
+    node(13,337,W-26,45,'2. Whisper small.en CPU INT8','Sinh transcript + word times; không đưa đáp án vào ASR'),
+    node(13,282,W-26,45,'3. Reference + fluency + acoustic evidence','B đồng bộ: CTC/CMU; CRO tùy chọn: bắt đầu chấm âm nền'),
+    node(13,227,W-26,45,'4. Giữ nội dung transcript / câu user xác nhận','Whisper path bỏ BERT recovery và Qwen normalization'),
     node(13,172,W-26,45,'5. Qwen base sinh câu trả lời','Sampling hội thoại → lọc lặp / kiểm tra policy / retry tối đa 1'),
     node(13,117,W-26,45,'6. Công bố reply_ready','Câu trả lời cố định; UI/voice có thể bắt đầu trong khi feedback chờ','accent'),
     node(13,62,W-26,45,'7. Grammar feedback cho hội thoại tự do','Hai lượt greedy: grammar_corrected rồi natural; guard từng trường'),
-    node(13,7,W-26,45,'8. Kết thúc job','Luồng assessment mới bỏ qua legacy coach → ready / cancelled / error'),
+    node(13,7,W-26,45,'8. Nhận CROTTC nền nếu có → kết thúc','Timeout âm không mất reply; coach legacy bỏ qua → ready'),
  ],edges=[edge((W/2,y),(W/2,y-10)) for y in [392,337,282,227,172,117,62]]),
  'routing':dict(height=316,nodes=[
     node(65,259,W-130,46,'Một backbone Qwen3-0.6B','Cache trong worker; tải model theo runtime policy','dark'),
-    node(0,91,153,135,'qwen-base','disable_adapter() nếu PEFT đã nạp\n\nNormalize transcript\nSinh dialogue\nFallback rewrite','accent',font_size=8.3),
+    node(0,91,153,135,'qwen-base','disable_adapter() nếu PEFT đã nạp\n\nSinh dialogue\nWhisper path: bỏ normalize\nLegacy: guarded recovery','accent',font_size=8.3),
     node(170,91,153,135,'qwen-grammar','Bật LoRA grammar\n\nGrammar correction\nNatural wording\nHai generation riêng','accent',font_size=8.3),
     node(340,91,W-340,135,'qwen-trained','Bật LoRA cascade feedback\n\nCoach phát âm legacy\nKhông gọi trong speech path có assessment','legacy',font_size=8.3),
     node(0,6,W,62,'Chọn model ở UI không đổi backbone reply speech','Trong speech chat, dialogue luôn qwen-base. Metadata coaching_model_id không tự chứng minh adapter đã được gọi.','normal'),
  ],edges=[edge((W/2,259),(W/2,244),(76.5,244),(76.5,226)),edge((W/2,259),(W/2,244),(246.5,244),(246.5,226)),edge((W/2,259),(W/2,244),(416,244),(416,226),dashed=True)]),
  'reference':dict(height=352,nodes=[
     node(170,293,W-170,48,'POST /api/chat/reference','Cùng job_id; user xác nhận câu thực sự đã nói','dark'),
-    node(0,204,150,65,'Posterior cache phía server','Audio evidence ban đầu\nKèm checkpoint/vocab hash','accent'),
+    node(0,204,150,65,'Private evidence cache','B: posterior; CRO: phones\nKèm model/revision/hash','accent'),
     node(170,204,W-170,65,'Reassess theo text mới','Không decode audio, chạy ASR hoặc phoneme model lại\nSo spoken_text_key'),
     node(170,111,150,65,'Cùng nội dung từ','Cập nhật reference\nGiữ reply / reply voice\nKhông gọi Qwen'),
     node(340,111,W-340,65,'Nội dung từ thay đổi','revision++\nXóa reply/voice cũ\nGiữ audio evidence','accent'),
@@ -155,7 +156,7 @@ def build_pdf(source):
     sub=ParagraphStyle('CoverSub',fontName='Arial',fontSize=15,leading=23,textColor=base.MUTED,spaceAfter=18)
     story=[Spacer(1,25*mm),Paragraph('TÀI LIỆU KIẾN TRÚC & VẬN HÀNH',label),
         Paragraph('Pipeline hiện tại<br/>của hệ thống MDD',title),
-        Paragraph('Cấu trúc hệ thống<br/>Model nào làm việc gì<br/>Workflow từ audio đến phản hồi',sub),
+        Paragraph('Whisper · wav2vec2 B · Qwen3 · Kokoro<br/>Training, workflow và kết quả đối chứng',sub),
         Spacer(1,8*mm),base.para('**MDD – Phát hiện và chẩn đoán lỗi phát âm tiếng Anh**\nTài liệu đồng hành với báo cáo huấn luyện wav2vec2 và Qwen.'),Spacer(1,6*mm),
         base.table({'headers':['Phạm vi','Snapshot'], 'rows':[
             ['Trọng tâm','Chat giọng nói hiện tại; thêm đường luyện phát âm và cấu trúc dự án'],
@@ -167,7 +168,7 @@ def build_pdf(source):
     toc=TableOfContents();toc.levelStyles=[ParagraphStyle('TOC',fontName='Arial-Bold',fontSize=10,leading=15,spaceBefore=8,textColor=base.INK)]
     story += [toc,Spacer(1,12*mm),base.para('Cách đọc tài liệu','h2'),
         base.para('“Đang dùng” chỉ đường gọi có trong workflow hiện tại. “Ready” cho biết artifact/config đủ điều kiện nạp; không đồng nghĩa một lượt xử lý đã thực sự gọi model đó. Device=auto là chính sách chọn thiết bị, khác device thực tế được ghi cho mỗi lần sinh.'),
-        base.para('Các sơ đồ kiến trúc được dựng từ code để giải thích pipeline, không phải đồ thị kết quả huấn luyện. Tham chiếu [Pxx] chỉ đến danh mục file/hàm ở cuối tài liệu.')]
+        base.para('Sơ đồ dựng từ code; số đo local lấy từ artifact [Lxx]. Trích dẫn [R-…] dẫn bài báo và tài liệu chính thức ở cuối. So sánh luôn giữ riêng tác vụ, tập dữ liệu và evaluator.')]
     for i,ch in enumerate(source['chapters'],1):
         story.append(PageBreak());heading=base.para(ch['title'],'h1');heading.report_heading=(0,ch['title'],f'pipeline-{i}');story.append(heading)
         for b in ch['blocks']:
@@ -191,8 +192,17 @@ def build_pdf(source):
 
 
 def add_rich(paragraph,text):
-    for part in re.split(r'(\*\*.*?\*\*|`[^`]+`)',str(text)):
+    for part in re.split(r'(\[[^\]]+\]\(https?://[^\s)]+\)|\*\*.*?\*\*|`[^`]+`)',str(text)):
         if part.startswith('**') and part.endswith('**'):paragraph.add_run(part[2:-2]).bold=True
+        elif re.fullmatch(r'\[[^\]]+\]\(https?://[^\s)]+\)', part):
+            match=re.fullmatch(r'\[([^\]]+)\]\((https?://[^\s)]+)\)',part)
+            link=OxmlElement('w:hyperlink')
+            link.set(qn('r:id'),paragraph.part.relate_to(match.group(2),RT.HYPERLINK,is_external=True))
+            run=OxmlElement('w:r');properties=OxmlElement('w:rPr')
+            color=OxmlElement('w:color');color.set(qn('w:val'),'087E8B');properties.append(color)
+            underline=OxmlElement('w:u');underline.set(qn('w:val'),'single');properties.append(underline)
+            run.append(properties);label=OxmlElement('w:t');label.text=match.group(1);run.append(label)
+            link.append(run);paragraph._p.append(link)
         elif part.startswith('`') and part.endswith('`'):
             run=paragraph.add_run(part[1:-1]);run.font.color.rgb=RGBColor.from_string('087E8B');run.font.size=Pt(9)
         else:paragraph.add_run(part)
@@ -236,7 +246,7 @@ def build_docx(source):
     for r in foot.runs:r.font.size=Pt(8)
     doc.add_paragraph('TÀI LIỆU KIẾN TRÚC & VẬN HÀNH','Subtitle')
     doc.add_paragraph('Pipeline hiện tại\ncủa hệ thống MDD','Title')
-    doc.add_paragraph('Cấu trúc hệ thống · Model nào làm việc gì · Workflow từ audio đến phản hồi','Subtitle')
+    doc.add_paragraph('Whisper · wav2vec2 B · Qwen3 · Kokoro\nTraining, workflow và kết quả đối chứng','Subtitle')
     doc.add_paragraph('Tài liệu đồng hành với báo cáo huấn luyện wav2vec2 và Qwen.\nSnapshot: '+source['snapshot_time'])
     word_table(doc,{'headers':['Phạm vi','Nội dung'],'rows':[
         ['Trọng tâm','Chat giọng nói, luyện phát âm, runtime và cấu trúc code hiện tại'],
@@ -278,6 +288,9 @@ def main():
     export_diagrams();pdf=build_pdf(source);docx=build_docx(source)
     manifest={'built_at_bangkok':datetime.now(timezone(timedelta(hours=7))).isoformat(),
         'source':'pipeline_content.json','chapters':len(source['chapters']),'diagrams':list(DIAGRAMS),
+        'source_sha256':{str(p.relative_to(HERE.parent)):hashlib.sha256(p.read_bytes()).hexdigest()
+                         for p in [HERE/'pipeline_content.json',HERE/'source_snapshot.json',HERE.parent/'references_20261023.json']},
+        'training_or_inference_executed':False,
         'outputs':[{'file':p.name,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in [pdf,docx]]}
     (HERE/'build_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps(manifest,ensure_ascii=False,indent=2))

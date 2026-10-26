@@ -1,0 +1,164 @@
+{
+  "schema": "mdd-verified-primary-references-v1",
+  "verified_date": "2026-10-23",
+  "scope_vi": "Nguồn sơ cấp được mở và đối chiếu trực tiếp. Claims mô tả phương pháp hoặc nguồn dữ liệu; kết quả local phải trích artifact riêng. Không dùng thứ hạng của paper làm kết quả đã tái lập trên máy.",
+  "references": [
+    {
+      "id": "R-WAV2VEC2", "title": "wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations",
+      "authors": "Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli", "year": 2020,
+      "venue": "NeurIPS 2020; arXiv:2006.11477", "url": "https://arxiv.org/abs/2006.11477",
+      "claim_vi": "Biểu diễn âm thanh tự giám sát, sau đó fine-tune với transcript; nền tảng của hai head riêng ASR chữ và phoneme trong dự án.",
+      "limits_vi": "Kết quả ASR trên LibriSpeech không chứng minh độ chính xác chẩn đoán phát âm hoặc khả năng nghe giọng Việt của checkpoint local."
+    },
+    {
+      "id": "R-WHISPER", "title": "Robust Speech Recognition via Large-Scale Weak Supervision",
+      "authors": "Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever", "year": 2022,
+      "venue": "arXiv:2212.04356; ICML 2023", "url": "https://arxiv.org/abs/2212.04356",
+      "claim_vi": "Whisper học nhận dạng tiếng nói từ dữ liệu giám sát yếu quy mô lớn; dùng để giải thích lựa chọn ASR chữ, tách khỏi mô hình chấm phát âm.",
+      "limits_vi": "Không suy ra transcript luôn đúng; WER thấp không tương đương phát hiện lỗi âm chính xác. Small.en local chưa được fine-tune trong dự án."
+    },
+    {
+      "id": "R-FASTER-WHISPER", "title": "faster-whisper: Faster Whisper transcription with CTranslate2",
+      "authors": "SYSTRAN and faster-whisper contributors", "year": null,
+      "venue": "Official software repository", "url": "https://github.com/SYSTRAN/faster-whisper",
+      "claim_vi": "Runtime CTranslate2 cho Whisper, hỗ trợ INT8 và timestamp từng từ. Dự án cố định phiên bản 1.2.1 và checkpoint chuyển đổi riêng.",
+      "limits_vi": "Benchmark hiệu năng của tác giả không thay thế đo latency trên CPU/GPU hiện tại; cần ghi compute type, beam và cấu hình máy."
+    },
+    {
+      "id": "R-QWEN3", "title": "Qwen3 Technical Report",
+      "authors": "An Yang et al. (Qwen Team)", "year": 2025,
+      "venue": "arXiv:2505.09388", "url": "https://arxiv.org/abs/2505.09388",
+      "companion_url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+      "claim_vi": "Qwen3 gồm các decoder LLM nhiều kích thước, có chế độ thinking và non-thinking. Checkpoint 0.6B được dùng làm backbone sinh text và gắn các LoRA riêng.",
+      "limits_vi": "Qwen3-0.6B nguyên bản là mô hình text; không tự nhận waveform. Chỉ số toàn họ Qwen3 không phải chỉ số của bản 0.6B hoặc adapter local."
+    },
+    {
+      "id": "R-BERT", "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+      "authors": "Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova", "year": 2019,
+      "venue": "NAACL-HLT 2019, pp. 4171–4186", "url": "https://aclanthology.org/N19-1423/",
+      "doi": "10.18653/v1/N19-1423",
+      "claim_vi": "Encoder hai chiều, học masked language modeling; dùng tham khảo cho chấm ứng viên khôi phục text ở nhánh ASR cũ.",
+      "limits_vi": "Không có waveform nên không thể khôi phục chắc chắn từ đã mất thông tin âm học. BERT local chưa fine-tune; mặc định bị bỏ qua khi dùng Whisper."
+    },
+    {
+      "id": "R-LORA", "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "authors": "Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen", "year": 2021,
+      "venue": "arXiv:2106.09685; ICLR 2022", "url": "https://arxiv.org/abs/2106.09685",
+      "claim_vi": "Cố định trọng số gốc và học phần cập nhật ma trận hạng thấp. Dùng giải thích q_proj/v_proj adapter thay vì nói toàn bộ Qwen đều được cập nhật.",
+      "limits_vi": "Tỷ lệ tham số train và module đích phải lấy từ provenance local; không sao chép tỷ lệ tiết kiệm của GPT-3 sang Qwen0.6B."
+    },
+    {
+      "id": "R-QLORA", "title": "QLoRA: Efficient Finetuning of Quantized LLMs",
+      "authors": "Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer", "year": 2023,
+      "venue": "NeurIPS 2023; arXiv:2305.14314", "url": "https://arxiv.org/abs/2305.14314",
+      "claim_vi": "Huấn luyện LoRA qua backbone cố định lượng tử hóa 4 bit; NF4 và double quantization phục vụ tiết kiệm bộ nhớ khi train.",
+      "limits_vi": "Recipe train NF4 không có nghĩa runtime demo đang infer NF4; worker hiện dùng Qwen BF16/FP16 CUDA hoặc FP32 CPU."
+    },
+    {
+      "id": "R-L2ARCTIC", "title": "L2-ARCTIC: A Non-native English Speech Corpus",
+      "authors": "Guanlong Zhao, Sinem Sonsaat, Alif Silpachai, Ivana Lucic, Evgeny Chukharev-Hudilainen, John Levis, Ricardo Gutierrez-Osuna", "year": 2018,
+      "venue": "Interspeech 2018, pp. 2783–2787", "url": "https://psi.engr.tamu.edu/l2-arctic-corpus/",
+      "doi": "10.21437/Interspeech.2018-1110",
+      "claim_vi": "Trang tác giả bản cập nhật có 24 người nói, sáu tiếng mẹ đẻ, bốn người Việt; khoảng 150 câu mỗi người có chú giải lỗi âm thủ công.",
+      "limits_vi": "Bài 2018 mô tả bản v1; phần người Việt được bổ sung năm 2019. Không phải mọi câu của toàn corpus đều có nhãn lỗi âm thủ công; đọc cùng prompt cần audit leakage."
+    },
+    {
+      "id": "R-ALM", "title": "Unlocking Large Audio-Language Models for Interactive Language Learning",
+      "authors": "Hongfu Liu, Zhouying Cui, Xiangming Gu, Ye Wang", "year": 2026,
+      "venue": "Findings of EACL 2026, pp. 3667–3690", "url": "https://aclanthology.org/2026.findings-eacl.190/",
+      "doi": "10.18653/v1/2026.findings-eacl.190", "companion_url": "https://github.com/zoeyada/ALMs4Learning",
+      "claim_vi": "Giới thiệu L2-Arctic-plus, benchmark cascade/ALM và instruction tuning để phát hiện lỗi, sinh lời giải thích và gợi ý.",
+      "limits_vi": "Nhận xét chất lượng nhãn phải phân biệt nhãn âm gốc thủ công với feedback sinh bằng LLM. Không gán điểm ALM lớn trong paper cho wav2vec2+Qwen0.6B local."
+    },
+    {
+      "id": "R-WI", "title": "The BEA-2019 Shared Task on Grammatical Error Correction",
+      "authors": "Christopher Bryant, Mariano Felice, Øistein E. Andersen, Ted Briscoe", "year": 2019,
+      "venue": "BEA 2019, pp. 52–75", "url": "https://aclanthology.org/W19-4406/",
+      "doi": "10.18653/v1/W19-4406", "companion_url": "https://www.cl.cam.ac.uk/research/nl/bea2019st/",
+      "claim_vi": "Nguồn Write&Improve+LOCNESS cho sửa lỗi tiếng Anh viết; shared task đánh giá bằng ERRANT F0.5.",
+      "limits_vi": "Domain tiếng Anh viết khác transcript nói. Internal held-out test của dự án không phải blind official BEA test; JSON hợp lệ và chrF không phải ERRANT F0.5."
+    },
+    {
+      "id": "R-JFLEG", "title": "JFLEG: A Fluency Corpus and Benchmark for Grammatical Error Correction",
+      "authors": "Courtney Napoles, Keisuke Sakaguchi, Joel Tetreault", "year": 2017,
+      "venue": "EACL 2017 Short Papers, pp. 229–234", "url": "https://aclanthology.org/E17-2037/",
+      "companion_url": "https://github.com/keisks/jfleg",
+      "claim_vi": "Corpus sửa câu theo độ trôi chảy, bao gồm thay đổi để diễn đạt tự nhiên hơn bên cạnh sửa ngữ pháp.",
+      "limits_vi": "Fluency trong GEC là chất lượng text viết lại; khác tốc độ/ngắt nghỉ audio. Có nhiều tham chiếu hợp lệ nên exact match chỉ là thước đo phụ."
+    },
+    {
+      "id": "R-CMU", "title": "CMU Pronouncing Dictionary",
+      "authors": "Carnegie Mellon University Speech Group and CMUSphinx contributors", "year": null,
+      "venue": "Official dictionary repository", "url": "https://github.com/cmusphinx/cmudict",
+      "claim_vi": "Từ điển phát âm tiếng Anh Mỹ; cung cấp ARPAbet và các biến thể mục từ để tạo reference.",
+      "limits_vi": "Không phải bộ nhãn chấm năng lực phát âm, không bao phủ mọi tên riêng/giọng Anh; OOV cần để chưa đánh giá thay vì tự coi là lỗi."
+    },
+    {
+      "id": "R-CROTTC", "title": "Beyond Acoustic Sparsity and Linguistic Bias: A Prompt-Free Paradigm for Mispronunciation Detection and Diagnosis",
+      "authors": "Haopeng Geng, Longfei Yang, Xi Chen, Haitong Sun, Daisuke Saito, Nobuaki Minematsu", "year": 2026,
+      "venue": "arXiv:2604.22133v1; official repository labels Interspeech 2026 Long Paper", "url": "https://arxiv.org/abs/2604.22133",
+      "companion_url": "https://github.com/Secondtonumb/IF-MDD",
+      "claim_vi": "CROTTC dùng alignment đơn điệu theo frame và consistency regularization; IF truyền thông tin lỗi gián tiếp lúc train. Tác giả báo F1 71,77% trên L2-ARCTIC theo thiết lập của họ.",
+      "limits_vi": "Điểm công bố chưa được tái lập local. Scorer, inventory, checkpoint và split cần khớp trước khi so; pilot local dùng giao thức khác và có thừa phone."
+    },
+    {
+      "id": "R-CROTTC-BUNDLE", "title": "CROTTC-IF for L2-ARCTIC: standalone inference bundle",
+      "authors": "Haopeng Geng / Haopeng", "year": 2026,
+      "venue": "Author-released checkpoint and inference wrapper", "url": "https://huggingface.co/Haopeng/CROTTC-IF-l2-arctic",
+      "claim_vi": "Bundle độc lập gồm model.ckpt, perceived_ssl.ckpt, label encoder và mã runtime; có thể nạp offline. Dự án ghim revision và hash.",
+      "limits_vi": "Wrapper xuất chuỗi perceived phones; không tự suy ra posterior CTC hoặc timestamp cấp phone. Trạng thái cài đặt hoàn tất không bảo đảm đạt điểm paper."
+    },
+    {
+      "id": "R-WAVLM", "title": "WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing",
+      "authors": "Sanyuan Chen et al.", "year": 2022,
+      "venue": "IEEE JSTSP 2022; arXiv:2110.13900 (first submitted 2021)", "url": "https://arxiv.org/abs/2110.13900",
+      "doi": "10.1109/JSTSP.2022.3188113",
+      "claim_vi": "Pretraining kết hợp masked speech prediction và denoising; backbone biểu diễn âm thanh của CROTTC bundle đang cài.",
+      "limits_vi": "SUPERB hoặc khả năng tổng quát của backbone không phải điểm phát hiện lỗi của head downstream local."
+    },
+    {
+      "id": "R-CTCGOP", "title": "A Framework for Phoneme-Level Pronunciation Assessment Using CTC",
+      "authors": "Xinwei Cao, Zijian Fan, Torbjørn Svendsen, Giampiero Salvi", "year": 2024,
+      "venue": "Interspeech 2024", "url": "https://www.isca-archive.org/interspeech_2024/cao24b_interspeech.html",
+      "claim_vi": "Nghiên cứu GOP dựa CTC, xét cả thay thế, bỏ và thêm âm, giảm phụ thuộc alignment; tài liệu định hướng cải thiện scorer.",
+      "limits_vi": "ctc_variant_posterior_margin_v1 local chưa phải bản tái lập đầy đủ công thức paper. Chỉ thêm alignment không bảo đảm giảm báo nhầm."
+    },
+    {
+      "id": "R-GOPT", "title": "Transformer-Based Multi-Aspect Multi-Granularity Non-Native English Speaker Pronunciation Assessment",
+      "authors": "Yuan Gong, Ziyi Chen, Iek-Heng Chu, Peng Chang, James Glass", "year": 2022,
+      "venue": "ICASSP 2022; arXiv:2205.03432", "url": "https://arxiv.org/abs/2205.03432",
+      "doi": "10.1109/ICASSP43922.2022.9746743", "companion_url": "https://github.com/YuanGongND/gopt",
+      "claim_vi": "Transformer dùng GOP features để học đánh giá nhiều khía cạnh ở cấp âm, từ và câu trên SpeechOcean762; một hướng benchmark bổ sung.",
+      "limits_vi": "Chưa cài/chạy trong hệ thống. Pearson correlation không phải tỷ lệ phần trăm chấm đúng; GOP/Kaldi feature pipeline là phụ thuộc riêng."
+    },
+    {
+      "id": "R-SPEECHOCEAN", "title": "speechocean762: An Open-Source Non-native English Speech Corpus for Pronunciation Assessment",
+      "authors": "Junbo Zhang, Zhiwen Zhang, Yongqing Wang, Zhiyong Yan, Qiong Song, Yukai Huang, Ke Li, Daniel Povey, Yujun Wang", "year": 2021,
+      "venue": "Interspeech 2021; OpenSLR SLR101", "url": "https://openslr.org/101/",
+      "claim_vi": "5.000 câu tiếng Anh của người nói tiếng mẹ đẻ Mandarin, gồm người lớn và trẻ em; năm chuyên gia chấm độc lập.",
+      "limits_vi": "Khác domain người Việt/L2-ARCTIC và khác rubric lỗi âm. Dùng làm external/domain-shift check, không gộp F1 thành cùng một leaderboard."
+    },
+    {
+      "id": "R-KOKORO", "title": "Kokoro-82M: model card and weights",
+      "authors": "hexgrad / Kokoro authors", "year": 2025,
+      "venue": "Official model card, v1.0", "url": "https://huggingface.co/hexgrad/Kokoro-82M",
+      "claim_vi": "Mô hình TTS open-weight 82 triệu tham số; dùng phát reply/nghe mẫu local, không phải mô hình nghe hoặc chấm phát âm.",
+      "limits_vi": "Không lấy tuyên bố chất lượng/tốc độ chung làm kết quả trên máy. Giọng af_sarah của Kokoro khác Sarah của dịch vụ ai33/ElevenLabs."
+    },
+    {
+      "id": "R-KOKORO-ONNX", "title": "kokoro-onnx: TTS with Kokoro and ONNX Runtime",
+      "authors": "thewh1teagle and kokoro-onnx contributors", "year": null,
+      "venue": "Runtime repository and model-files-v1.0 release", "url": "https://github.com/thewh1teagle/kokoro-onnx",
+      "companion_url": "https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0",
+      "claim_vi": "Runtime ONNX và bản chuyển đổi model dùng trong demo. Manifest local ghi kokoro-onnx 0.6.1, optimized FP32, CUDA và hash file.",
+      "limits_vi": "File được đặt tên optimized local vẫn truy vết URL model release gốc; loại giọng, cache, warm/cold và device cần ghi khi so thời gian."
+    },
+    {
+      "id": "R-SAA", "title": "The Speech Accent Archive",
+      "authors": "Steven H. Weinberger, Matthew C. Kelley / George Mason University", "year": null,
+      "venue": "University speech archive", "url": "https://accent.gmu.edu/",
+      "claim_vi": "Người bản ngữ và không bản ngữ cùng đọc một đoạn văn. Bốn mẫu vietnamese12/13/22/32 được dùng kiểm tra ASR ngoài L2-ARCTIC.",
+      "limits_vi": "Bốn người nói cùng một prompt không đại diện hội thoại tự do; không có bộ nhãn lỗi âm chuyên gia tương đương L2-ARCTIC trong thử nghiệm này."
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "pdf": "MDD_Bao_cao_huan_luyen_Wav2Vec2_Qwen.pdf",
-  "sha256": "ed32132db57e47a4d1d160fd49824bd0608e4f4385c32e3953a17b9eafe99473",
-  "pages": 36,
-  "unique_image_xrefs": 35,
+  "sha256": "f3bd901f09f1aea1e8df12f7215ace797fc59316365cf92a6a02e5629220c2ce",
+  "pages": 46,
+  "unique_image_xrefs": 38,
   "captions": [
     1,
     2,
@@ -43,25 +43,32 @@
   "missing_captions": [],
   "replacement_characters": 0,
   "suspect_text_bounds": 0,
-  "outline_entries": 14,
+  "outline_entries": 18,
+  "additional_chart_labels": [
+    "A1",
+    "A2",
+    "A3"
+  ],
+  "external_link_annotations": 21,
+  "missing_primary_reference_links": [],
   "page_details": [
     {
       "page": 1,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 663,
+      "characters": 738,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
         "BÁO CÁO TỔNG HỢP THỰC NGHIỆM",
-        "Huấn luyện wav2vec2",
-        "và Qwen trong MDD",
-        "Quy trình · Cấu hình · Kết quả",
-        "Đánh giá và đối chiếu bằng chứng"
+        "Huấn luyện và đánh giá",
+        "mô hình trong MDD",
+        "wav2vec2 · Qwen · Whisper · CROTTC-IF",
+        "Flow hệ thống và đối chiếu nghiên cứu"
       ],
       "last_lines": [
         "Phiên bản",
-        "1.0 · Tổng hợp trạng thái cục bộ, không chạy lại huấn luyện",
+        "2.0 · Trạng thái và nguồn nghiên cứu cập nhật; không chạy lại huấn luyện",
         "Số liệu của từng protocol được trình bày riêng. Ảnh được lấy trực tiếp từ output đã lưu của notebook; các ảnh chưa cập nhật được chú",
         "thích rõ."
       ]
@@ -70,35 +77,56 @@
       "page": 2,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1282,
+      "characters": 909,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "2",
         "Mục lục"
       ],
       "last_lines": [
-        "Nguồn [Sxx] được giải thích ở danh mục cuối tài liệu. Cell được đánh số từ 1 theo vị trí trong file notebook, không",
-        "theo execution count. Mỗi hình có thêm output index để truy ngược chính xác.",
-        "Ảnh notebook có thể phản ánh thời điểm lưu cũ. Nếu có khác biệt, bảng phân tích dùng artifact thực tế mới hơn",
-        "và chỉ rõ khác biệt. Không xem mẫu smoke, pilot hay validation như kết quả test toàn bộ."
+        "40",
+        "17. Đối chiếu nghiên cứu và thiết kế thực nghiệm tiếp theo",
+        "42",
+        "18. Chỉ số, nguồn và danh mục hình"
       ]
     },
     {
       "page": 3,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 2193,
+      "characters": 777,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "3",
+        "Quy ước đọc tài liệu"
+      ],
+      "last_lines": [
+        "Nguồn [Sxx] là artifact local; [R-TÊN] là nghiên cứu/tài liệu gốc và có liên kết ở cuối báo cáo. Cell được đánh số",
+        "từ 1 theo vị trí trong notebook. 35 hình cũ có output index; biểu đồ A1–A3 bổ sung từ kết quả đo mới.",
+        "Ảnh notebook có thể phản ánh thời điểm lưu cũ. Nếu có khác biệt, bảng phân tích dùng artifact thực tế mới hơn",
+        "và chỉ rõ khác biệt. Không xem mẫu smoke, pilot hay validation như kết quả test toàn bộ."
+      ]
+    },
+    {
+      "page": 4,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2555,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "4",
         "1. Tổng quan và tiến trình thực nghiệm"
       ],
       "last_lines": [
@@ -109,39 +137,39 @@
       ]
     },
     {
-      "page": 4,
-      "width": 595.2755737304688,
-      "height": 841.8897705078125,
-      "characters": 2264,
-      "image_count": 0,
-      "suspect_text_bounds": [],
-      "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
-        "Báo cáo thực nghiệm • 23/10/2026",
-        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "4",
-        "2. Bài toán, kiến trúc và dữ liệu"
-      ],
-      "last_lines": [
-        "trước thích ứng Việt là model A sau source training.",
-        "Qwen trong các lượt train thực tế là Qwen3-0.6B. Qwen2-Audio-7B-Instruct chỉ có metadata và manifest",
-        "ghi weights_downloaded=false; không có bằng chứng weights hoặc run train. Không gán các kết quả bên",
-        "dưới cho Qwen2-Audio."
-      ]
-    },
-    {
       "page": 5,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 790,
-      "image_count": 2,
+      "characters": 2158,
+      "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "5",
-        "Corpus và nhãn"
+        "2. Bài toán, kiến trúc và dữ liệu"
+      ],
+      "last_lines": [
+        "Nguồn: config model local và parameter_counts; context train thực tế nhỏ hơn giới hạn kiến trúc [S01].",
+        "CNN wav2vec2 dùng kernels [10,3,3,3,3,2,2] và strides [5,2,2,2,2,2,2]. Head CTC phoneme được khởi tạo mới",
+        "trên backbone tự giám sát. Vì vậy BASE chưa train head không phải baseline MDD đã có chất lượng; baseline",
+        "trước thích ứng Việt là model A sau source training."
+      ]
+    },
+    {
+      "page": 6,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 1034,
+      "image_count": 2,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "6",
+        "Qwen trong các lượt train thực tế là Qwen3-0.6B. Qwen2-Audio-7B-Instruct chỉ có metadata và manifest"
       ],
       "last_lines": [
         "Hình 01. Phân bố ngôn ngữ, thời lượng và số lỗi trong corpus annotated của thí nghiệm local.",
@@ -151,17 +179,17 @@
       ]
     },
     {
-      "page": 6,
+      "page": 7,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1360,
+      "characters": 1381,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "6",
+        "7",
         "Hình 03. Waveform với khoảng thời gian lỗi từ annotation thủ công; đây là nhãn tham chiếu, không phải dự đoán model."
       ],
       "last_lines": [
@@ -172,38 +200,38 @@
       ]
     },
     {
-      "page": 7,
-      "width": 595.2755737304688,
-      "height": 841.8897705078125,
-      "characters": 919,
-      "image_count": 3,
-      "suspect_text_bounds": [],
-      "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
-        "Báo cáo thực nghiệm • 23/10/2026",
-        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "7",
-        "Hình 05. Số mẫu, phân bố thời lượng và độ dài prompt/target Qwen trên các split cascade."
-      ],
-      "last_lines": [
-        "kiểm chứng từng mẫu bởi con người; feedback test được tác giả kiểm tra bằng annotator. Chúng khác với nhãn",
-        "phone thủ công L2-ARCTIC. Không mô tả toàn bộ feedback train là nhãn chuyên gia.",
-        "Hình 07. Histogram thời lượng audio và phân bố speaker holdout của nhánh Projector, dùng cùng split Plus.",
-        "Nguồn: notebooks/mdd_projector_training_comparison.ipynb · cell 4 · output 2."
-      ]
-    },
-    {
       "page": 8,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 2143,
-      "image_count": 0,
+      "characters": 1366,
+      "image_count": 3,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "8",
+        "Hình 05. Số mẫu, phân bố thời lượng và độ dài prompt/target Qwen trên các split cascade."
+      ],
+      "last_lines": [
+        "decoder ngôn ngữ [R-QWEN3]. LoRA bổ sung cập nhật hạng thấp vào trọng số đã đóng băng [R-LORA], còn",
+        "QLoRA kết hợp base lượng tử với adapter [R-QLORA]. Recipe dự án chỉ mở q_proj/v_proj, không phải toàn bộ",
+        "attention/MLP. L2-ARCTIC cung cấp nhãn phát âm [R-L2ARCTIC]; L2-Arctic-plus mở rộng phần giải thích/lời",
+        "khuyên [R-ALM]."
+      ]
+    },
+    {
+      "page": 9,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2164,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "9",
         "3. Cách huấn luyện wav2vec2 MDD"
       ],
       "last_lines": [
@@ -214,17 +242,17 @@
       ]
     },
     {
-      "page": 9,
+      "page": 10,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1240,
+      "characters": 1262,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "9",
+        "10",
         "Hình 08. Learning curves từ log thật của A/B/C v1, gồm train loss và validation; các đường source/Vi validation có tập chấm khác"
       ],
       "last_lines": [
@@ -235,17 +263,17 @@
       ]
     },
     {
-      "page": 10,
+      "page": 11,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1119,
+      "characters": 1140,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "10",
+        "11",
         "4. Kết quả wav2vec2 v1: A/B/C"
       ],
       "last_lines": [
@@ -256,17 +284,17 @@
       ]
     },
     {
-      "page": 11,
+      "page": 12,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 890,
+      "characters": 911,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "11",
+        "12",
         "Hình 10. Các lỗi substitution phổ biến từ alignment perceived-gold → predicted của model B; không phải confusion matrix phân loại"
       ],
       "last_lines": [
@@ -277,17 +305,17 @@
       ]
     },
     {
-      "page": 12,
+      "page": 13,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 953,
+      "characters": 974,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "12",
+        "13",
         "5. Kết quả wav2vec2 trong cascade Plus"
       ],
       "last_lines": [
@@ -298,17 +326,17 @@
       ]
     },
     {
-      "page": 13,
+      "page": 14,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1111,
+      "characters": 1132,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "13",
+        "14",
         "Hình 12. Phone F1 của A/B theo từng speaker trên đủ 900 câu test protocol Plus; PER theo speaker được trình bày ở bảng dưới."
       ],
       "last_lines": [
@@ -319,17 +347,17 @@
       ]
     },
     {
-      "page": 14,
+      "page": 15,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1999,
+      "characters": 2020,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "14",
+        "15",
         "6. Qwen cascade: huấn luyện và feedback"
       ],
       "last_lines": [
@@ -340,17 +368,17 @@
       ]
     },
     {
-      "page": 15,
+      "page": 16,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1787,
+      "characters": 1808,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "15",
+        "16",
         "Kết quả hiện có: pilot 12 feedback"
       ],
       "last_lines": [
@@ -361,17 +389,17 @@
       ]
     },
     {
-      "page": 16,
+      "page": 17,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1964,
+      "characters": 1985,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "16",
+        "17",
         "7. Projector: nối audio với Qwen"
       ],
       "last_lines": [
@@ -382,17 +410,17 @@
       ]
     },
     {
-      "page": 17,
+      "page": 18,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 994,
+      "characters": 1015,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "17",
+        "18",
         "Hình 15. Trước/sau alignment và đối chứng tắt audio: NLL trên 900 câu và WER pilot sinh transcript 30 mẫu; perplexity được trình"
       ],
       "last_lines": [
@@ -403,17 +431,17 @@
       ]
     },
     {
-      "page": 18,
+      "page": 19,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1519,
+      "characters": 1540,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "18",
+        "19",
         "8. Qwen ngữ pháp và cách nói tự nhiên"
       ],
       "last_lines": [
@@ -424,38 +452,38 @@
       ]
     },
     {
-      "page": 19,
-      "width": 595.2755737304688,
-      "height": 841.8897705078125,
-      "characters": 1866,
-      "image_count": 0,
-      "suspect_text_bounds": [],
-      "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
-        "Báo cáo thực nghiệm • 23/10/2026",
-        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "19",
-        "Thông số thực chạy"
-      ],
-      "last_lines": [
-        "control là dấu hiệu cần xem lại mức sửa quá tay. Không suy ra chất lượng hội thoại từ dữ liệu văn viết.",
-        "Nguồn dữ liệu có giới hạn nghiên cứu/giáo dục phi thương mại và điều kiện phân phối riêng. Báo cáo không đính",
-        "kèm corpus thô. Các artifact runtime/demo không được xem là bằng chứng adapter cải thiện tác vụ hội thoại tự",
-        "do."
-      ]
-    },
-    {
       "page": 20,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1394,
-      "image_count": 1,
+      "characters": 2162,
+      "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "20",
+        "Thông số thực chạy"
+      ],
+      "last_lines": [
+        "do.",
+        "Nguồn W&I+LOCNESS được giới thiệu trong BEA-2019 với đánh giá ERRANT F0.5 [R-WI]; JFLEG tập trung sửa",
+        "fluency của văn viết [R-JFLEG]. Vì vậy chrF/JSON trên 16 probe nội bộ chưa thay thế được benchmark theo hai",
+        "tài liệu này, và fluency văn viết khác tốc độ/ngắt nghỉ khi nói."
+      ]
+    },
+    {
+      "page": 21,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 1415,
+      "image_count": 1,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "21",
         "9. Fine-tune wav2vec2 cho ASR tiếng Anh"
       ],
       "last_lines": [
@@ -466,17 +494,17 @@
       ]
     },
     {
-      "page": 21,
+      "page": 22,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 956,
+      "characters": 977,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "21",
+        "22",
         "Hình 19. So sánh WER/CER trước và sau fine-tune trên cùng validation/test ASR."
       ],
       "last_lines": [
@@ -487,17 +515,17 @@
       ]
     },
     {
-      "page": 22,
+      "page": 23,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1098,
+      "characters": 1119,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "22",
+        "23",
         "10. Kiểm chứng ngoài miền: SpeechOcean762"
       ],
       "last_lines": [
@@ -508,17 +536,17 @@
       ]
     },
     {
-      "page": 23,
+      "page": 24,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 694,
+      "characters": 715,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "23",
+        "24",
         "Hình 21. A/B/C trên 179 câu được cả năm chuyên gia chấm đúng; cột cảnh báo càng cao càng bất lợi."
       ],
       "last_lines": [
@@ -529,17 +557,17 @@
       ]
     },
     {
-      "page": 24,
+      "page": 25,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1310,
+      "characters": 1331,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "24",
+        "25",
         "11. Hiệu chỉnh và kiểm tra hệ thống"
       ],
       "last_lines": [
@@ -550,17 +578,17 @@
       ]
     },
     {
-      "page": 25,
+      "page": 26,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 532,
+      "characters": 553,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "25",
+        "26",
         "Hình 25. Histogram posterior-margin error score của từ được chấm thủ công đúng/sai trong pilot; hai phân bố chồng lấn. Score chưa"
       ],
       "last_lines": [
@@ -571,17 +599,17 @@
       ]
     },
     {
-      "page": 26,
+      "page": 27,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 769,
+      "characters": 790,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "26",
+        "27",
         "Hình 27. Full-validation heldout PNV: strict FPR 23,46%, recall 69,66%; candidate/safe coverage 0 vì artifact ineligible."
       ],
       "last_lines": [
@@ -592,17 +620,17 @@
       ]
     },
     {
-      "page": 27,
+      "page": 28,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 782,
+      "characters": 803,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "27",
+        "28",
         "Hình 29. Đối chiếu bốn audio validation: số từ phát hiện đúng lỗi (TP), báo nhầm (FP) và bỏ sót (FN)."
       ],
       "last_lines": [
@@ -613,38 +641,38 @@
       ]
     },
     {
-      "page": 28,
-      "width": 595.2755737304688,
-      "height": 841.8897705078125,
-      "characters": 1218,
-      "image_count": 2,
-      "suspect_text_bounds": [],
-      "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
-        "Báo cáo thực nghiệm • 23/10/2026",
-        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "28",
-        "Hình 31. WER của ASR so với intended-text hint do người dùng xác nhận trên ba audio minh họa sound-neighbour retrieval."
-      ],
-      "last_lines": [
-        "guarded output 16,67%, với 8/12 đề xuất được nhận. Guard chưa cải thiện word errors audio trong ví dụ này;",
-        "không được báo thành benchmark tăng ASR chung.",
-        "Nguồn: các notebook mdd_pronunciation_calibration, mdd_chat_error_checks, phonetic_candidates_validation và transcript_normalization_validation;",
-        "captions kiểm tra trong qa/figures_notes_vi.json [S15]."
-      ]
-    },
-    {
       "page": 29,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 2571,
-      "image_count": 0,
+      "characters": 1559,
+      "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
         "29",
+        "Hình 31. WER của ASR so với intended-text hint do người dùng xác nhận trên ba audio minh họa sound-neighbour retrieval."
+      ],
+      "last_lines": [
+        "Nghiên cứu CTC-GOP đề xuất điểm phát âm từ mô hình CTC [R-CTCGOP]. Hàm",
+        "ctc_variant_posterior_margin_v1 trong dự án là thử nghiệm riêng; báo cáo không nhận là bản tái hiện phương",
+        "pháp hoặc điểm công bố của CTC-GOP. CMUdict [R-CMU] cung cấp biến thể từ điển, không tự quyết định mọi",
+        "biến thể thực nói có hợp lệ hay không."
+      ]
+    },
+    {
+      "page": 30,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2592,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "30",
         "12. Môi trường và cách tái lập"
       ],
       "last_lines": [
@@ -655,17 +683,17 @@
       ]
     },
     {
-      "page": 30,
+      "page": 31,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1217,
+      "characters": 1238,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "30",
+        "31",
         "# Projector: trạng thái / validation đã có runner riêng"
       ],
       "last_lines": [
@@ -676,17 +704,17 @@
       ]
     },
     {
-      "page": 31,
+      "page": 32,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1462,
+      "characters": 1483,
       "image_count": 2,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "31",
+        "32",
         "13. Ảnh lịch sử và phần còn thiếu"
       ],
       "last_lines": [
@@ -697,17 +725,17 @@
       ]
     },
     {
-      "page": 32,
+      "page": 33,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1224,
+      "characters": 1245,
       "image_count": 1,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "32",
+        "33",
         "Các giới hạn quyết định cách diễn giải"
       ],
       "last_lines": [
@@ -718,18 +746,186 @@
       ]
     },
     {
-      "page": 33,
+      "page": 34,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 2724,
+      "characters": 2789,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "33",
-        "14. Chỉ số, nguồn và danh mục hình"
+        "34",
+        "14. Từ checkpoint đã train tới pipeline web hiện tại"
+      ],
+      "last_lines": [
+        "nói chắc chắn.",
+        "Dropdown Original/Fine-tuned của coaching không đổi Whisper thành wav2vec2 và không tự biến Qwen hội",
+        "thoại thành adapter đã train. coaching_model_id trong metadata cũng chưa đủ chứng minh adapter đã được",
+        "gọi. Muốn kết luận phải đọc đường gọi và runtime check thực sự."
+      ]
+    },
+    {
+      "page": 35,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 1297,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "35",
+        "Những thành phần local và thành phần ngoài máy"
+      ],
+      "last_lines": [
+        "CROTTC-IF",
+        "revision 9149e5107b3332b9aa3f5573f6328a4e312006ad; model.ckpt SHA256",
+        "3a9a4a03d2af6c90f71db8972a51dd4ce4559d1e9801f078904a65ce4aa113ef",
+        "Tệp setup/provenance và manifest đã lưu [S19–S22]. Revision nguồn và SHA tệp là hai loại định danh khác nhau."
+      ]
+    },
+    {
+      "page": 36,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2224,
+      "image_count": 1,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "36",
+        "15. Đối chứng ASR: Whisper small.en và wav2vec2"
+      ],
+      "last_lines": [
+        "3 recording phát triển",
+        "1.161",
+        "1.099",
+        "2.786"
+      ]
+    },
+    {
+      "page": 37,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2412,
+      "image_count": 1,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "37",
+        "Loại thời gian tải model và decode/resample audio; Whisper bao gồm tạo word timings. Không phải latency toàn hệ thống."
+      ],
+      "last_lines": [
+        "Theo bài BERT [R-BERT], masked language modeling giúp học ngữ cảnh chữ. Trong pipeline đã thử, nó chỉ",
+        "chấm ứng viên chữ từ transcript/phone, không nghe waveform và không bảo đảm câu khôi phục là câu người",
+        "dùng thực sự nói. Việc bước này hiện được bypass với Whisper giảm thêm một chặng suy luận; cần benchmark",
+        "riêng nếu muốn bật lại."
+      ]
+    },
+    {
+      "page": 38,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2048,
+      "image_count": 1,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "38",
+        "16. CROTTC-IF, wav2vec2 B và đánh giá trôi chảy"
+      ],
+      "last_lines": [
+        "CROTTC-IF",
+        "Hint precision (%)",
+        "74.12",
+        "59.85"
+      ]
+    },
+    {
+      "page": 39,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2336,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "39",
+        "Review theo word_index gold"
+      ],
+      "last_lines": [
+        "Live check đã lưu chứng minh cả B/CROTTC có thể đi cùng Whisper và module fluency [S21]. Ví dụ road có",
+        "khoảng 94,99 từ/phút và 0 pause nội bộ theo ASR 3,79 giây; TLV/a0018 khoảng 178,57 từ/phút trên 1,68 giây.",
+        "Đây là ví dụ kết nối module, không phải thang IELTS hay điểm fluency đã train. Chưa chấm prosody, lexical",
+        "stress hoặc xác thực correlation với người chấm."
+      ]
+    },
+    {
+      "page": 40,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2877,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "40",
+        "17. Đối chiếu nghiên cứu và thiết kế thực nghiệm"
+      ],
+      "last_lines": [
+        "unsupported changes thay vì chỉ độ mượt.",
+        "GOPT [R-GOPT] là hướng tham khảo cho đánh giá phát âm nhiều mức. Chưa có checkpoint GOPT chạy trong",
+        "demo và chưa đo correlation với người chấm ở dự án; không đưa điểm công bố của nó vào bảng model local.",
+        "Đây là lựa chọn nghiên cứu sau khi khóa được rubric và tập kiểm chứng độc lập."
+      ]
+    },
+    {
+      "page": 41,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 1556,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "41",
+        "Các bước tiếp theo có thể kiểm chứng được"
+      ],
+      "last_lines": [
+        "chấm; p50/p95/RSS/VRAM thay vì một số",
+        "trung bình",
+        "Đây là kế hoạch nghiên cứu tiếp theo, chưa phải kết quả đã đạt và không tự khởi động training. Bản báo cáo",
+        "này chỉ đọc lại output có sẵn; người dùng chủ động chạy các lệnh train khi quyết định."
+      ]
+    },
+    {
+      "page": 42,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 2745,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "42",
+        "18. Chỉ số, nguồn và danh mục hình"
       ],
       "last_lines": [
         "[S04] Test v1. runs/windows-notebook-seed42-A-test-fold1/metrics.json;",
@@ -739,38 +935,59 @@
       ]
     },
     {
-      "page": 34,
+      "page": 43,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 2891,
+      "characters": 4141,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "34",
+        "43",
         "[S06] Train audio Plus. runs/cascade-l2arctic-plus-seed42/{A,B}/ — config, completed, training_log, validation_log,"
       ],
       "last_lines": [
-        "figures_manifest.json chứa nguồn, cell, output, kích thước và SHA256 của từng hình. evidence_wav2vec.json và",
-        "evidence_qwen.json lưu chi tiết đối chiếu. report_content.json là bản nội dung có thể chỉnh sửa; author_report.py",
-        "tạo bảng từ nguồn, build_report.py dựng PDF. report_build_manifest.json và qa/pdf_validation.json ghi thông tin",
-        "xuất/kiểm tra tài liệu."
+        "with CTranslate2. https://github.com/SYSTRAN/faster-whisper",
+        "[R-QWEN3] An Yang et al. (Qwen Team) (2025). Qwen3 Technical Report. https://arxiv.org/abs/2505.09388",
+        "[R-BERT] Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova (2019). BERT: Pre-training of Deep Bidirectional",
+        "Transformers for Language Understanding. https://aclanthology.org/N19-1423/"
       ]
     },
     {
-      "page": 35,
+      "page": 44,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1848,
+      "characters": 4006,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "35",
+        "44",
+        "[R-LORA] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen (2021)."
+      ],
+      "last_lines": [
+        "tính các artifact mới. report_content.json là bản nội dung có thể chỉnh sửa;",
+        "author_report.py/current_report_update.py tạo bảng từ nguồn, build_report.py dựng PDF.",
+        "report_build_manifest.json và qa/pdf_validation.json ghi thông tin xuất/kiểm tra. docs/references_20261023.json",
+        "lưu bibliography dùng chung với báo cáo pipeline."
+      ]
+    },
+    {
+      "page": 45,
+      "width": 595.2755737304688,
+      "height": 841.8897705078125,
+      "characters": 1869,
+      "image_count": 0,
+      "suspect_text_bounds": [],
+      "first_lines": [
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
+        "Báo cáo thực nghiệm • 23/10/2026",
+        "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
+        "45",
         "Danh mục đủ 35 hình notebook"
       ],
       "last_lines": [
@@ -781,17 +998,17 @@
       ]
     },
     {
-      "page": 36,
+      "page": 46,
       "width": 595.2755737304688,
       "height": 841.8897705078125,
-      "characters": 1737,
+      "characters": 1758,
       "image_count": 0,
       "suspect_text_bounds": [],
       "first_lines": [
-        "MDD  /  wav2vec2 & Qwen",
+        "MDD  /  Huấn luyện và đánh giá mô hình local",
         "Báo cáo thực nghiệm • 23/10/2026",
         "Nguồn: notebook, cấu hình và artifact cục bộ của dự án MDD",
-        "36",
+        "46",
         "Hình"
       ],
       "last_lines": [

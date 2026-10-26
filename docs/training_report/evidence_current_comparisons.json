@@ -1,0 +1,237 @@
+{
+  "date": "2026-10-23",
+  "scope": "Saved artifacts only; no training/inference/API",
+  "input_files": [
+    {
+      "path": "data/generated/asr-backends-20261023/manifest.json",
+      "sha256": "023cddbeb20c126b64a012b90476448c9fc9e99d64153247305bb2e3a0df83a2",
+      "bytes": 83372
+    },
+    {
+      "path": "data/generated/asr-backends-20261023/results.json",
+      "sha256": "1a80abbee8361d88ef0dae2c6ef7dbbb3b70f6830db5ba00afacfa883961ea59",
+      "bytes": 582558
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/manifest.json",
+      "sha256": "340d23bb6e988a5ec6fe38b9a79d045d41e4ede9be85c897044e6ed61d384855",
+      "bytes": 512092
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/results.json",
+      "sha256": "dd5e5dd870a735fbc828b863e82c5e1ef1957043cc1a8c903c7353dd1fc07395",
+      "bytes": 5772276
+    },
+    {
+      "path": "data/generated/crottc-live-20261023/verification.json",
+      "sha256": "b76e440417a7ad779422e40991b140f6a80d13921d37907c8c13f283784d1cce",
+      "bytes": 46185
+    },
+    {
+      "path": "data/generated/vi-voice-pipeline-v1/bert-v2/results.json",
+      "sha256": "feb681d243e84813b9d6976b670a1c34225d9895a5fd9c52ad3b0014c5896f7b",
+      "bytes": 170854
+    },
+    {
+      "path": "scripts/local_speech_engine.py",
+      "sha256": "81fc649b1257a720a92690116b81fa44ced8927395374d18d206a54208436980",
+      "bytes": 54498
+    },
+    {
+      "path": "src/mdd/demo_model_registry.py",
+      "sha256": "75c947eea2d95110427013cedb4cab4f26d4e35810fe9b4237d9cb7006f8335d",
+      "bytes": 5815
+    },
+    {
+      "path": "src/mdd/chat_assessment.py",
+      "sha256": "ea59a9d09a4d8287550e9aa7e6b3f4855d5576f5eb35cfee725e84f381516014",
+      "bytes": 8999
+    },
+    {
+      "path": "src/mdd/speech_fluency.py",
+      "sha256": "ca14c8c602189e3ba7cb673c8eb69837d3619acb7946f27d2d85b582f35a16b0",
+      "bytes": 9950
+    }
+  ],
+  "asr_manifest_canonical_sha256": "bd2d0cf9abc15d780b833a946684c48fecdad8a7c38c409f2ede426f4d6f433e",
+  "crottc_manifest_canonical_sha256": "34f9c65701614c2891e85f7a9dc7dffeaaa8775d9fac310d36d761423c9ba8f1",
+  "crottc_model_source": {
+    "cascade-B": {
+      "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint",
+      "decoder": "CTC greedy",
+      "device": "cpu",
+      "threads": 2,
+      "files": [
+        {
+          "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/config.json",
+          "sha256": "44f7b230d62206346fc517dc3ac30e669d21f597207f3d5515c840eec32c092e",
+          "bytes": 5149
+        },
+        {
+          "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/metadata.json",
+          "sha256": "c53b581c721a926866d934ce1e2b64c996bdbe4c061db1ab7ba5d8a46572b8a4",
+          "bytes": 10492
+        },
+        {
+          "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/model.safetensors",
+          "sha256": "da000521b31ad4d7445b8eb13d82d8a767d6535e678d727aae9baa8a8b177110",
+          "bytes": 377768004
+        },
+        {
+          "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/preprocessor_config.json",
+          "sha256": "731e3bf65dc2d31af0263dcf8eb9119902c102753bf5b7e25a9204eea7ae5ac1",
+          "bytes": 224
+        },
+        {
+          "path": "runs/cascade-l2arctic-plus-seed42/B/best_checkpoint/vocab.json",
+          "sha256": "1ebdf682aa547489a70aa72606a3f32fa38398a12977b978b2d874dac3d6bb8d",
+          "bytes": 1089
+        }
+      ]
+    },
+    "crottc-if": {
+      "model_id": "Haopeng/CROTTC-IF-l2-arctic",
+      "revision": "9149e5107b3332b9aa3f5573f6328a4e312006ad",
+      "decoder": "Official SpeechBrain AR/CTC beam10 weight0.99",
+      "device": "cpu",
+      "threads": 2,
+      "files": [
+        {
+          "path": ".tools/crottc/bundle/README.md",
+          "sha256": "4da4d804b08e077857456e0e7b33f709a38f3925a8f0550fc9fdb391ff530eff",
+          "bytes": 1199
+        },
+        {
+          "path": ".tools/crottc/bundle/checkpoint/CKPT.yaml",
+          "sha256": "e4d88e64859b82317e5ad99d6d22c557579bb93b7497859af976d7aa69c37f60",
+          "bytes": 187
+        },
+        {
+          "path": ".tools/crottc/bundle/checkpoint/model.ckpt",
+          "sha256": "3a9a4a03d2af6c90f71db8972a51dd4ce4559d1e9801f078904a65ce4aa113ef",
+          "bytes": 73894282
+        },
+        {
+          "path": ".tools/crottc/bundle/checkpoint/perceived_ssl.ckpt",
+          "sha256": "a1ff5b43b55c412e73381e8b257c9af3c2237fa71b76bac5119ca8b31a531ec4",
+          "bytes": 1262009130
+        },
+        {
+          "path": ".tools/crottc/bundle/custom_interface.py",
+          "sha256": "a92f165ea657a9fb62835099d65613c4897f6d0f825fdd867ae61ceef30c272a",
+          "bytes": 5745
+        },
+        {
+          "path": ".tools/crottc/bundle/hyperparams.yaml",
+          "sha256": "dde69e1b5c2f18a35f71ad5884275c8f948ba81a30be15f996fba6eaf845b5bb",
+          "bytes": 19737
+        },
+        {
+          "path": ".tools/crottc/bundle/label_encoder.txt",
+          "sha256": "98cee9707ab67c3e29ee337debf4ba319cbc61c3777024db6b8f3494f0df5bfe",
+          "bytes": 583
+        },
+        {
+          "path": ".tools/crottc/bundle/manifest.json",
+          "sha256": "8dcd106eee0321195853f8b29bf9f4dd48764eea5a79444bc8d6f5731b0c794b",
+          "bytes": 545
+        },
+        {
+          "path": ".tools/crottc/bundle/requirements.txt",
+          "sha256": "c339f9b6e61f442e19c94d59bffad5f9bffaf3a3022f339a57bee5aa88df803d",
+          "bytes": 230
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/models/Trans_IFMDD_ConPCO_ver2.py",
+          "sha256": "5955726fb7476e237bc08d18d5ea5d94124f976dfcb1bc3142d98ff100d57a61",
+          "bytes": 112938
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/models/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/models/projector.py",
+          "sha256": "a7f21e63007c7dc0cab35921028a28f92277218bf4d8b1c7b333b58b6668702f",
+          "bytes": 2999
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/mpd_eval_v4.py",
+          "sha256": "9e88388629a69f46ac41bd9c1b428aa30ffb4defb6a67113afc3309b893abcf2",
+          "bytes": 30799
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/trainer/AutoSSLoader.py",
+          "sha256": "64f807bf202b7b1ee37e3a5b323868cfed78279d203ee1ceec571bc9500ec0e3",
+          "bytes": 5393
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/trainer/ConPCO_TransASR.py",
+          "sha256": "6dcc57477071027ae7e3f30a1f9813bd8095ff6bb9055747e47c4518d8f544fd",
+          "bytes": 10599
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/trainer/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/layers/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/layers/utils.py",
+          "sha256": "cb4657c60f0cb889286c5d28f364ca6c542617f0b288dfc46bcfa29398590005",
+          "bytes": 7244
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/losses/ConPCO_norm.py",
+          "sha256": "d072ee4c26934fba4f1750b9bf30d6a80020f893ba2dab200bdd62d7bc066bda",
+          "bytes": 6027
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/losses/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/plot/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/plot/plot_attn.py",
+          "sha256": "183d522839fb67d6190c47b4c89e331efcaaecfa922a6f023d0548778396523a",
+          "bytes": 1162
+        },
+        {
+          "path": ".tools/crottc/bundle/runtime/utils/release_bundle.py",
+          "sha256": "f3c619f7bc4fba6bcfe2f9078ddcf5e14d1b6bcff534bcd3f801e56c44aca898",
+          "bytes": 9823
+        },
+        {
+          "path": ".tools/crottc/bundle/wavlm/config.json",
+          "sha256": "a3d8fe831aaf63d725b54a8ac36f3549cd4365c5086774b2c89cabbc6f9e129d",
+          "bytes": 2222
+        },
+        {
+          "path": ".tools/crottc/bundle/wavlm/preprocessor_config.json",
+          "sha256": "60ca5a31e13f69ee2fbf147504c8676db5f6398fd7a6b12294341dff838edfcf",
+          "bytes": 214
+        },
+        {
+          "path": ".tools/crottc/setup_manifest.json",
+          "sha256": "4aa5b0f133e1ab3f7975c5111541bd0d227fa153a5d537c6eb6ae68681d74a99",
+          "bytes": 7259
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "repo_id": "grammarly/coedit-large",
+  "revision": "5637bcdf9d8d4419f97c8cfea36f7d35c79232b6",
+  "files": {
+    "config.json": {
+      "sha256": "bca25a47a9ceab6fa63555b0eaab289e89735bcf1de6cc1dcb6bc57e88881c0d",
+      "size": 787
+    },
+    "generation_config.json": {
+      "sha256": "eed058a57a4e9aa945c08aab951ae8455298d8912a5fe2d301caf0141595fd77",
+      "size": 142
+    },
+    "model.safetensors": {
+      "sha256": "c692f68bca5c6899801bc9fad626fefd3359ccd95e26dccae4dd72186fd98852",
+      "size": 3132439432
+    },
+    "README.md": {
+      "sha256": "bb9ed5aa73b9f59a10578a89fa07593f06646f95189b81df7c4759664e22ac5f",
+      "size": 3148
+    },
+    "special_tokens_map.json": {
+      "sha256": "5c87151ef0f72a99d1f766a4c418bd2a1f90aaa30a8e22fe5eca9641daebb64f",
+      "size": 2201
+    },
+    "spiece.model": {
+      "sha256": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86",
+      "size": 791656
+    },
+    "tokenizer.json": {
+      "sha256": "92c25d2e604250ffdcf35d7aec47931868ca92b35d6afe84dc039a47a3a87226",
+      "size": 2422262
+    },
+    "tokenizer_config.json": {
+      "sha256": "16dcefb67ade62dc4f5fb2b1be434e10116f8da40c964c2b43fcf7294944f397",
+      "size": 2497
+    }
+  },
+  "source": "https://huggingface.co/grammarly/coedit-large",
+  "paper": "https://aclanthology.org/2023.findings-emnlp.350/",
+  "license": "cc-by-nc-4.0"
+}

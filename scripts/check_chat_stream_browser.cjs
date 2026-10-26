@@ -49,7 +49,7 @@ async function checkOpeningVoice(browser, checks) {
     };
   });
   await page.route('**/api/chat/config', async route => {
-    const response = await route.fetch(); return route.fulfill({ json: { ...await response.json(), default_voice_provider: 'ai33' } });
+    const response = await route.fetch(); return route.fulfill({ json: { ...await response.json(), kokoro_available: false, default_voice_provider: 'ai33' } });
   });
   await page.route('**/api/chat/topic', route => {
     job = { id: String(++serial).padStart(32, '0'), model_id: 'qwen-trained', status: 'ready', text: opening,
@@ -152,7 +152,7 @@ async function checkSentencePrefetch(browser, checks, fixture, sample) {
   });
   await page.route('**/api/chat/config', async route => {
     const response = await route.fetch();
-    return route.fulfill({ json: { ...await response.json(), default_voice_provider: 'ai33' } });
+    return route.fulfill({ json: { ...await response.json(), kokoro_available: false, default_voice_provider: 'ai33' } });
   });
   await page.route('**/api/chat/speech', route => route.fulfill({ json: job }));
   await page.route('**/api/chat/jobs/*', route => route.fulfill({ json: job }));
@@ -239,7 +239,7 @@ async function checkInterpretation(browser, checks, fixture) {
   await page.addInitScript(mockVoice);
   await page.route('**/api/chat/config', async route => {
     const response = await route.fetch();
-    return route.fulfill({ json: { ...await response.json(), default_voice_provider: 'browser' } });
+    return route.fulfill({ json: { ...await response.json(), kokoro_available: false, default_voice_provider: 'browser' } });
   });
   await page.route('**/api/chat/speech', route => { submissions.push(route.request().postDataJSON()); return route.fulfill({ json: job }); });
   await page.route('**/api/chat/jobs/*', route => route.fulfill({ json: job }));
@@ -255,27 +255,29 @@ async function checkInterpretation(browser, checks, fixture) {
     await page.goto(base + '/#chat'); await page.waitForFunction(() => window.MDDChat?.state.config?.speech_ready);
     await page.locator('#chat-free-talk').click();
     await page.locator('#chat-settings > summary').click(); await page.locator('#chat-auto-read').uncheck(); await page.keyboard.press('Escape');
-    const speech = { ...structuredClone(fixture.speech), transcript: original, reference_text: original, reference_source: 'asr',
+    const speech = { ...structuredClone(fixture.speech), transcript: original, reference_text: inferred, reference_source: 'bert_inferred',
+      pronunciation_reference_ready: true,
       conversation_source: 'asr_interpreted', conversation_text: inferred, reply_ready: true, sound_candidates: null,
-      comparison: { words: original.split(/\s+/).map(text => ({ text, status: 'uncertain' })), events: [] },
-      interpretation: { status: 'accepted', text: inferred, changed: true, requires_confirmation: true, source: 'qwen_inferred' } };
+      comparison: { words: inferred.split(/\s+/).map(text => ({ text, status: 'uncertain' })), events: [] },
+      interpretation: { status: 'accepted', text: inferred, changed: true, requires_confirmation: true, source: 'bert_inferred' } };
     job = first = { id: 'e'.repeat(32), status: 'ready', text: 'What made the journey difficult?', metadata: { reference_revision: 0 }, speech };
     await page.evaluate(() => window.MDDChat.sendAudio(new ArrayBuffer(44), 'mock.wav'));
     const user = page.locator('.chat-message.user').first(), feedback = page.locator('.chat-turn-feedback').first();
     assert.equal(await user.locator('.chat-message-text').textContent(), inferred);
-    assert.equal(await user.locator('.chat-message-meta').textContent(), 'AI hiểu là');
+    assert.equal(await user.locator('.chat-message-meta').textContent(), '');
     assert.equal(await user.locator('[data-evidence],.chat-word-practice,.chat-sound-word').count(), 0,
-      'Raw-reference pronunciation marks cannot be attached to inferred words.');
+      'An uncertain reference cannot invent pronunciation errors.');
     await feedback.locator(':scope > summary').click();
-    assert.equal(await feedback.locator('.chat-turn-review > .chat-review-label').first().textContent(), 'ASR gốc');
-    assert.equal(await feedback.locator('.chat-target-text').textContent(), original);
-    assert.equal(await feedback.locator('.chat-sentence-text').textContent(), original,
-      'The sentence voice remains bound to the raw acoustic reference until explicit confirmation.');
-    assert.deepEqual(await feedback.locator('.chat-sound-word > summary').allTextContents(), original.split(/\s+/));
+    assert.equal(await feedback.locator('.chat-turn-review > .chat-review-label').first().textContent(), 'Câu đã nói');
+    assert.equal(await feedback.locator('.chat-target-text').textContent(), inferred);
+    assert.equal(await feedback.locator('.chat-sentence-text').textContent(), inferred,
+      'Sentence voice uses the same selected BERT reference as the sound comparison.');
+    assert.deepEqual(await feedback.locator('.chat-sound-word > summary').allTextContents(), inferred.split(/\s+/));
     assert.equal(await feedback.locator('.chat-reference-input').inputValue(), inferred);
-    assert.equal(await feedback.locator('.chat-reference-apply').textContent(), 'Xác nhận câu này');
+    assert.equal(await feedback.locator('.chat-reference-apply').textContent(), 'Đối chiếu audio này');
     assert.equal(references.length, 0, 'An interpretation must never auto-confirm itself.');
-    checks.push('Accepted Qwen interpretation is shown and labelled separately; raw ASR, sound tokens and sentence audio stay in feedback, and confirmation remains explicit.');
+    assert.equal((await feedback.textContent()).includes(original), false, 'The original ASR must remain hidden.');
+    checks.push('BERT text drives the bubble, pronunciation words and sentence audio; raw ASR stays hidden and editing remains optional.');
     job = { ...first, id: 'f'.repeat(32), text: 'Could you say that again?', speech: { ...speech, transcript: 'And he dishurt my m',
       reference_text: 'And he dishurt my m', conversation_source: 'asr', conversation_text: 'And he dishurt my m',
       interpretation: { status: 'ambiguous', text: 'And he hurt my arm.', requires_confirmation: true } } };
@@ -288,11 +290,11 @@ async function checkInterpretation(browser, checks, fixture) {
     await page.waitForFunction(() => window.MDDChat.getTurns()[0].confirmedSource === 'user_confirmed');
     assert.equal(references.length, 1); assert.equal(references[0].reference_text, inferred);
     assert.equal(await user.locator('.chat-message-meta').textContent(), '');
-    assert.equal(await feedback.locator('.chat-target-text').textContent(), original, 'Confirmation must preserve the original ASR.');
-    assert.equal(await feedback.locator('.chat-confirmed-text').textContent(), inferred);
+    assert.equal(await feedback.locator('.chat-target-text').textContent(), inferred);
+    assert.equal(await feedback.locator('.chat-confirmed-text').count(), 0, 'Only the selected sentence is shown.');
     assert.equal(await feedback.locator('.chat-sentence-text').textContent(), inferred);
     assert.deepEqual(errors, []);
-    checks.push('Inferred chat history remains consistent, ambiguous alternatives leave raw text alone, and a no-regeneration confirmation updates only the explicit pronunciation reference.');
+    checks.push('Inferred chat history remains consistent, ambiguous alternatives leave the selected fallback alone, and manual confirmation keeps one visible reference.');
   } finally { await page.close(); }
 }
 
@@ -308,7 +310,7 @@ async function run() {
   // This suite exercises browser speech; production may default to Sarah/ai33.
   await page.route('**/api/chat/config', async route => {
     const response = await route.fetch();
-    return route.fulfill({ json: { ...await response.json(), default_voice_provider: 'browser' } });
+    return route.fulfill({ json: { ...await response.json(), kokoro_available: false, default_voice_provider: 'browser' } });
   });
   const fresh = (text = 'I am learning to speak ') => {
     const speech = structuredClone(fixture.speech); speech.coaching = { status: 'pending' }; speech.reply_ready = false; delete speech.spoken_response;

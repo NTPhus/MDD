@@ -10,7 +10,7 @@ import time
 import unittest
 import wave
 from http.client import HTTPConnection
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from mdd.demo_chat import ChatService, ChatError
@@ -84,7 +84,8 @@ class SpeechChatTests(unittest.TestCase):
             on_text('What happened next?')
             return {}
         self.service.speech_generator = run
-        final = finished(self.service, self.service.submit_speech(self.payload())["id"])
+        with patch.dict('os.environ', {'MDD_CHAT_ASR': 'wav2vec2'}):
+            final = finished(self.service, self.service.submit_speech(self.payload())["id"])
         self.assertEqual(final['speech']['transcript'], 'Yesterday I go')
         self.assertNotIn('private', json.dumps(final))
         self.assertIn('_acoustic_evidence', self.service._jobs[final['id']].speech)

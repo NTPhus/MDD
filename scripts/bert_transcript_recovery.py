@@ -3,8 +3,9 @@
 BERT never receives a reading answer and never generates a replacement sentence.
 It compares the original span with a small set of dictionary spelling/sound
 neighbours. Scores are language-model preferences, not acoustic probabilities or
-proof of what somebody said. Accepted changes remain unconfirmed interpretations;
-the caller must retain the original recording, transcript and sound reference.
+proof of what somebody said. Accepted changes remain model interpretations.
+The demo can use them as the pronunciation target under its explicit policy,
+while retaining the original recording, transcript and acoustic evidence.
 """
 from __future__ import annotations
 
@@ -82,8 +83,11 @@ def _phone_rows(value, tokens):
     if (not isinstance(value, dict) or value.get('status') != 'available'
             or value.get('diagnostic_only') is not True):
         return {}
+    rows = value.get('words')
+    if not isinstance(rows, list):
+        return {}
     result = {}
-    for row in value.get('words', []):
+    for row in rows[:150]:
         if not isinstance(row, dict):
             continue
         index = row.get('index')
@@ -147,7 +151,8 @@ def _candidate(original, text, *, origin, phone_distance=None):
             'phone_edit_distance': phone_distance}
 
 
-def _proposals(transcript, dictionary, phonetic_candidates=None, *, cancelled=None):
+def _proposals(transcript, dictionary, phonetic_candidates=None, *, cancelled=None,
+               allow_known_word_edits=False):
     tokens = list(WORDS.finditer(transcript))
     phone_rows = _phone_rows(phonetic_candidates, tokens)
     proposals, spelling_attempts = [], 0
@@ -174,7 +179,9 @@ def _proposals(transcript, dictionary, phonetic_candidates=None, *, cancelled=No
                     if left in dictionary and right in dictionary:
                         candidate = f'{left} {right}'
                         alternatives[candidate] = _candidate(word, candidate, origin='dictionary_boundary')
-            for item in row.get('candidates', [])[:5]:
+            phone_candidates = row.get('candidates', [])
+            for item in (phone_candidates[:5] if isinstance(phone_candidates, list)
+                         and (key not in dictionary or allow_known_word_edits) else []):
                 if not isinstance(item, dict):
                     continue
                 candidate = item.get('word')
@@ -268,10 +275,14 @@ def _choose(proposal, scores):
 class BertTranscriptRecovery:
     """One lazy, CPU-only BERT instance per inference worker; no API/downloads."""
 
-    def __init__(self, root, *, model_dir=None, max_edits=3):
+    def __init__(self, root, *, model_dir=None, max_edits=3, allow_known_word_edits=False):
         self.root = Path(root).resolve()
         self.model_dir = Path(model_dir) if model_dir is not None else self.root / 'models/pretrained/bert-base-uncased'
         self.max_edits = max(1, min(int(max_edits), 3))
+        # Approximate word timing and phoneme-B neighbours have not been
+        # calibrated for ASR replacement. Valid dictionary words therefore stay
+        # intact by default, even when a contextual model prefers another word.
+        self.allow_known_word_edits = bool(allow_known_word_edits)
         self.tokenizer = self.model = None
         self._load_lock = threading.Lock()
 
@@ -407,7 +418,8 @@ class BertTranscriptRecovery:
                 if not dictionary:
                     result['reason'] = 'verified_dictionary_unavailable'
                 else:
-                    proposals = _proposals(transcript, dictionary, phonetic_candidates, cancelled=cancelled)
+                    proposals = _proposals(transcript, dictionary, phonetic_candidates,
+                        cancelled=cancelled, allow_known_word_edits=self.allow_known_word_edits)
                     edits, evidence = [], []
                     for proposal in proposals:
                         if _cancelled(cancelled):
@@ -443,7 +455,7 @@ class BertTranscriptRecovery:
                             reason='candidate_ambiguity' if status == 'ambiguous' else None,
                             evidence=evidence, evaluated_spans=len(evidence),
                             candidate_limit=MAX_CANDIDATES, span_limit=MAX_SPANS,
-                            max_edits=self.max_edits,
+                            max_edits=self.max_edits, known_word_edits=self.allow_known_word_edits,
                             thresholds={'min_gain': MIN_GAIN, 'min_margin': MIN_MARGIN,
                                         'known_word_min_gain': 2.0, 'spelling_penalty': SPELLING_PENALTY})
             except InterruptedError:

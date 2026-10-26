@@ -7,9 +7,41 @@ checks pronunciations, or removes history by matching text strings.
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 
 SOURCES = {'asr', 'reading_prompt', 'corrected_sentence', 'user_confirmed'}
 MAX_TEXT_CHARS = 1000
+
+
+def _word_keys(text):
+    return re.findall(r"[a-z]+(?:'[a-z]+)?", text.casefold().replace('’', "'"))
+
+
+def _unresolved_recovery_span(interpretation, unresolved_words, effective):
+    """A partial repair must not hide another explicitly unresolved span.
+
+    Unknown dictionary entries alone are not proof of an unintelligible turn:
+    names and technical words may be perfectly meaningful. Here the extra
+    evidence is that the recovery step actually compared an unknown span with
+    alternatives and could not choose one. Bind that decision to words still
+    missing in the selected text, rather than to an already repaired spelling.
+    """
+    if interpretation.get('provider') != 'bert' or not isinstance(unresolved_words, list):
+        return False
+    evidence = interpretation.get('evidence')
+    if not isinstance(evidence, list):
+        return False
+    unresolved = {word for value in unresolved_words if isinstance(value, str)
+                  for word in _word_keys(value)}
+    selected = set(_word_keys(effective))
+    for row in evidence:
+        if (not isinstance(row, dict) or row.get('reason') != 'unknown_word'
+                or row.get('accepted') is not False or not isinstance(row.get('original'), str)):
+            continue
+        words = _word_keys(row['original'])
+        if words and all(word in unresolved and word in selected for word in words):
+            return True
+    return False
 
 
 def _validate_text(value, name):
@@ -63,6 +95,8 @@ def prepare_dialogue_context(request, raw_transcript, *, dialogue_text=None, sou
             if not isinstance(unresolved, list):
                 unresolved = missing_words if interpretation.get('status') == 'unchanged' else []
             needs_clarification = len(unresolved) >= 2 and len(unresolved) / max(len(effective.split()), 1) >= .25
+            needs_clarification = needs_clarification or _unresolved_recovery_span(
+                interpretation, unresolved, effective)
         if interpretation is not None and interpretation.get('status') == 'ambiguous':
             needs_clarification = True
     view['conversation_source'] = source

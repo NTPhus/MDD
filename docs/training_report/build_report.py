@@ -83,6 +83,7 @@ def rich(text):
     t = clean(text)
     t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
     t = re.sub(r"`([^`]+)`", r'<font color="#087E8B">\1</font>', t)
+    t = re.sub(r"\[([^\[\]]+)\]\((https?://[^\s)]+)\)", r'<link href="\2" color="#087E8B">\1</link>', t)
     return t
 
 
@@ -119,7 +120,7 @@ class ReportDoc(BaseDocTemplate):
         canvas.line(MARGIN,h-15*mm,w-MARGIN,h-15*mm)
         canvas.setFont("Arial-Bold",7.5)
         canvas.setFillColor(TEAL)
-        canvas.drawString(MARGIN,h-12*mm,"MDD  /  wav2vec2 & Qwen")
+        canvas.drawString(MARGIN,h-12*mm,"MDD  /  Huấn luyện và đánh giá mô hình local")
         canvas.setFont("Arial",7)
         canvas.setFillColor(MUTED)
         canvas.drawRightString(w-MARGIN,h-12*mm,"Báo cáo thực nghiệm • 23/10/2026")
@@ -161,21 +162,21 @@ def main():
     figures = json.loads((HERE/"figures_manifest.json").read_text(encoding="utf-8"))["figures"]
     figmap = {x["figure_id"]:x for x in figures}
     out = HERE / "MDD_Bao_cao_huan_luyen_Wav2Vec2_Qwen.pdf"
-    doc = ReportDoc(str(out), title="MDD – Báo cáo huấn luyện wav2vec2 và Qwen",
+    doc = ReportDoc(str(out), title="MDD – Huấn luyện, pipeline và đánh giá mô hình local",
         author="Dự án MDD", subject="Quy trình, thông số, kết quả và hình ảnh notebook")
     story = [Spacer(1,26*mm)]
     cover_label=ParagraphStyle("CoverLabel",fontName="Arial-Bold",fontSize=11,leading=17,textColor=TEAL,spaceAfter=18)
     cover_title=ParagraphStyle("CoverTitle",fontName="Arial-Bold",fontSize=32,leading=42,textColor=INK,spaceAfter=20)
     cover_sub=ParagraphStyle("CoverSub",fontName="Arial",fontSize=15,leading=23,textColor=MUTED,spaceAfter=18)
     story += [Paragraph("BÁO CÁO TỔNG HỢP THỰC NGHIỆM",cover_label),
-        Paragraph("Huấn luyện wav2vec2<br/>và Qwen trong MDD",cover_title),
-        Paragraph("Quy trình · Cấu hình · Kết quả<br/>Đánh giá và đối chiếu bằng chứng",cover_sub),
+        Paragraph("Huấn luyện và đánh giá<br/>mô hình trong MDD",cover_title),
+        Paragraph("wav2vec2 · Qwen · Whisper · CROTTC-IF<br/>Flow hệ thống và đối chiếu nghiên cứu",cover_sub),
         Spacer(1,10*mm),para("**MDD – Mispronunciation Detection and Diagnosis**\nPhát hiện và chẩn đoán lỗi phát âm tiếng Anh cho người Việt."),
         Spacer(1,7*mm), table({"headers":["Phạm vi","Tài liệu"],"rows":[
-            ["Mô hình","wav2vec2-base, wav2vec2-base-960h, Qwen3-0.6B và Projector"],
-            ["Bằng chứng","14 notebook; 35 hình gốc; log, checkpoint metadata và metrics đã lưu"],
+            ["Mô hình","wav2vec2 MDD/ASR, Qwen3-0.6B + LoRA, Projector, Whisper, BERT, CROTTC-IF"],
+            ["Bằng chứng","35 hình notebook lịch sử; 3 biểu đồ đối chứng mới; log, checkpoint, 118 ASR và 27 pronunciation audio"],
             ["Ngày tổng hợp","23/10/2026 · Giờ Bangkok (UTC+7)"],
-            ["Phiên bản","1.0 · Tổng hợp trạng thái cục bộ, không chạy lại huấn luyện"],
+            ["Phiên bản","2.0 · Trạng thái và nguồn nghiên cứu cập nhật; không chạy lại huấn luyện"],
         ],"widths":[1,3]}), Spacer(1,10*mm),
         para("Số liệu của từng protocol được trình bày riêng. Ảnh được lấy trực tiếp từ output đã lưu của notebook; các ảnh chưa cập nhật được chú thích rõ.","small"),
         NextPageTemplate("body"),PageBreak(),para("Mục lục","h1")]
@@ -184,9 +185,10 @@ def main():
         ParagraphStyle("TOC1",fontName="Arial",fontSize=9,leading=13,leftIndent=14,textColor=MUTED)]
     story += [toc,Spacer(1,9*mm),para("Quy ước đọc tài liệu","h2"),
         para("Các tỷ lệ được đổi sang %; chênh lệch giữa hai tỷ lệ dùng **điểm phần trăm (đpt)**. Loss/NLL, perplexity, BLEU và ROUGE giữ đúng thang ghi trong nguồn. Dấu — là không có hoặc không xác định, không phải 0."),
-        para("Nguồn `[Sxx]` được giải thích ở danh mục cuối tài liệu. Cell được đánh số từ 1 theo vị trí trong file notebook, không theo execution count. Mỗi hình có thêm output index để truy ngược chính xác."),
+        para("Nguồn `[Sxx]` là artifact local; `[R-TÊN]` là nghiên cứu/tài liệu gốc và có liên kết ở cuối báo cáo. Cell được đánh số từ 1 theo vị trí trong notebook. 35 hình cũ có output index; biểu đồ A1–A3 bổ sung từ kết quả đo mới."),
         para("Ảnh notebook có thể phản ánh thời điểm lưu cũ. Nếu có khác biệt, bảng phân tích dùng artifact thực tế mới hơn và chỉ rõ khác biệt. Không xem mẫu smoke, pilot hay validation như kết quả test toàn bộ.")]
     used_figures=[]
+    artifact_figures=[]
     for ci,chapter in enumerate(source["chapters"],1):
         story.append(PageBreak())
         heading=para(chapter["title"],"h1")
@@ -223,6 +225,17 @@ def main():
                 cap=para(f"**Hình {len(used_figures):02d}.** "+b["caption"],"caption")
                 src=para(f"Nguồn: {f['notebook']} · cell {f['cell_number_1']} · output {f['output_index_0']+1}." + (" "+b["note"] if b.get("note") else ""),"source")
                 story += [KeepTogether([Spacer(1,6),img,cap,src]),Spacer(1,5)]
+            elif kind=="artifact_figure":
+                from PIL import Image as PILImage
+                path = ROOT/b["file"]
+                with PILImage.open(path) as actual_image:
+                    pixels_w,pixels_h=actual_image.size
+                scale=min(WIDTH/pixels_w,b.get("max_height_mm",100)*mm/pixels_h)
+                img=Image(str(path),width=pixels_w*scale,height=pixels_h*scale)
+                cap=para(f"**Biểu đồ {b['label']}.** "+b["caption"],"caption")
+                figure_source=para("Nguồn: "+b["file"]+". "+b.get("source",""),"source")
+                story += [KeepTogether([Spacer(1,6),img,cap,figure_source]),Spacer(1,5)]
+                artifact_figures.append({"file":b["file"],"label":b["label"],"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
             else:raise ValueError(kind)
     missing=sorted(set(figmap)-set(used_figures))
     if missing:raise ValueError(f"Notebook figures not included: {missing}")
@@ -233,6 +246,7 @@ def main():
         "pdf":out.name,"pdf_sha256":hashlib.sha256(out.read_bytes()).hexdigest(),
         "figure_count":len(used_figures),"figure_ids":used_figures,
         "figure_number_to_extraction_id":{str(n):f for n,f in enumerate(used_figures,1)},
+        "additional_artifact_figures":artifact_figures,
         "source": "report_content.json", "chapters":len(source["chapters"]),
         "method":"ReportLab; Arial TrueType embedded; saved notebook PNG images unchanged",
     }

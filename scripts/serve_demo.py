@@ -34,6 +34,11 @@ def main(argv=None):
     bind_host = "0.0.0.0" if args.lan else "127.0.0.1"
     server = DemoServer((bind_host, args.port), DemoApplication(ROOT, threads=args.threads),
                         lan=args.lan, allow_hosts=allowed_hosts)
+    if os.environ.get('MDD_CHAT_PREWARM', '1') != '0':
+        chat = server.application.chat_service
+        if chat.config()['speech_ready'] and chat._models()['qwen-base']['ready']:
+            chat.prewarm()
+            print('Speech models: preparing in the background.', flush=True)
     from mdd.tts_registry import kokoro_status
     if kokoro_status(ROOT)['ready']:
         from scripts.kokoro_tts import prewarm_async
@@ -42,7 +47,8 @@ def main(argv=None):
     for host in sorted(allowed_hosts):
         print(f"LAN demo: http://{host}:{args.port}", flush=True)
     from mdd.chat_runtime import requested_device
-    print(f"Acoustic inference: CPU; Qwen device policy: {requested_device()}. This server does not start or stop training.", flush=True)
+    from mdd.demo_model_registry import speech_device_policy
+    print(f"Device policies: Qwen={requested_device()}, ASR={speech_device_policy('asr')}, phoneme={speech_device_policy('phoneme')}, CROTTC={speech_device_policy('crottc')}. This server does not start or stop training.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

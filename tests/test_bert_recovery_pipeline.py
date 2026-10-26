@@ -1,4 +1,4 @@
-"""BERT chooses conversation text without changing acoustic references."""
+"""BERT chooses conversation/pronunciation text while retaining acoustic evidence."""
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -26,7 +26,7 @@ class RecoverySelectionTests(unittest.TestCase):
             for name in ('config.json', 'tokenizer_config.json', 'tokenizer.json', 'vocab.txt', 'model.safetensors'):
                 (model / name).write_bytes(b'fixture')
                 files[name] = {'bytes': 7}
-            manifest = {'model_id': 'google-bert/bert-base-uncased', 'revision': 'a' * 40,
+            manifest = {'model_id': 'google-bert/bert-base-uncased', 'revision': '86b5e0934494bd15c9632b12f734a8a67f723594',
                         'status': 'downloading', 'files': files}
             path = model / 'setup_manifest.json'
             path.write_text(json.dumps(manifest))
@@ -51,6 +51,8 @@ class BertRoutingTests(unittest.TestCase):
         engine._respond = Mock(side_effect=lambda request, result, *args: result)
         inferred = {'original': evidence['transcript'], 'text': 'My favorite is tea.', 'status': 'accepted',
                     'latency_sec': .25, 'source': 'bert_inferred', 'reference_confirmed': False}
+        engine._use_bert_reference = Mock(side_effect=lambda result: {
+            **result, 'reference_text': inferred['text'], 'reference_source': 'bert_inferred'})
         events, cancelled, qwen = [], threading.Event(), Mock()
         with patch('scripts.bert_transcript_recovery.BertTranscriptRecovery') as model:
             model.return_value.recover.return_value = inferred
@@ -60,14 +62,16 @@ class BertRoutingTests(unittest.TestCase):
                                 cancelled, events.append, qwen)
             if reading:
                 model.assert_not_called()
+                engine._use_bert_reference.assert_not_called()
             else:
                 model.return_value.recover.assert_called_once_with(evidence['transcript'], cancelled,
                     phonetic_candidates=evidence['phonetic_candidates'], history=[])
                 self.assertEqual(result['interpretation'], inferred)
                 self.assertEqual(result['timings']['interpretation_sec'], .25)
+                engine._use_bert_reference.assert_called_once()
         qwen.generate.assert_not_called()
         self.assertEqual(result['transcript'], evidence['transcript'])
-        self.assertEqual(result['reference_text'], evidence['reference_text'])
+        self.assertEqual(result['reference_text'], evidence['reference_text'] if reading else inferred['text'])
         self.assertEqual(result['_acoustic_evidence'], evidence['_acoustic_evidence'])
         return result
 

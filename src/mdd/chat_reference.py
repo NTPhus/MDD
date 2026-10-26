@@ -190,6 +190,9 @@ def reassess_reference(root, speech, target):
         if comparison is None:
             raise ValueError('The confirmed target could not be aligned with its dictionary reference.')
     result = deepcopy(speech)
+    result['pronunciation_reference_ready'] = True
+    if isinstance(result.get('interpretation'), dict):
+        result['interpretation']['applied_as_pronunciation_reference'] = False
     result.update(reference_text=target, conversation_text=target, reference_source='user_confirmed', comparison=comparison,
                   missing_words=list(missing),
                   target_words=target_words(root, target, display_reference),

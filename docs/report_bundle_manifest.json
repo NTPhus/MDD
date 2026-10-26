@@ -1,0 +1,20 @@
+{
+  "built_at_bangkok": "2026-10-23T16:06:29.777143+07:00",
+  "file": "MDD_Bao_cao_tong_hop_20261023.pdf",
+  "pages": 69,
+  "bookmarks": 34,
+  "unique_primary_sources": 21,
+  "replacement_characters": 0,
+  "sha256": "02e43f8aa085c395d35bf57c12d91888e87bd68cb7cb691f102c719e8d0f0903",
+  "inputs": [
+    {
+      "file": "training_report\\MDD_Bao_cao_huan_luyen_Wav2Vec2_Qwen.pdf",
+      "sha256": "f3bd901f09f1aea1e8df12f7215ace797fc59316365cf92a6a02e5629220c2ce"
+    },
+    {
+      "file": "pipeline_report\\MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.pdf",
+      "sha256": "9efbbef639bb180c161445966cad7ebf56101baa3eeb688d80587cfbebef211e"
+    }
+  ],
+  "training_or_inference_executed": false
+}

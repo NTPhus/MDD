@@ -1,0 +1,5 @@
+# Optional isolated speech-to-text runtime; setup_whisper_asr.py installs/copies
+# these into .tools/whisper-asr/python without changing the Qwen training env.
+faster-whisper==1.2.1
+ctranslate2==4.8.3
+av==19.0.2

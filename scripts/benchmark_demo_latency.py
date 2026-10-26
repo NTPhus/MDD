@@ -210,7 +210,9 @@ def main(argv=None):
         client = LocalDemoClient(args.base_url)
         config = client.request("/api/chat/config")
         summary["config"] = {key: config[key] for key in ("device", "threads", "asr_model_id", "grammar_model_id",
-            "reply_model_id", "transcript_normalization", "feedback_order", "inference_device") if key in config}
+            "reply_model_id", "transcript_normalization", "feedback_order", "inference_device",
+            "transcript_recovery_provider", "transcript_recovery_model", "transcript_recovery_revision",
+            "inference_warmup") if key in config}
         for index in range(1, args.runs + 1):
             result, job = run_once(client, encoded, index, args.poll_interval, args.timeout)
             summary["runs"].append(result)

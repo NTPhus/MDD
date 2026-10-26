@@ -1,23 +1,29 @@
 {
-  "built_at_bangkok": "2026-10-23T09:45:14.415022+07:00",
+  "built_at_bangkok": "2026-10-23T16:05:24.162860+07:00",
   "source": "pipeline_content.json",
-  "chapters": 11,
+  "chapters": 14,
   "diagrams": [
     "architecture",
     "workflow",
     "routing",
     "reference"
   ],
+  "source_sha256": {
+    "pipeline_report\\pipeline_content.json": "cccf7efac8bf9a2ebac57ef3943e2a5aaa60cf7d614fb55954655848bd05984c",
+    "pipeline_report\\source_snapshot.json": "ad55455863248efecee6e45dd70e827321a37238282e9b05e5ebdf36ad1de64b",
+    "references_20261023.json": "6bee6b359d319623595719c9f9b5ca7e8c08015f918fd5c7b2f9614ff9f08ddc"
+  },
+  "training_or_inference_executed": false,
   "outputs": [
     {
       "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.pdf",
-      "bytes": 178523,
-      "sha256": "bbf48c6ea22f35d35b4500d0b72124a46d316eaecda130052a64bfdcc1e96b67"
+      "bytes": 190506,
+      "sha256": "9efbbef639bb180c161445966cad7ebf56101baa3eeb688d80587cfbebef211e"
     },
     {
       "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.docx",
-      "bytes": 395014,
-      "sha256": "c46f502d14b6e3dccc510c3878e9b14b3f674ce645edf4a7ec0214738c954303"
+      "bytes": 404368,
+      "sha256": "df4cfbff035d72e0933c7c402ba6973e635e35abfeb800ce332b644b6df461c8"
     }
   ]
 }

@@ -1,64 +1,79 @@
 {
-  "validated_at_bangkok": "2026-10-23T09:45:16.783594+07:00",
+  "validated_at_bangkok": "2026-10-23T16:05:26.682924+07:00",
   "pdf": {
     "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.pdf",
-    "sha256": "bbf48c6ea22f35d35b4500d0b72124a46d316eaecda130052a64bfdcc1e96b67",
-    "pages": 20,
+    "sha256": "9efbbef639bb180c161445966cad7ebf56101baa3eeb688d80587cfbebef211e",
+    "pages": 22,
     "outline": [
       [
         1,
-        "1. Pipeline hiện tại trong một trang",
+        "1. Tổng quan và kết luận có bằng chứng",
         3
       ],
       [
         1,
-        "2. Kiến trúc hệ thống và cấu trúc code",
+        "2. Cơ sở khoa học và lựa chọn kiến trúc",
         4
       ],
       [
         1,
-        "3. Model nào phụ trách việc gì?",
-        6
+        "3. Kiến trúc và các model đang ở local",
+        5
       ],
       [
         1,
-        "4. Workflow một lượt nói",
+        "4. Dữ liệu, nhãn và ranh giới test",
         7
       ],
       [
         1,
-        "5. Nhánh âm thanh và chấm phát âm",
+        "5. Đã train gì và trọng số nào thay đổi?",
+        8
+      ],
+      [
+        1,
+        "6. Workflow từ bản thu đến reply và collapse",
         9
       ],
       [
         1,
-        "6. Qwen: routing, grammar và thiết bị",
-        10
+        "7. Phát âm, fluency và xác nhận câu nói",
+        11
       ],
       [
         1,
-        "7. Khi sửa câu ASR hoặc luyện câu mẫu",
-        12
+        "8. So sánh ASR: base, fine-tuned và Whisper",
+        13
       ],
       [
         1,
-        "8. API, trạng thái UI, history và voice",
+        "9. B, CROTTC-IF và external pronunciation test",
         14
       ],
       [
         1,
-        "9. Workspace practice và cấu trúc triển khai",
+        "10. Qwen, grammar và chất lượng hội thoại",
         16
       ],
       [
         1,
-        "10. Ví dụ sử dụng và các trường hợp ngoại lệ",
+        "11. Voice, highlight, latency và phần local",
         18
       ],
       [
         1,
-        "11. Nguồn đối chiếu và phạm vi snapshot",
+        "12. API, triển khai và tái tạo tài liệu",
         19
+      ],
+      [
+        1,
+        "13. Giới hạn và cải thiện ưu tiên",
+        20
+      ],
+      [
+        1,
+        "14. Tài liệu tham khảo và dấu vết tái lập",
+        21
       ]
     ],
     "replacement_characters": 0,
@@ -72,12 +87,12 @@
     "pages_detail": [
       {
         "page": 1,
-        "characters": 659,
+        "characters": 666,
         "suspect_bounds": [],
         "first_lines": [
-          "Model nào làm việc gì",
-          "Workflow từ audio đến phản hồi",
-          "MDD – Phát hiện và chẩn đoán lỗi phát âm tiếng Anh"
+          "Training, workflow và kết quả đối chứng",
+          "MDD – Phát hiện và chẩn đoán lỗi phát âm tiếng Anh",
+          "Tài liệu đồng hành với báo cáo huấn luyện wav2vec2 và Qwen."
         ],
         "last_lines": [
           "PDF để đọc/chia sẻ; DOCX có cùng nội dung để chỉnh sửa",
@@ -87,313 +102,352 @@
       },
       {
         "page": 2,
-        "characters": 1025,
+        "characters": 1203,
         "suspect_bounds": [],
         "first_lines": [
           "Mục lục",
           "3",
-          "1. Pipeline hiện tại trong một trang"
+          "1. Tổng quan và kết luận có bằng chứng"
         ],
         "last_lines": [
           "được ghi cho mỗi lần sinh.",
-          "Các sơ đồ kiến trúc được dựng từ code để giải thích pipeline, không phải đồ thị kết quả huấn luyện. Tham chiếu",
-          "[Pxx] chỉ đến danh mục file/hàm ở cuối tài liệu."
+          "Sơ đồ dựng từ code; số đo local lấy từ artifact [Lxx]. Trích dẫn [R-…] dẫn bài báo và tài liệu chính thức ở cuối. So",
+          "sánh luôn giữ riêng tác vụ, tập dữ liệu và evaluator."
         ]
       },
       {
         "page": 3,
-        "characters": 2274,
+        "characters": 1848,
         "suspect_bounds": [],
         "first_lines": [
-          "1. Pipeline hiện tại trong một trang",
-          "Hệ thống MDD hiện có hai workspace chính: Luyện phát âm để đọc câu/từ và xem đối chiếu âm; Đối thoại AI để",
-          "thu audio, nhận câu trả lời bằng tiếng Anh và xem feedback khi cần. Tài liệu tập trung đường đối thoại giọng nói"
+          "1. Tổng quan và kết luận có bằng chứng",
+          "Dự án xây dựng môi trường luyện nói tiếng Anh có hội thoại, phản hồi ngữ pháp và đối chiếu phát âm. Báo cáo",
+          "được viết lại theo mã nguồn và artifact ngày 23/10/2026: hệ thống chạy thế nào, đã train thành phần nào, model"
         ],
         "last_lines": [
-          "Trạng thái đã đối chiếu bằng GET /api/chat/config: ASR=wav2vec2-vi-en-v1, grammar=qwen-grammar,",
-          "reply=qwen-base, acoustic_device=cpu, device policy=auto; speech_ready=true. Base và feedback adapter đều",
-          "được công bố ready. Đây là snapshot config, không phải một phép chạy inference mới."
+          "WER đo sai khác chữ; phone F1 đo phát hiện lỗi âm; JSON hợp lệ đo đúng định dạng. Các chỉ số này không thay",
+          "thế nhau và không được gọi chung là độ chính xác hệ thống. Số công bố trong bài báo được tách khỏi số đo",
+          "local."
         ]
       },
       {
         "page": 4,
-        "characters": 1355,
+        "characters": 1978,
         "suspect_bounds": [],
         "first_lines": [
-          "2. Kiến trúc hệ thống và cấu trúc code",
-          "Browser: demo/chat.js",
-          "Mic / upload · hội thoại · feedback · phát voice"
+          "2. Cơ sở khoa học và lựa chọn kiến trúc",
+          "Thành phần",
+          "Tài liệu gốc"
         ],
         "last_lines": [
-          "request, tạo job, giữ snapshot cùng revision. Tính toán chat được chuyển qua stdin/stdout JSONL đến worker",
-          "Python tồn tại lâu, nơi cache ASR, phoneme model và Qwen. Worker xử lý lần lượt, không chạy ba tác vụ Qwen",
-          "song song."
+          "CTC-GOP cung cấp hướng điểm âm học và calibration [R-CTCGOP]; scorer margin/variant hiện tại chưa tái lập",
+          "đầy đủ công thức đó. GOPT nghiên cứu điểm phát âm nhiều mức trên SpeechOcean762 [R-GOPT], nhưng chưa",
+          "cài/đo ở máy này. Tương quan PCC trong bài báo không phải phần trăm phát hiện lỗi."
         ]
       },
       {
         "page": 5,
-        "characters": 2503,
+        "characters": 1749,
         "suspect_bounds": [],
         "first_lines": [
-          "Bản đồ thư mục cần đọc",
-          "MDD/",
-          "demo/                         Giao diện HTML/CSS/JavaScript"
+          "3. Kiến trúc và các model đang ở local",
+          "Browser: demo/chat.js",
+          "Mic / upload · hội thoại · feedback · phát voice"
         ],
         "last_lines": [
-          "Không được tự chạy khi một request chat tới",
-          "Sự tách worker áp dụng cho chat. Workspace practice có đường LocalInference riêng dưới DemoApplication;",
-          "không nên khái quát rằng mọi inference của toàn ứng dụng đều nằm trong cùng worker chat."
+          "runs/cascade-l2arctic-plus-seed42/Q/adapter",
+          "Đã train; coach legacy không gọi khi có",
+          "assessment."
         ]
       },
       {
         "page": 6,
-        "characters": 2485,
+        "characters": 1925,
         "suspect_bounds": [],
         "first_lines": [
-          "3. Model nào phụ trách việc gì?",
-          "Vai trò / model ID",
-          "Checkpoint hoặc adapter hiện tại"
+          "Vai trò",
+          "Artifact local",
+          "Trạng thái / thiết bị"
         ],
         "last_lines": [
-          "hiện luôn trả assessment_fields với key này. Vì thế luồng speech hiện tại bỏ qua lời gọi coach phát âm",
-          "Q0/Q1; coaching mặc định unavailable. metadata coaching_model_id vẫn có thể ghi qwen-trained theo lựa",
-          "chọn. Đây là mô tả code hiện tại, không phải lỗi đã được sửa trong lượt làm tài liệu."
+          "src/mdd/speech_fluency.py             descriptive word-time measures",
+          "scripts/kokoro_tts.py                local TTS",
+          "scripts/ai33_tts.py                  optional API TTS"
         ]
       },
       {
         "page": 7,
-        "characters": 1789,
+        "characters": 2158,
         "suspect_bounds": [],
         "first_lines": [
-          "4. Workflow một lượt nói",
-          "1. Nhận audio hợp lệ",
-          "PCM16 WAV mono 16 kHz, 0,25–30 giây → tạo job"
+          "4. Dữ liệu, nhãn và ranh giới test",
+          "Nguồn",
+          "Nhãn / tác vụ"
         ],
         "last_lines": [
-          "POST /api/chat/speech gửi model_id, request_id, audio_base64, history cùng topic_id hoặc practice_id. Backend",
-          "kiểm role/history, chọn reference, kiểm model ready/hash và giữ một generation slot. Nếu đang có lượt khác sẽ",
-          "trả 409 chat_busy. Request_id cùng nội dung trả lại job cũ; cùng ID nhưng đổi nội dung bị từ chối."
+          "biết.",
+          "Calibration phát âm fit 300 câu HJK/LXC, holdout 150 PNV. PNV không fit ngưỡng nhưng đã tham gia chọn",
+          "checkpoint B trước đó; chưa độc lập hoàn toàn với quy trình chọn model."
         ]
       },
       {
         "page": 8,
-        "characters": 1477,
+        "characters": 2210,
         "suspect_bounds": [],
         "first_lines": [
-          "Hội thoại và feedback hoàn tất ở hai mốc",
-          "Sau acoustic analysis, normalization của Qwen base chạy trước dialogue khi không có reference đọc cố định.",
-          "Dialogue nhận user-confirmed text hoặc bản normalization qua lexical guard; grammar rewrite chưa chạy ở bước"
+          "5. Đã train gì và trọng số nào thay đổi?",
+          "Lượt train",
+          "Supervision / loss"
         ],
         "last_lines": [
-          "Tên stage correcting có thể xuất hiện cả trước lẫn sau generating vì dùng cho normalization và rewrite. Không thể",
-          "chỉ nhìn tên stage để kết luận hệ thống đang sửa grammar trước reply. Metadata cuối có",
-          "feedback_order=reply_first; các timing riêng ghi audio_decode, ASR, phoneme, assessment, rewrite và tổng lượt."
+          "train trên text-phone là transfer thử nghiệm, không phải đã train P1.",
+          "Whisper, BERT, CROTTC-IF và Kokoro chỉ tải checkpoint, chưa fine-tune local. Lượng tử hóa inference và thêm",
+          "wrapper không phải training. Biên soạn báo cáo không khởi động lượt train mới."
         ]
       },
       {
         "page": 9,
-        "characters": 2797,
+        "characters": 1999,
         "suspect_bounds": [],
         "first_lines": [
-          "5. Nhánh âm thanh và chấm phát âm",
-          "Hai model âm thanh độc lập",
-          "ASR dùng Wav2Vec2ForCTC với head ký tự từ wav2vec2-base-960h đã thích ứng Việt. Argmax CTC và"
+          "6. Workflow từ bản thu đến reply và collapse",
+          "1. Nhận audio hợp lệ",
+          "PCM16 WAV mono 16 kHz, 0,25–30 giây → tạo job"
         ],
         "last_lines": [
-          "validation. Flag verified do browser gửi không đủ bật chấm. FPR/FNR/coverage và abstention là những khái niệm",
-          "của phép đánh giá scorer, không được tự đổi thành confidence xác suất cho một từ.",
-          "Nguồn: [P04], [P07–P09]."
+          "• CROTTC tùy chọn với Whisper: inference âm CPU ở thread/process riêng; Qwen GPU sinh reply, grammar xử",
+          "lý tiếp rồi nhận kết quả âm. Lỗi/timeout không làm mất reply.",
+          "• Fluency lấy transcript và word times của bản thu ban đầu; không lấy câu grammar để tính lại tốc độ nói."
         ]
       },
       {
         "page": 10,
-        "characters": 2149,
+        "characters": 1080,
         "suspect_bounds": [],
         "first_lines": [
-          "6. Qwen: routing, grammar và thiết bị",
-          "Một backbone Qwen3-0.6B",
-          "Cache trong worker; tải model theo runtime policy"
+          "Qwen base nhận transcript hoặc user-confirmed text cùng history thật, sinh 1–2 câu tiếng Anh. Prompt yêu cầu",
+          "bám lượt cuối, không lặp, không sửa grammar trong reply. Echo filter, policy, một lần retry và fallback đều có",
+          "nguồn riêng. Câu mở đầu soạn sẵn; café có state/rules hỗ trợ, không gán toàn bộ hành vi đó cho model."
         ],
         "last_lines": [
-          "JSON một trường, greedy. Parser task và lexical guard kiểm kết quả độc lập. Lỗi một task ghi unavailable cho",
-          "task đó, không coi text giữ nguyên do lỗi là một lần sửa thành công. Nếu grammar adapter không ready, workflow",
-          "dùng base rewrite contract qua sentence_rewrite."
+          "Không tự train hoặc gửi lại TTS khi lỗi.",
+          "reply_ready khác voice đã phát: TTS còn tổng hợp, tải/buffer/play. Câu mở đầu bật auto-read đợi voice sẵn rồi",
+          "mới hiện và phát. Reply hiển thị toàn câu, highlight khi đọc; feedback đến sau không thay voice text."
         ]
       },
       {
         "page": 11,
-        "characters": 2307,
+        "characters": 1655,
         "suspect_bounds": [],
         "first_lines": [
-          "Grammar aggregate được tính lại sau khi loại trường không dùng được, kèm field_reasons, partial và",
-          "feedback_state: unavailable, partial, suggestions_available hoặc no_change_suggested. Một câu bị model chép",
-          "lại chỉ có nghĩa không đề xuất thay đổi; không phải kết luận câu đúng grammar, đúng nghĩa hoặc tự nhiên."
+          "7. Phát âm, fluency và xác nhận câu nói",
+          "Reference mặc định là text Whisper nghe được; câu đọc cố định lấy từ server. Người học sửa text trong collapse",
+          "khi nghe nhầm. Grammar/natural suggestion giữ riêng, không tự dùng để kết luận audio cũ sai những từ chưa"
         ],
         "last_lines": [
-          "rồi gắn LoRA. NF4/QLoRA thuộc recipe train. GET config trả device=auto chỉ là policy;",
-          "qwen_runtime.device/dtype/attention trong metadata lượt sinh mới cho biết placement thực. Không khẳng",
-          "định generation OOM hoặc adapter-load OOM cũng có cùng fallback."
+          "transcript.",
+          "ASR có thể bỏ filler; lặp có thể có chủ đích.",
+          "Nguồn speech_fluency.py [L01]. Không có điểm0–100, IELTS, stress/intonation hoặc human-calibrated fluency."
         ]
       },
       {
         "page": 12,
-        "characters": 2075,
+        "characters": 1164,
         "suspect_bounds": [],
         "first_lines": [
-          "7. Khi sửa câu ASR hoặc luyện câu mẫu",
           "POST /api/chat/reference",
-          "Cùng job_id; user xác nhận câu thực sự đã nói"
+          "Cùng job_id; user xác nhận câu thực sự đã nói",
+          "Private evidence cache"
         ],
         "last_lines": [
-          "Regenerate chỉ nhận text đã được server xác nhận và context trước lượt sửa. Worker không decode audio,",
-          "không chạy ASR hoặc phoneme B. Base Qwen trả lời theo nghĩa mới rồi grammar rewrite; ứng dụng chèn “Sorry",
-          "for the misunderstanding.” một lần, được ghi là nội dung ứng dụng, không gán thành câu model tự sinh."
+          "Public polling bỏ _acoustic_evidence. Sửa reference không chạy lại ASR hoặc acoustic model. Chỉ đổi dấu",
+          "câu/hoa thường giữ reply/voice; đổi chuỗi từ tăng revision, sinh reply mới kèm lời xin lỗi do app thêm. Fluency giữ",
+          "measured_transcript ban đầu."
         ]
       },
       {
         "page": 13,
-        "characters": 1844,
+        "characters": 2117,
         "suspect_bounds": [],
         "first_lines": [
-          "Cache để đối chiếu lại",
-          "pack_evidence lưu log_probs float32 nén zlib/base64, id_to_phone, blank_id, duration, checkpoint/vocabulary",
-          "SHA trong _acoustic_evidence của ChatJob memory phía server. Giới hạn frame/vocabulary và kích thước được"
+          "8. So sánh ASR: base, fine-tuned và Whisper",
+          "Hoàn tất 118 audio, khoảng 617,55 giây:111 TLV,4 SAA và 3 người dùng. Cùng audio cho mọi model; không đưa",
+          "reference/history vào decoder, không BERT/Qwen hậu xử lý để tăng điểm."
         ],
         "last_lines": [
-          "Code còn nhận correction_job_id cho luyện một completion-only sentence đã sẵn sàng, cùng model/topic và có",
-          "server-owned source job. Luồng grammar_and_natural hiện không tự tạo completion-only output. Vì vậy không",
-          "nên mô tả mọi grammar suggestion hiện đều là target luyện lại hợp lệ qua cơ chế legacy này."
+          "So sánh triển khai: wav2vec2 CPU FP32 greedy với Whisper CPU INT8 beam 5, khác kiến",
+          "trúc/pretraining/decoder. Cặp base→fine-tuned wav2vec2 đo tác động thích ứng trong cùng họ model. Chưa",
+          "đủ để kết luận mọi wav2vec2 kém Whisper hoặc mọi giọng Việt đều được nhận đúng."
         ]
       },
       {
         "page": 14,
-        "characters": 2229,
+        "characters": 2116,
         "suspect_bounds": [],
         "first_lines": [
-          "8. API, trạng thái UI, history và voice",
-          "Các API của đường đối thoại",
-          "Method / route"
+          "9. B, CROTTC-IF và external pronunciation test",
+          "B Plus trên đủ 900 câu",
+          "Chỉ số"
         ],
         "last_lines": [
-          "từ, rồi raw ASR. Browser giới hạn tối đa 20 messages/12.000 ký tự bằng cách bỏ cả cặp đầu. Backend kiểm role",
-          "xen kẽ và giới hạn riêng; model worker tiếp tục áp dụng token context budget. Rewrite không tự ghi đè lời người",
-          "học trong history."
+          "Bài báo CROTTC-IF công bố F1 71,77% trên L 2-ARCTIC [R-CROTTC]. Đó là evaluator/protocol tác giả, khác",
+          "24-case local canonical-plus-insertion-slot scorer. Chưa audit trọn split training của checkpoint để loại overlap với",
+          "pilot. Số local thấp không chứng minh bài báo sai; paper-score không chứng minh hệ thống đạt 71,77%."
         ]
       },
       {
         "page": 15,
-        "characters": 1540,
+        "characters": 699,
         "suspect_bounds": [],
         "first_lines": [
-          "Voice và dừng tác vụ",
-          "Đường voice",
-          "Nguồn nội dung"
+          "External test và calibration",
+          "B chạy 2.500 câu SpeechOcean762: phone F1 21,04%, word F1 22,89%; gold-majority-correct word FPR",
+          "57,68%. Trong 179 câu 5 chuyên gia chấm hoàn toàn đúng,173 có flag. Đây là canonical-position baseline cũ,"
         ],
         "last_lines": [
-          "thể dùng credits; không tự phát câu mẫu. Request được dedup theo job/revision/target/voice/speed/text. Server",
-          "có slot TTS reply và sentence riêng, cho phép một reply và một sentence được tổng hợp đồng thời; sentence có",
-          "thể yêu cầu khi chưa job ready nhưng đã có text hợp lệ."
+          "UI mới [L07], [R-SPEECHOCEAN].",
+          "Calibration mới không đạt policy:1.389 từ holdout có gold nhưng 0 quyết định, coverage 0%. Precision/FPR trên",
+          "quyết định là undefined, không phải 100% đúng hay 0% sai [L08]."
         ]
       },
       {
         "page": 16,
-        "characters": 2730,
+        "characters": 1843,
         "suspect_bounds": [],
         "first_lines": [
-          "9. Workspace practice và cấu trúc triển khai",
-          "Practice là đường gọi riêng với chat",
-          "Đường"
+          "10. Qwen, grammar và chất lượng hội thoại",
+          "Một backbone Qwen3-0.6B",
+          "Cache trong worker; tải model theo runtime policy"
         ],
         "last_lines": [
-          "# GET /api/status          trạng thái app/model catalog/training artifacts",
-          "# GET /api/chat/config     lựa chọn ASR/grammar và policy chat",
-          "# GET /api/chat/jobs/{id}  metadata thực của lượt còn tồn tại"
+          "Config/live jobs xác nhận qwen-grammar được nạp cho rewrite. Worker tắt adapter khi reply, bật grammar cho 2",
+          "generation sau. Adapter feedback đã train nhưng legacy coach chỉ chạy khi không có key assessment; current",
+          "analyze luôn có key này. Nhãn Fine-tuned/coaching_model_id không chứng minh adapter đó sinh reply."
         ]
       },
       {
         "page": 17,
-        "characters": 1038,
+        "characters": 1359,
         "suspect_bounds": [],
         "first_lines": [
-          "Các tab/status đọc file log/provenance để hiển thị training; inference server không tự chạy train. Cache voice,",
-          "chat-worker.log và report dưới data/generated là artifact vận hành. Job snapshots và quyền thao tác job thuộc",
-          "phiên server; text history ở browser không phải database phục hồi mọi trạng thái."
+          "Chưa có benchmark hội thoại do người đánh giá độc lập. Opening soạn sẵn, echo filter, state café, retry,",
+          "clarification fallback là logic ứng dụng cần tách khỏi raw model output. ASR nghe sai nhưng câu vẫn trôi chảy có",
+          "thể làm Qwen trả lời sai chủ đề; prompt không bảo đảm phục hồi âm thanh đã nghe nhầm."
         ],
         "last_lines": [
-          "Chuẩn bị dữ liệu, train, đánh giá khoa học",
-          "Ngoài đường inference request",
-          "Nguồn: [P01], [P10], [P13], [P14]."
+          "BERT trước Whisper trên 10 audio giọng Việt giảm WER109/335(32,54%)→104/335(31,04%):3 tốt,1 xấu,6",
+          "bằng,0 exact. Stella có 30 word errors tăng 31 sau BERT. Vì vậy giữ BERT đối chứng, mặc định dùng Whisper,",
+          "không dùng cảm nhận vài ca để thay đánh giá ghép cặp [L11]."
         ]
       },
       {
         "page": 18,
-        "characters": 2463,
+        "characters": 2157,
         "suspect_bounds": [],
         "first_lines": [
-          "10. Ví dụ sử dụng và các trường hợp ngoại lệ",
-          "Ví dụ 1: một câu hội thoại có lỗi grammar",
-          "Người học nói “Yesterday I go to the park with my friend”. ASR ghi raw text, phoneme B tạo acoustic evidence"
+          "11. Voice, highlight, latency và phần local",
+          "Khâu",
+          "Mặc định"
         ],
         "last_lines": [
-          "Tài liệu này chụp trạng thái code/config hiện tại. Các ranh giới còn hạn chế gồm calibration ineligible, coach",
-          "adapter không được gọi trong assessment path, defaults UI/server khác nhau và nhánh completion-only",
-          "legacy. Không có thay đổi code hoặc runtime nào được thực hiện để viết tài liệu."
+          "Ba live jobs mới có reply_ready khoảng 3,33–8,03 s, hoàn tất 4,77–24,08 s; không gọi TTS.",
+          "Input/cache/load/sampling khác nhau nên chỉ xác nhận integration, không xếp hạng tốc độ B/CRO. Warmup nạp",
+          "model/từ điển, không train hoặc forward giả [L02]."
         ]
       },
       {
         "page": 19,
-        "characters": 3462,
+        "characters": 2058,
         "suspect_bounds": [],
         "first_lines": [
-          "11. Nguồn đối chiếu và phạm vi snapshot",
-          "Tài liệu dựa code đang có trong workspace và model/artifact metadata, thay vì sao chép mô tả README.",
-          "source_snapshot.json ghi thời điểm, SHA256 của 43 source/artifact files và một tập field config được chọn từ"
+          "12. API, triển khai và tái tạo tài liệu",
+          "API",
+          "Mục đích"
         ],
         "last_lines": [
-          "[P15] Trạng thái artifact hiện tại. runs/asr-vietnamese-english-v1/training_provenance.json;",
-          "runs/cascade-l2arctic-plus-seed42/B/completed.json; runs/grammar-qwen3-06b-wi-jfleg-v1/{training_provenance,demo_validation}.json;",
-          "data/generated/pronunciation-calibration-v1/full-validation/calibration.json"
+          "Local app cổng 8765. Nginx chuyển về loopback; ngrok HTTPS hỗ trợ mic trên browser. LAN HTTP không bảo",
+          "đảm cấp mic. Đây là topology được hỗ trợ; địa chỉ tunnel có thể thay đổi. Training scripts chỉ chạy khi người dùng",
+          "chủ động thao tác."
         ]
       },
       {
         "page": 20,
-        "characters": 1559,
+        "characters": 1692,
         "suspect_bounds": [],
         "first_lines": [
-          "Các mô tả cũ cần đọc đúng phạm vi",
-          "Tài liệu / nhánh",
-          "Điểm cần chú ý hiện tại"
+          "13. Giới hạn và cải thiện ưu tiên",
+          "Ưu tiên",
+          "Cần làm tiếp"
         ],
         "last_lines": [
-          "Các mã nguồn có thể tiếp tục thay đổi sau snapshot. “Đang dùng” trong tài liệu là call path đã đối chiếu tại thời",
-          "điểm chốt, không phải bảo đảm mọi model sẽ giữ nguyên khi registry, checkpoint hoặc app được cập nhật. Báo",
-          "cáo training riêng vẫn là nơi xem dữ liệu train, hyperparameters và test/pilot metrics."
+          "Có bằng chứng thích ứng wav2vec2 cải thiện các test đã nêu, Whisper giảm WER và grammar adapter hoạt",
+          "động. Chưa đủ bằng chứng scorer phát âm calibrated, grammar hoàn hảo hoặc hội thoại tự nhiên mọi tình",
+          "huống. Đây là phạm vi kết luận hiện tại."
+        ]
+      },
+      {
+        "page": 21,
+        "characters": 3909,
+        "suspect_bounds": [],
+        "first_lines": [
+          "14. Tài liệu tham khảo và dấu vết tái lập",
+          "Các mã [R-…] dẫn bài báo/model card/repository chính thức đã tra ngày23/10/2026. Tài liệu nghiên cứu giải thích",
+          "phương pháp; số local lấy từ [L…]. Thông số local ưu tiên config/checkpoint thực có, không suy từ tên model."
+        ],
+        "last_lines": [
+          "src/mdd/demo_model_registry.py; src/mdd/chat_reference.py; src/mdd/acoustic_evidence.py; src/mdd/speech_fluency.py; demo/chat.js",
+          "[L02] Live integration. data/generated/crottc-live-20261023/verification.json; reference-reassessment.json; các job snapshot cùng thư",
+          "mục"
+        ]
+      },
+      {
+        "page": 22,
+        "characters": 2345,
+        "suspect_bounds": [],
+        "first_lines": [
+          "[L03] Provenance training. runs/cascade-l2arctic-plus-seed42/{A,B}/completed.json; Q/training_provenance.json;",
+          "runs/grammar-qwen3-06b-wi-jfleg-v1/training_provenance.json; runs/asr-vietnamese-english-v1/training_provenance.json;",
+          "runs/projector-l2arctic-plus-seed42/alignment/training_provenance.json"
+        ],
+        "last_lines": [
+          "• Tài liệu này mô tả pipeline, local model, runtime và kết quả so sánh chính.",
+          "• Báo cáo training giữ optimizer, learning curves, A/B/C v1 và Plus, Qwen/Projector, hình notebook có nguồn cell.",
+          "• HTML/notebook benchmark giữ từng case, counter, manifest và đồ thị. Build tài liệu không chạy lại model."
         ]
       }
     ]
   },
   "docx": {
     "file": "MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow.docx",
-    "sha256": "c46f502d14b6e3dccc510c3878e9b14b3f674ce645edf4a7ec0214738c954303",
+    "sha256": "df4cfbff035d72e0933c7c402ba6973e635e35abfeb800ce332b644b6df461c8",
     "xml_parts_parsed": 18,
     "embedded_images": 4,
     "inline_shapes": 4,
-    "tables": 16,
+    "tables": 17,
     "headings_1": [
       "Nội dung",
-      "1. Pipeline hiện tại trong một trang",
-      "2. Kiến trúc hệ thống và cấu trúc code",
-      "3. Model nào phụ trách việc gì?",
-      "4. Workflow một lượt nói",
-      "5. Nhánh âm thanh và chấm phát âm",
-      "6. Qwen: routing, grammar và thiết bị",
-      "7. Khi sửa câu ASR hoặc luyện câu mẫu",
-      "8. API, trạng thái UI, history và voice",
-      "9. Workspace practice và cấu trúc triển khai",
-      "10. Ví dụ sử dụng và các trường hợp ngoại lệ",
-      "11. Nguồn đối chiếu và phạm vi snapshot"
+      "1. Tổng quan và kết luận có bằng chứng",
+      "2. Cơ sở khoa học và lựa chọn kiến trúc",
+      "3. Kiến trúc và các model đang ở local",
+      "4. Dữ liệu, nhãn và ranh giới test",
+      "5. Đã train gì và trọng số nào thay đổi?",
+      "6. Workflow từ bản thu đến reply và collapse",
+      "7. Phát âm, fluency và xác nhận câu nói",
+      "8. So sánh ASR: base, fine-tuned và Whisper",
+      "9. B, CROTTC-IF và external pronunciation test",
+      "10. Qwen, grammar và chất lượng hội thoại",
+      "11. Voice, highlight, latency và phần local",
+      "12. API, triển khai và tái tạo tài liệu",
+      "13. Giới hạn và cải thiện ưu tiên",
+      "14. Tài liệu tham khảo và dấu vết tái lập"
     ],
-    "paragraphs": 162
+    "paragraphs": 179
   },
-  "scope": "PDF rendered and structurally inspected. DOCX ZIP/XML reopened and checked; no Word pagination/rendering engine used."
+  "research_references": {
+    "count": 21,
+    "unknown_ids": [],
+    "pdf_primary_links": 21,
+    "docx_primary_links": 21
+  },
+  "scope": "PDF rendered and structurally inspected. DOCX ZIP/XML reopened and checked; no Word pagination/rendering engine used. No inference/training/TTS executed."
 }

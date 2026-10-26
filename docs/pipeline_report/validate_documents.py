@@ -17,6 +17,7 @@ from docx import Document
 STEM='MDD_Pipeline_hien_tai_Kien_truc_Model_Workflow'
 qa=HERE/'qa';qa.mkdir(exist_ok=True)
 source=json.loads((HERE/'pipeline_content.json').read_text(encoding='utf-8'))
+references=json.loads((HERE.parent/'references_20261023.json').read_text(encoding='utf-8'))['references']
 pdf=HERE/(STEM+'.pdf');word=HERE/(STEM+'.docx')
 doc=pymupdf.open(pdf)
 pages=[]
@@ -31,6 +32,14 @@ for i,page in enumerate(doc):
     lines=[x.strip() for x in text.splitlines() if x.strip()]
     pages.append({'page':i+1,'characters':len(text),'suspect_bounds':bad,'first_lines':lines[4:7],'last_lines':lines[-3:]})
 joined='\n'.join(texts);(qa/'pdf_text.txt').write_text(joined,encoding='utf-8')
+primary_urls={row['url'] for row in references}
+pdf_urls={link.get('uri') for page in doc for link in page.get_links() if link.get('uri')}
+source_text=json.dumps(source,ensure_ascii=False)
+cited=set(re.findall(r'\[(R-[A-Z0-9-]+)\]',source_text))
+known={row['id'] for row in references}
+assert cited <= known, f'Unknown research IDs: {cited-known}'
+assert primary_urls <= pdf_urls, f'Missing PDF links: {primary_urls-pdf_urls}'
+assert '(None)' not in joined and '\ue000' not in joined
 font=ImageFont.truetype('C:/Windows/Fonts/arial.ttf',18)
 for start in range(0,len(doc),9):
     sheet=Image.new('RGB',(1200,1750),'#dbe3eb');draw=ImageDraw.Draw(sheet)
@@ -42,6 +51,9 @@ for start in range(0,len(doc),9):
     sheet.save(qa/f'pdf_contact_{start//9+1:02d}.png')
 
 d=Document(word)
+word_urls={rel.target_ref for rel in d.part.rels.values()
+           if rel.reltype.endswith('/hyperlink') and rel.is_external}
+assert primary_urls <= word_urls, f'Missing DOCX links: {primary_urls-word_urls}'
 heading_texts=[p.text for p in d.paragraphs if p.style.name=='Heading 1']
 with zipfile.ZipFile(word) as z:
     xmls=[n for n in z.namelist() if n.endswith('.xml') or n.endswith('.rels')]
@@ -57,7 +69,9 @@ result={'validated_at_bangkok':datetime.now(timezone(timedelta(hours=7))).isofor
     'docx':{'file':word.name,'sha256':hashlib.sha256(word.read_bytes()).hexdigest(),
         'xml_parts_parsed':len(xmls),'embedded_images':len(media),'inline_shapes':len(d.inline_shapes),
         'tables':len(d.tables),'headings_1':heading_texts,'paragraphs':len(d.paragraphs)},
-    'scope':'PDF rendered and structurally inspected. DOCX ZIP/XML reopened and checked; no Word pagination/rendering engine used.'}
+    'research_references':{'count':len(references),'unknown_ids':sorted(cited-known),
+        'pdf_primary_links':len(primary_urls & pdf_urls),'docx_primary_links':len(primary_urls & word_urls)},
+    'scope':'PDF rendered and structurally inspected. DOCX ZIP/XML reopened and checked; no Word pagination/rendering engine used. No inference/training/TTS executed.'}
 assert len(doc.get_toc())==len(source['chapters'])
 assert joined.count('\ufffd')==0 and result['pdf']['suspect_bounds']==0
 assert result['pdf']['caption_numbers']==['1','2','3','4']

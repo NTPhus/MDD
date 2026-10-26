@@ -66,27 +66,27 @@
     "espeakng-loader": "0.2.4",
     "phonemizer": "3.4.0"
   },
-  "verified_at_utc": "2026-10-23T03:34:28.766085+00:00",
+  "verified_at_utc": "2026-10-23T09:48:01.199716+00:00",
   "smoke": {
-    "audio": "data/generated/tts/kokoro/90dc25b1c694ca12bbf81548c6c55a91ea099ce6e19e029dd7a4a30d50903b25.wav",
+    "audio": "data/generated/tts/kokoro/7e587604d0c2c95f69b89d6167f8eca0a39f5cff78ec7e80aff5a9a296642ffd.wav",
     "timing": {
-      "total_sec": 1.206485,
-      "cache_lookup_sec": 2e-05,
+      "total_sec": 0.877341,
+      "cache_lookup_sec": 2.1e-05,
       "cache_hit": false,
       "new_tasks_submitted": 0,
-      "synthesis_sec": 1.187345,
+      "synthesis_sec": 0.858863,
       "load_sec": 0.0,
       "audio_duration_sec": 3.349333,
-      "real_time_factor": 0.354502,
-      "phonemize_sec": 0.152824,
-      "inference_sec": 1.034514,
+      "real_time_factor": 0.256428,
+      "phonemize_sec": 0.264481,
+      "inference_sec": 0.594375,
       "requested_device": "cuda",
       "effective_device": "cuda",
       "execution_provider": "CUDAExecutionProvider",
       "provider_options": {
         "CUDAExecutionProvider": {
           "device_id": "0",
-          "gpu_mem_limit": "805306368",
+          "gpu_mem_limit": "1073741824",
           "arena_extend_strategy": "kSameAsRequested",
           "cudnn_conv_algo_search": "HEURISTIC",
           "do_copy_in_default_stream": "1",
@@ -103,7 +103,7 @@
     "execution_provider": "CUDAExecutionProvider"
   },
   "benchmark": "data/generated/kokoro-gpu-validation-v1/summary.json",
-  "gpu_mem_limit_mb": 768,
+  "gpu_mem_limit_mb": 1024,
   "cuda_dll_directory": ".venv/Lib/site-packages/torch/lib",
   "validation": {
     "live-api": "data/generated/kokoro-gpu-validation-v1/live-api.json",

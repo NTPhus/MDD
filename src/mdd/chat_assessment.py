@@ -134,6 +134,9 @@ def load_calibration(root, evidence):
 
 
 def assessment_fields(root, text, evidence, *, confirmed=False, raw_comparison=None):
+    if evidence.get('provider') == 'crottc-if':
+        from .phone_sequence_assessment import assess_sequence
+        return assess_sequence(root, text, evidence, confirmed=confirmed)
     from .pronunciation_assessment import assess
     from .chat_diagnostics import sound_candidates
     result = assess(root, text, evidence, calibration=load_calibration(root, evidence),

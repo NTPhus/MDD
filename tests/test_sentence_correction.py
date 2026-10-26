@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import test_speech_chat as speech_fixture
 from mdd.demo_chat import ChatError
-from scripts.local_speech_engine import LocalSpeechEngine
+from scripts.local_speech_engine import LocalSpeechEngine, REPEAT_REQUEST, UnrecognizedSpeech
 from scripts.sentence_correction import correction_request, parse_correction
 
 
@@ -223,19 +223,48 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
     def correction_json(self):
         return json.dumps({"corrected": self.corrected, "explanation": "Keep the spoken words unchanged."})
 
+    def test_no_recognized_words_asks_for_another_recording_without_model_guess(self):
+        self.engine.analyze.side_effect = UnrecognizedSpeech('No usable words')
+        qwen = Mock()
+        metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
+        qwen.generate.assert_not_called()
+        output = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
+        self.assertEqual(output, REPEAT_REQUEST)
+        self.assertEqual(metadata['fallback_reason'], 'unrecognized_speech')
+        final = self.events[-1]['speech']
+        self.assertEqual(final['transcript'], '')
+        self.assertFalse(final['pronunciation_reference_ready'])
+        self.assertEqual(final['assessment']['status'], 'unavailable')
+        self.assertEqual(final['rewrite']['status'], 'not_needed')
+
+    def test_model_or_audio_failure_is_not_misrepresented_as_unclear_speech(self):
+        self.engine.analyze.side_effect = RuntimeError('Model failed')
+        with self.assertRaises(RuntimeError):
+            self.engine.run(self.request, self.cancelled, self.emit, Mock())
+        self.assertFalse(any(event['type'] == 'chunk' for event in self.events))
+
+    def test_cancelled_empty_recognition_cannot_publish_a_late_repeat_prompt(self):
+        self.engine.analyze.side_effect = UnrecognizedSpeech('No usable words')
+        self.cancelled.set()
+        result = self.engine.run(self.request, self.cancelled, self.emit, Mock())
+        self.assertEqual(result['finish_reason'], 'cancelled')
+        self.assertFalse(any(event['type'] == 'chunk' for event in self.events))
+
     def test_unclear_transcript_fallback_is_explicit_and_never_claimed_as_a_qwen_reply(self):
         transcript = 'It was the divicote true getesir'
         self.result.update(transcript=transcript, reference_text=transcript,
                            missing_words=['divicote', 'getesir'])
         self.request['rewrite_enabled'] = True
-        qwen = self.qwen_with_outputs([('Hi!', 'stop'), ("You're welcome!", 'stop'), ('not JSON', 'stop')])
+        qwen = self.qwen_with_outputs([('not JSON', 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         output = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         final = self.events[-1]['speech']
         self.assertEqual(metadata['reply_source'], 'clarification_fallback')
-        self.assertEqual(metadata['reply_generation_attempts'], 2)
-        self.assertEqual(metadata['reply_attempts'][0]['raw_text'], 'Hi!')
-        self.assertIn('Could you say that another way?', output)
+        self.assertEqual(metadata['reply_generation_attempts'], 0)
+        self.assertEqual(metadata['reply_attempts'], [])
+        self.assertFalse(metadata['reply_model_used'])
+        self.assertEqual(qwen.generate.call_count, 1, 'Only optional grammar feedback uses Qwen.')
+        self.assertIn('Could you say it again, please?', output)
         self.assertNotIn('Hi!', output)
         self.assertTrue(final['transcript_clarity']['needs_clarification'])
         self.assertEqual(final['transcript'], transcript)
@@ -248,13 +277,44 @@ class SentenceCorrectionPipelineTests(unittest.TestCase):
                            missing_words=['divicote', 'getesir'])
         self.request['rewrite_enabled'] = True
         bad = 'It was a great day! How does it feel for you today?'
-        qwen = self.qwen_with_outputs([(bad, 'stop'), (bad, 'stop'), ('not JSON', 'stop')])
+        qwen = self.qwen_with_outputs([('not JSON', 'stop')])
         metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
         output = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
         self.assertNotIn('great day', output)
-        self.assertIn('Could you say that another way?', output)
+        self.assertIn('Could you say it again, please?', output)
         self.assertEqual(metadata['reply_source'], 'clarification_fallback')
-        self.assertTrue(all(attempt['blocked_questions'] for attempt in metadata['reply_attempts']))
+        self.assertEqual(metadata['reply_attempts'], [])
+        self.assertEqual(qwen.generate.call_count, 1)
+
+    def test_exact_ambiguous_bert_example_asks_repeat_before_optional_feedback(self):
+        raw = 'I will wi to order a cupf coffee and one ice ta please'
+        self.result.update(transcript=raw, reference_text=raw, missing_words=['wi', 'cupf'])
+        self.engine.bert_recovery = Mock()
+        self.engine.bert_recovery.recover.return_value = {
+            'provider': 'bert', 'status': 'ambiguous', 'original': raw, 'text': raw,
+            'reference_confirmed': False, 'reason': 'candidate_ambiguity', 'latency_sec': .1}
+        self.request.update(recovery_enabled=True, recovery_provider='bert', rewrite_enabled=True,
+                            reference_source='asr', topic_id='food')
+        qwen = self.qwen_with_outputs([(json.dumps({'status': 'unclear', 'text': ''}), 'stop'),
+                                       ('not JSON', 'stop')])
+        metadata = self.engine.run(self.request, self.cancelled, self.emit, qwen)
+        text = ''.join(event['text'] for event in self.events if event['type'] == 'chunk')
+        final = self.events[-1]['speech']
+        self.assertEqual(text, "Sorry, I didn't catch that. Could you say it again, please?")
+        self.assertEqual(final['spoken_response'], text)
+        self.assertEqual(final['reference_text'], raw)
+        self.assertTrue(final['transcript_clarity']['needs_clarification'])
+        self.assertEqual(metadata['reply_source'], 'clarification_fallback')
+        self.assertEqual(metadata['follow_up_source'], 'application')
+        self.assertEqual(metadata['reply_generation_attempts'], 0)
+        self.assertIsNone(metadata['conversation_state'], 'An unclear order cannot advance cafe state.')
+        self.assertEqual(qwen.generate.call_count, 2, 'One sentence recovery and one optional writing pass.')
+        self.assertEqual(json.loads(qwen.generate.call_args_list[0].args[0]['messages'][-1]['content'])['transcript'], raw)
+        self.assertTrue(all(call.args[0].get('generation_profile') != 'conversation'
+                            for call in qwen.generate.call_args_list))
+        first_reply = next(i for i, event in enumerate(self.events) if event['type'] == 'chunk')
+        final_feedback = max(i for i, event in enumerate(self.events) if event['type'] == 'speech')
+        self.assertLess(first_reply, final_feedback)
 
     def test_bot_reply_precedes_optional_grammar_help_and_never_relabels_audio(self):
         self.original = 'Yesterday I go to the park'

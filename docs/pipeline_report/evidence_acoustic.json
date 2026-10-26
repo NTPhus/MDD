@@ -1,4 +1,7 @@
 {
+  "_status": "historical_snapshot_superseded",
+  "_superseded_by": "docs/report_evidence_review_20261023.json and docs/pipeline_report/source_snapshot.json",
+  "_note_vi": "Giữ bằng chứng buổi sáng để truy vết; Whisper/CROTTC/fluency hiện tại được mô tả trong pipeline_content.json.",
   "title": "Bằng chứng pipeline âm thanh hiện tại của MDD / speech chat",
   "snapshot_bangkok": "2026-10-23T09:36:37.782915+07:00",
   "method": "Audit read-only source code và JSON artifact, không inference, không train, không gọi model/API/TTS. Tách runtime chat hiện hành khỏi pipeline nghiên cứu và demo API cũ.",

@@ -91,6 +91,30 @@ class SentencePrefetchTests(unittest.TestCase):
             self.service.voice(self.payload)
         self.assertEqual(caught.exception.code, 'chat_not_ready')
 
+    def test_pending_bert_reference_cannot_synthesize_raw_transcript(self):
+        calls = []
+        self.service.tts_factory = lambda: SimpleNamespace(synthesize=lambda text, **options: calls.append(text))
+        self.job.speech['pronunciation_reference_ready'] = False
+        with self.assertRaises(ChatError) as caught:
+            self.service.voice(self.payload)
+        self.assertEqual(caught.exception.code, 'sentence_reference_pending')
+        self.assertEqual(calls, [])
+        self.assertEqual(self.job.sentence_voice['status'], 'not_requested')
+
+    def test_sentence_synthesis_uses_ready_bert_reference_instead_of_raw_asr(self):
+        calls = []
+        recovered = 'I usually wake up early.'
+        self.job.speech.update(transcript='I usuly wake up erly', reference_text=recovered,
+                              reference_source='bert_inferred', pronunciation_reference_ready=True)
+        def synthesize(text, **options):
+            calls.append(text)
+            return self.audio
+        self.service.tts_factory = lambda: SimpleNamespace(synthesize=synthesize)
+        self.service.voice(self.payload)
+        self.release_slot('sentence')
+        self.assertEqual(calls, [recovered])
+        self.assertEqual(self.job.sentence_voice_text, recovered)
+
 
 if __name__ == '__main__':
     unittest.main()

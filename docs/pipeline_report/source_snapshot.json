@@ -1,21 +1,21 @@
 {
-  "captured_at_bangkok": "2026-10-23T09:45:11.479996+07:00",
+  "captured_at_bangkok": "2026-10-23T16:05:21.120555+07:00",
   "method": "Read local code/metadata and GET config only; no audio, inference, training, TTS or state mutation.",
   "sources": [
     {
       "path": "src/mdd/demo.py",
-      "bytes": 35573,
-      "sha256": "2e020fdf8e0d602f96aa7df020fe03bc76fe5d52c5b0b2b8f09471ea119f5276"
+      "bytes": 36196,
+      "sha256": "5c05b275e3589239b296bcf5c02dd02d1034f5922175b2bd42e669ce0f024950"
     },
     {
       "path": "src/mdd/demo_chat.py",
-      "bytes": 44855,
-      "sha256": "31fcd75474c08a3c6e4c61bce957e204a52167ef9ea6840774e7ae7b3e5e52f9"
+      "bytes": 54030,
+      "sha256": "4f8b2fad6ea85f4401bb1fbd80b5eedee251a36da3b4413355508330913bf7a9"
     },
     {
       "path": "src/mdd/demo_model_registry.py",
-      "bytes": 1922,
-      "sha256": "841cba1f517ddb376c8603142d6ccbc9c45dacca02c985faa1f121849f21d10b"
+      "bytes": 5815,
+      "sha256": "75c947eea2d95110427013cedb4cab4f26d4e35810fe9b4237d9cb7006f8335d"
     },
     {
       "path": "src/mdd/chat_runtime.py",
@@ -44,8 +44,8 @@
     },
     {
       "path": "src/mdd/chat_assessment.py",
-      "bytes": 8814,
-      "sha256": "11a58aee7bf97c47a7d5b959904aef057274a9c522b180411757ab1e82d2b706"
+      "bytes": 8999,
+      "sha256": "ea59a9d09a4d8287550e9aa7e6b3f4855d5576f5eb35cfee725e84f381516014"
     },
     {
       "path": "src/mdd/pronunciation_assessment.py",
@@ -59,8 +59,8 @@
     },
     {
       "path": "src/mdd/chat_reference.py",
-      "bytes": 11509,
-      "sha256": "f8f5a3e8dd06f933633e76942f94336baf1a9652e0eeb68484bb96fe80ce90a5"
+      "bytes": 11924,
+      "sha256": "97cdffb54f55783ecbb180c7b199bf34afad89a72ded532ddeb2d4330c7f5dc5"
     },
     {
       "path": "src/mdd/chat_diagnostics.py",
@@ -74,8 +74,8 @@
     },
     {
       "path": "src/mdd/acoustic_evidence.py",
-      "bytes": 3697,
-      "sha256": "22a820572ebc8a04ae7f78b1b05067f17c2ed71057db6644b3aab4e0a4f7353d"
+      "bytes": 5505,
+      "sha256": "f280d742a9026dc881c2bf085d55f933eb997b3f9159dfbe796a47928725da69"
     },
     {
       "path": "src/mdd/speech_topics.py",
@@ -89,23 +89,23 @@
     },
     {
       "path": "scripts/serve_demo.py",
-      "bytes": 2140,
-      "sha256": "a1c373e4453c0dedd4eb72ebe0d075fb81091a2a620c48eb28728d23ab5ad574"
+      "bytes": 2680,
+      "sha256": "6380166f28407fdf69555d63c576313fb605bf135c0a149d9cf568266386cba7"
     },
     {
       "path": "scripts/local_chat_process.py",
-      "bytes": 6336,
-      "sha256": "a055e780311cd467bf70d11ec1ac42c664a647678086b813b4ca162267d98bd1"
+      "bytes": 7553,
+      "sha256": "23c382507696f46de15c3c076c9e21a0939211db9d6af7e1d202ea3266357852"
     },
     {
       "path": "scripts/local_chat_worker.py",
-      "bytes": 12044,
-      "sha256": "6eba885479c3b603e62ae5697acc351b0098d0185b6d029a2b42e4d6db1e87f3"
+      "bytes": 12506,
+      "sha256": "e3d8baf935c256de59029686b5868a063b5ce7c0373b96957c82267fe4f49f4c"
     },
     {
       "path": "scripts/local_speech_engine.py",
-      "bytes": 32739,
-      "sha256": "7214f127b6f16b31f2a9e645b09512df635793da864418ac50e684e59065b0cc"
+      "bytes": 54498,
+      "sha256": "81fc649b1257a720a92690116b81fa44ced8927395374d18d206a54208436980"
     },
     {
       "path": "scripts/grammar_inference.py",
@@ -119,8 +119,8 @@
     },
     {
       "path": "scripts/conversation_context.py",
-      "bytes": 3014,
-      "sha256": "a1344ea457bd1552cc75b14904186ef04960ffe7559f64c188193a00a93dd164"
+      "bytes": 6226,
+      "sha256": "d1c4e8cd73ca86406e9cbea56115741cd52b99f15b8cf5eb92270d9e70e60439"
     },
     {
       "path": "scripts/conversation_reply.py",
@@ -129,8 +129,8 @@
     },
     {
       "path": "scripts/conversation_policy.py",
-      "bytes": 7260,
-      "sha256": "a04976f0cb0f1f46de1cb6708f311e1fef0639c228beb734abc659f5b59431e7"
+      "bytes": 9012,
+      "sha256": "4743970695176555f252e96e005dc5f66a61b2a8617404de390ed0a3e1824f4f"
     },
     {
       "path": "scripts/conversation_state.py",
@@ -164,23 +164,23 @@
     },
     {
       "path": "demo/index.html",
-      "bytes": 26998,
-      "sha256": "ecb401d2230d770db231ca91353d8b2bb704f2e9fe129dea942b5b9f613eaab1"
+      "bytes": 30204,
+      "sha256": "9a8322dc42c3a9aaf7ed3c9eb7ac47576a910604d0ddfdb27212d3d1abc599fc"
     },
     {
       "path": "demo/chat.js",
-      "bytes": 106262,
-      "sha256": "187a9e5a76fab452c1d3b519e1669170a06daa897db0dabf1b3527d307454767"
+      "bytes": 129836,
+      "sha256": "68fd597c0aa2f62cc7ec90a274bc8df541de9fbd986610f38194032a77a944f7"
     },
     {
       "path": "demo/app.js",
-      "bytes": 76821,
-      "sha256": "1ec423851688f359119d81b2e6b56a95c6b795a4cb9e900dc4a20b8de2c8183f"
+      "bytes": 77249,
+      "sha256": "d9c4f14be041013a2aa1373d38281e6a5542e12938854f44ae1f4bd681b49e54"
     },
     {
       "path": "demo/recorder-worklet.js",
-      "bytes": 957,
-      "sha256": "9758caffdc47c2769d5c25feb4045f40abf5acf70b2b308b86f0c331964ab74d"
+      "bytes": 1138,
+      "sha256": "486f5bfdfb7cdf2ed6d2171334b0708f3072fe9b2af6c466c8a70c1db75ff4da"
     },
     {
       "path": "runs/asr-vietnamese-english-v1/training_provenance.json",
@@ -216,6 +216,146 @@
       "path": "data/generated/pronunciation-calibration-v1/full-validation/calibration.json",
       "bytes": 4471,
       "sha256": "338065ffa80dca6f17bb39257f00aea517d00cd0215437925a8884478ff2bcb3"
+    },
+    {
+      "path": "scripts/whisper_asr.py",
+      "bytes": 12457,
+      "sha256": "e1c5d7ce4db5511d4ad4814893ca4386b210cc1141b52263b2df228ec466a332"
+    },
+    {
+      "path": "scripts/setup_whisper_asr.py",
+      "bytes": 5468,
+      "sha256": "1aa23c5c1ae1b9bf0636373c1f8443932ce4d153bf9c2a81edd086a5b7c192a2"
+    },
+    {
+      "path": "scripts/crottc_pronunciation.py",
+      "bytes": 12775,
+      "sha256": "602c42190b4befe97cecaa22e3086b2e4980acf29859765e016bb1a54690a375"
+    },
+    {
+      "path": "scripts/crottc_worker.py",
+      "bytes": 6777,
+      "sha256": "4ba3cba0be6471e74c354892f68af65e6273a402d58d4d13da87428325c7b8b9"
+    },
+    {
+      "path": "src/mdd/phone_sequence_assessment.py",
+      "bytes": 10922,
+      "sha256": "eee8453b187d7cf92ce561b54b72903fe8c5428e00cff2f106b80103bfa9e7d8"
+    },
+    {
+      "path": "src/mdd/speech_fluency.py",
+      "bytes": 9950,
+      "sha256": "ca14c8c602189e3ba7cb673c8eb69837d3619acb7946f27d2d85b582f35a16b0"
+    },
+    {
+      "path": "src/mdd/tts_registry.py",
+      "bytes": 2328,
+      "sha256": "fd3eb1df54d44a732a57ccf921e2067b3d6444dd68aa58782622d0bb963d6264"
+    },
+    {
+      "path": "scripts/kokoro_tts.py",
+      "bytes": 12979,
+      "sha256": "d55704da07408a0714aefc841f7ca1f4a1646bb0f91531c566d8aa27b4152534"
+    },
+    {
+      "path": "models/pretrained/faster-whisper-small.en/setup_manifest.json",
+      "bytes": 1142,
+      "sha256": "12a89c66fd2747769c421a8bdb399ac6e9102a303f8f0c6944624a38df55526d"
+    },
+    {
+      "path": "models/pretrained/bert-base-uncased/setup_manifest.json",
+      "bytes": 2868,
+      "sha256": "a0e28b917f0a5f96e7eb0a996ceb20d07d5c65ba9de0064f734806de7ca53b2a"
+    },
+    {
+      "path": "models/pretrained/kokoro-82m/setup_manifest.json",
+      "bytes": 3640,
+      "sha256": "cab7f90758517e248cd9dfd8a2f4eda04f3c8e0639edd8c7316b7b43836a609f"
+    },
+    {
+      "path": ".tools/crottc/bundle/manifest.json",
+      "bytes": 545,
+      "sha256": "8dcd106eee0321195853f8b29bf9f4dd48764eea5a79444bc8d6f5731b0c794b"
+    },
+    {
+      "path": "data/generated/asr-backends-20261023/manifest.json",
+      "bytes": 83372,
+      "sha256": "023cddbeb20c126b64a012b90476448c9fc9e99d64153247305bb2e3a0df83a2"
+    },
+    {
+      "path": "data/generated/asr-backends-20261023/results.json",
+      "bytes": 582558,
+      "sha256": "1a80abbee8361d88ef0dae2c6ef7dbbb3b70f6830db5ba00afacfa883961ea59"
+    },
+    {
+      "path": "data/generated/asr-backends-20261023/metrics.csv",
+      "bytes": 1879,
+      "sha256": "eb552941749b60179e73c21c6c188f04877df0b7827d944c037759a4a33299f8"
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/manifest.json",
+      "bytes": 512092,
+      "sha256": "340d23bb6e988a5ec6fe38b9a79d045d41e4ede9be85c897044e6ed61d384855"
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/results.json",
+      "bytes": 5772276,
+      "sha256": "dd5e5dd870a735fbc828b863e82c5e1ef1957043cc1a8c903c7353dd1fc07395"
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/research_metrics.csv",
+      "bytes": 1198,
+      "sha256": "db9fdbfdf473dbf8121b51db96f6eb90b50ee9deb228833dfa29a9813f4e5279"
+    },
+    {
+      "path": "data/generated/crottc-pilot-20261023/ui_review_metrics.csv",
+      "bytes": 477,
+      "sha256": "f56494fd47748dffa32ca6bb05fe156d2a5a02a04060813168f9210de26a70c6"
+    },
+    {
+      "path": "data/generated/crottc-live-20261023/verification.json",
+      "bytes": 46185,
+      "sha256": "b76e440417a7ad779422e40991b140f6a80d13921d37907c8c13f283784d1cce"
+    },
+    {
+      "path": "data/generated/crottc-live-20261023/reference-reassessment.json",
+      "bytes": 44254,
+      "sha256": "7240eb8aa658d759727c63dc4b8de15ab005f14bfcf484c69c4e8a391db4a7d0"
+    },
+    {
+      "path": "data/generated/grammar-adapter-demo-v1/comparison.json",
+      "bytes": 3427,
+      "sha256": "64bca9edb7936ab268983f69921b025f3fae787b3f5506bcd163a1875f418444"
+    },
+    {
+      "path": "data/generated/kokoro-gpu-validation-v1/summary.json",
+      "bytes": 10296,
+      "sha256": "291042037efd781c72c08166027a60ac33ce89fa86e22b43fcd0032fd3709d71"
+    },
+    {
+      "path": "data/generated/cascade-l2arctic-plus-seed42/audio/A/metrics.json",
+      "bytes": 41490,
+      "sha256": "8066ed10c6f0137fe33040f8d9ec832c1f744bd2328fb4c18f930557220a6425"
+    },
+    {
+      "path": "data/generated/cascade-l2arctic-plus-seed42/audio/B/metrics.json",
+      "bytes": 47230,
+      "sha256": "92a825226abc6972f81fad10a764fde03d1a89c15a0451b5f25746ca6e6ea197"
+    },
+    {
+      "path": "data/generated/external/speechocean762/20261021T024600Z/B-full/metrics.json",
+      "bytes": 385766,
+      "sha256": "7e228d21763bddc8f9057c3f45ce5eee28a3c87eda9c136afe6e5240d6777dd8"
+    },
+    {
+      "path": "docs/references_20261023.json",
+      "bytes": 15112,
+      "sha256": "6bee6b359d319623595719c9f9b5ca7e8c08015f918fd5c7b2f9614ff9f08ddc"
+    },
+    {
+      "path": "docs/report_evidence_review_20261023.json",
+      "bytes": 8676,
+      "sha256": "4fcee74ea8bbc2648f8c88bd5d64c3237c9117f60df15fdddc92ecbdd3142cdc"
     }
   ],
   "runtime_config": {
@@ -236,7 +376,7 @@
     ],
     "device": "auto",
     "acoustic_device": "cpu",
-    "asr_model_id": "wav2vec2-vi-en-v1",
+    "asr_model_id": "whisper-small-en",
     "grammar_model_id": "qwen-grammar",
     "reply_model_id": "qwen-base",
     "sentence_mode": "grammar_and_natural",
@@ -252,7 +392,47 @@
     "max_audio_seconds": 30,
     "speech_ready": true,
     "ai33_available": true,
-    "default_voice_provider": "ai33"
+    "default_voice_provider": "kokoro",
+    "asr_backend": "whisper",
+    "asr_revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+    "asr_compute_type": "int8",
+    "phoneme_model_id": "cascade-B",
+    "pronunciation_backend": "wav2vec2-b",
+    "pronunciation_models": [
+      {
+        "id": "cascade-B",
+        "ready": true,
+        "label": "wav2vec2 B",
+        "experimental": false
+      },
+      {
+        "id": "crottc-if-l2-arctic",
+        "ready": true,
+        "label": "CROTTC-IF · Thử nghiệm",
+        "experimental": true
+      }
+    ],
+    "default_pronunciation_model_id": "cascade-B",
+    "fluency_method": "word_timing_fluency_v1",
+    "fluency_calibrated": false,
+    "kokoro_available": true,
+    "kokoro_default_voice_id": "af_heart",
+    "transcript_recovery": null,
+    "transcript_recovery_provider": null,
+    "transcript_normalization": null,
+    "inference_warmup": {
+      "status": "ready",
+      "elapsed_sec": 18.14,
+      "qwen_device": "cuda:0",
+      "load_only": true,
+      "timings": {
+        "qwen_load_sec": 3.141,
+        "asr_load_sec": 2.234,
+        "phoneme_load_sec": 0.141,
+        "dictionary_load_sec": 6.328,
+        "recovery_load_sec": 0.0
+      }
+    }
   },
   "runtime_config_status": "GET completed"
 }

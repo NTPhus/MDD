@@ -1,4 +1,4 @@
-"""Server-owned Qwen inference placement; acoustic models keep their CPU policy."""
+"""Server-owned Qwen inference placement; speech models use separate policies."""
 from __future__ import annotations
 
 import os
@@ -26,8 +26,8 @@ def select_runtime(torch, requested=None):
             if requested == 'cuda':
                 raise RuntimeError('CUDA was requested but is unavailable')
             return cpu('cuda_unavailable')
-        # Leave room for Windows, KV cache and adapter execution. Do not put
-        # the acoustic models on CUDA or start/stop another GPU process.
+        # Load Qwen first, leaving room for Windows, KV cache and adapters.
+        # Speech models subsequently choose their own measured device policy.
         if requested == 'auto' and torch.cuda.mem_get_info(0)[0] < 2048 * 1024**2:
             return cpu('cuda_memory_low')
         dtype = 'bfloat16' if torch.cuda.is_bf16_supported() else 'float16'

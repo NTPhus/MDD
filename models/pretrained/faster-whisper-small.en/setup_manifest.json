@@ -1,0 +1,35 @@
+{
+  "status": "ready",
+  "model_id": "Systran/faster-whisper-small.en",
+  "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+  "source": "https://huggingface.co/Systran/faster-whisper-small.en/tree/d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+  "prepared_from": "verified_local_experiment",
+  "device": "cpu",
+  "compute_type": "int8",
+  "packages": {
+    "faster-whisper": "1.2.1",
+    "ctranslate2": "4.8.3",
+    "av": "19.0.2"
+  },
+  "files": {
+    "config.json": {
+      "bytes": 2657,
+      "sha256": "666a9605530ac1f61fa8177f3702b4dacec9966749e42610839fcc32661d5fae"
+    },
+    "model.bin": {
+      "bytes": 483545366,
+      "sha256": "62b2a45b05ee59acb4a5341b33ee35e041395d378d418a18acfe4c9e768ee37a"
+    },
+    "tokenizer.json": {
+      "bytes": 2128466,
+      "sha256": "929c5252409436dce1b38a75d1abbcb5e132d170d8e324e4e04ed915fa2d22df"
+    },
+    "vocabulary.txt": {
+      "bytes": 422309,
+      "sha256": "ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf"
+    }
+  },
+  "verified_at_utc": "2026-10-23T07:07:25.413904+00:00",
+  "inference_executed": false,
+  "training": false
+}

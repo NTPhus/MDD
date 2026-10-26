@@ -1,0 +1,126 @@
+{
+  "schema": "mdd-independent-report-evidence-review-v1",
+  "created_utc": "2026-10-23T08:50:28.243347+00:00",
+  "scope_vi": "Audit read-only metadata, code và kết quả inference đã lưu. Không đọc .env, không nạp torch/model, không training/inference/API/voice.",
+  "source_sha256": {
+    "src/mdd/demo_model_registry.py": "75c947eea2d95110427013cedb4cab4f26d4e35810fe9b4237d9cb7006f8335d",
+    "scripts/local_speech_engine.py": "81fc649b1257a720a92690116b81fa44ced8927395374d18d206a54208436980",
+    "scripts/whisper_asr.py": "e1c5d7ce4db5511d4ad4814893ca4386b210cc1141b52263b2df228ec466a332",
+    "src/mdd/speech_fluency.py": "ca14c8c602189e3ba7cb673c8eb69837d3619acb7946f27d2d85b582f35a16b0",
+    "src/mdd/phone_sequence_assessment.py": "eee8453b187d7cf92ce561b54b72903fe8c5428e00cff2f106b80103bfa9e7d8",
+    "src/mdd/acoustic_evidence.py": "f280d742a9026dc881c2bf085d55f933eb997b3f9159dfbe796a47928725da69",
+    "src/mdd/chat_assessment.py": "ea59a9d09a4d8287550e9aa7e6b3f4855d5576f5eb35cfee725e84f381516014",
+    "src/mdd/demo_chat.py": "4f8b2fad6ea85f4401bb1fbd80b5eedee251a36da3b4413355508330913bf7a9",
+    "src/mdd/tts_registry.py": "fd3eb1df54d44a732a57ccf921e2067b3d6444dd68aa58782622d0bb963d6264",
+    "demo/chat.js": "68fd597c0aa2f62cc7ec90a274bc8df541de9fbd986610f38194032a77a944f7",
+    "data/generated/asr-backends-20261023/manifest.json": "023cddbeb20c126b64a012b90476448c9fc9e99d64153247305bb2e3a0df83a2",
+    "data/generated/asr-backends-20261023/results.json": "1a80abbee8361d88ef0dae2c6ef7dbbb3b70f6830db5ba00afacfa883961ea59",
+    "data/generated/crottc-pilot-20261023/manifest.json": "340d23bb6e988a5ec6fe38b9a79d045d41e4ede9be85c897044e6ed61d384855",
+    "data/generated/crottc-pilot-20261023/results.json": "dd5e5dd870a735fbc828b863e82c5e1ef1957043cc1a8c903c7353dd1fc07395",
+    "data/generated/crottc-live-20261023/verification.json": "b76e440417a7ad779422e40991b140f6a80d13921d37907c8c13f283784d1cce",
+    "models/pretrained/faster-whisper-small.en/setup_manifest.json": "12a89c66fd2747769c421a8bdb399ac6e9102a303f8f0c6944624a38df55526d",
+    "models/pretrained/kokoro-82m/setup_manifest.json": "cab7f90758517e248cd9dfd8a2f4eda04f3c8e0639edd8c7316b7b43836a609f",
+    ".tools/crottc/bundle/manifest.json": "8dcd106eee0321195853f8b29bf9f4dd48764eea5a79444bc8d6f5731b0c794b",
+    "docs/references_20261023.json": "6bee6b359d319623595719c9f9b5ca7e8c08015f918fd5c7b2f9614ff9f08ddc"
+  },
+  "current_selection": {
+    "speech_asr": {
+      "id": "whisper-small-en",
+      "model_id": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "path": "D:\\NCC\\MDD\\models\\pretrained\\faster-whisper-small.en",
+      "device": "cpu",
+      "compute_type": "int8",
+      "sha256": "62b2a45b05ee59acb4a5341b33ee35e041395d378d418a18acfe4c9e768ee37a",
+      "files": {
+        "config.json": {
+          "bytes": 2657,
+          "sha256": "666a9605530ac1f61fa8177f3702b4dacec9966749e42610839fcc32661d5fae"
+        },
+        "model.bin": {
+          "bytes": 483545366,
+          "sha256": "62b2a45b05ee59acb4a5341b33ee35e041395d378d418a18acfe4c9e768ee37a"
+        },
+        "tokenizer.json": {
+          "bytes": 2128466,
+          "sha256": "929c5252409436dce1b38a75d1abbcb5e132d170d8e324e4e04ed915fa2d22df"
+        },
+        "vocabulary.txt": {
+          "bytes": 422309,
+          "sha256": "ff77588746d3a2595d32ab5b69ffd7b95ce2441ac57533cb66fc3eb575a115cf"
+        }
+      },
+      "ready": true,
+      "available": true,
+      "selection": "local_whisper_small_en",
+      "provider": "whisper",
+      "trained": false
+    },
+    "pronunciation_default": {
+      "id": "cascade-B",
+      "provider": "wav2vec2-b",
+      "path": "runs\\cascade-l2arctic-plus-seed42\\B\\best_checkpoint",
+      "ready": true,
+      "device": "cpu",
+      "method": "ctc_variant_posterior_margin_v1"
+    },
+    "pronunciation_crottc": {
+      "provider": "crottc-if",
+      "id": "crottc-if-l2-arctic",
+      "model_id": "Haopeng/CROTTC-IF-l2-arctic",
+      "revision": "9149e5107b3332b9aa3f5573f6328a4e312006ad",
+      "path": "D:\\NCC\\MDD\\.tools\\crottc\\bundle",
+      "ready": true,
+      "checkpoint_sha256": "3a9a4a03d2af6c90f71db8972a51dd4ce4559d1e9801f078904a65ce4aa113ef",
+      "ssl_checkpoint_sha256": "a1ff5b43b55c412e73381e8b257c9af3c2237fa71b76bac5119ca8b31a531ec4",
+      "vocabulary_sha256": "98cee9707ab67c3e29ee337debf4ba319cbc61c3777024db6b8f3494f0df5bfe",
+      "device": "cpu",
+      "compute_type": "float32",
+      "decoder": "official_speechbrain_ar_ctc_beam10_weight0.99",
+      "phone_timing": "unavailable"
+    },
+    "grammar": {
+      "id": "qwen-grammar",
+      "ready": true,
+      "adapter": "runs\\grammar-qwen3-06b-wi-jfleg-v1\\adapter",
+      "sha256": "f865033a3053229864eb1fee1957aa5488ea5376d4d3a3279b4cb6d68d58632e",
+      "validation": "16-row held-out validation development probe; output contract and unchanged grammar controls, not grammar accuracy."
+    },
+    "recovery_installed_but_bypassed_for_whisper": {
+      "provider": "bert",
+      "ready": true,
+      "path": "models\\pretrained\\bert-base-uncased",
+      "model_id": "google-bert/bert-base-uncased",
+      "revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+      "version": "bert_masked_recovery_v1"
+    }
+  },
+  "flow_vi": [
+    "UI: mic/upload → mono 16k PCM WAV → server job/history → local speech worker.",
+    "Mặc định Whisper small.en: CPU INT8, 2 threads, beam5, native word timestamps; không đưa câu chuẩn hay hội thoại vào ASR.",
+    "Fluency mô tả timing trên transcript ASR gốc, không có điểm chuyên gia hoặc stress/prosody.",
+    "Phát âm mặc định cascade-B phoneme CTC CPU + CMUdict variants/posterior scorer; nhánh này còn đồng bộ trước reply.",
+    "CROTTC lựa chọn thử nghiệm: tách CPU worker, bắt đầu phoneme inference nền sau Whisper; Qwen có thể trả lời khi acoustic analysis còn chạy.",
+    "Qwen base nhận text/history để hội thoại; Qwen grammar LoRA chạy hai task riêng sau reply. Coach LoRA cũ không được gọi khi assessment key tồn tại.",
+    "BERT local chỉ còn ở nhánh wav2vec2 ASR legacy; Whisper mặc định bỏ qua BERT và lexical recovery.",
+    "Kokoro TTS local CUDA mặc định. ai33 Sarah là dịch vụ ngoài tùy chọn; Kokoro af_sarah là voice khác.",
+    "Sửa câu đối chiếu tái sử dụng acoustic evidence đúng job, không chạy ASR lại; không dùng grammar rewrite làm chứng cứ phát âm cho audio cũ."
+  ],
+  "comparison_limits_vi": [
+    "ASR 118 case = 111 TLV previously observed held-out + 4 external SAA cùng prompt + 3 user development; không phải tập test độc lập mới cho mọi lựa chọn phát triển.",
+    "Wav2vec CPU FP32 greedy vs Whisper CPU INT8 beam5 có pretraining/runtime/decoder khác; kết quả là so sánh hệ thống thực tế, không phải ablation causal cùng mô hình.",
+    "WER là lỗi transcript, khác phát hiện lỗi âm, ngữ pháp hoặc mức tự nhiên hội thoại.",
+    "CRO pilot 24 expert + 3 user: chọn nhãn stratified trước inference trên tập đã quan sát; không đại diện toàn900 hoặc người dùng Việt.",
+    "CRO raw và shared39 scoring riêng; canonical/insertion-slot evaluator local khác metric paper. Không dùng19.01 vs71.77 để kết luận paper sai.",
+    "UI hint FPR khác phone FRR/FAR. Cả B/CRO pilot không có quyết định calibrated. Calibration450validation của B ineligible không được diễn giải thành mọi audio đúng.",
+    "Grammar development16 case chỉ đo JSON/reference text control, chưa có fulltest ERRANT/GLEU hay human semantic evaluation.",
+    "Live latency3job phụ thuộcwarm/cold/sampling/backgroundschedule; không dùng để xếpCRO nhanh hơnB.",
+    "KokoroGPU warmuncached3 vsai33uncached1 khácvoice vàthờiđiểm: sốminh họa, chưa phải controlledTTSbenchmark."
+  ],
+  "obsolete_report_claims_vi": [
+    "author_pipeline.py cũ nói ASR mặc định wav2vec2-vi-en-v1; phải thay Whisper.",
+    "Không còn đúng nếu nói mọi acoustic đều tuần tự, không cóCRO, không cóFluency, TTSchỉbrowser/ai33.",
+    "Qwen2-Audio folder chỉcómetadata/index, khôngcóweightshards; khôngđượcliệt kê làđãcài sẵn sànginference.",
+    "Các report/cascade comparison awaiting_evaluations làsnapshotcũ; A/Bmetrics900caseđãcó nhưngchưa có fullQwenfeedbackqualitybenchmark."
+  ]
+}
