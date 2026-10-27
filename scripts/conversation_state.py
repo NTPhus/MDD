@@ -20,8 +20,15 @@ _BEVERAGES = (
     ('water', r'waters?'), ('juice', r'juices?'),
 )
 _DRINKS = re.compile(r'\b(?:' + '|'.join(f'(?P<item{index}>{pattern})' for index, (_, pattern) in enumerate(_BEVERAGES)) + r')\b')
+_FOODS = (
+    ('chicken sandwich', r'chicken\s+sandwich(?:es)?'),
+    ('sandwich', r'sandwich(?:es)?'),
+)
+_MENU_ITEMS = (*_BEVERAGES, *_FOODS)
+_MENU = re.compile(r'\b(?:' + '|'.join(f'(?P<item{index}>{pattern})' for index, (_, pattern) in enumerate(_MENU_ITEMS)) + r')\b')
 _ORDER_PREFIX = re.compile(
-    r'^(?:(?:actually|okay|ok|well|so|instead)\s*[,!:]?\s+)*'
+    r'^(?:(?:hi|hello|hey)(?: there)?[,!:]?\s+)?'
+    r'(?:(?:actually|okay|ok|well|so|instead)\s*[,!:]?\s+)*'
     r'(?P<phrase>i would like(?: to order)?|i want(?: to order)?|i will have|i will take|can i have|can i get|could i have|may i have|'
     r'make (?:it|that)|change my order to)\b\s*')
 _DETAIL_PREFIX = re.compile(r'^(?:i would like|i want|i will have|i will take|make)\b\s*')
@@ -85,15 +92,17 @@ def _selection(text, *, allow_short=False):
     if not prefix and not allow_short:
         return None
     body = normalized[prefix.end():] if prefix else normalized
-    matches = list(_DRINKS.finditer(body))
+    matches = list(_MENU.finditer(body))
     if not matches:
         return None
-    items = list(dict.fromkeys(_BEVERAGES[int(match.lastgroup[4:])][0] for match in matches))
-    remainder = _DRINKS.sub(' ', body)
+    items = list(dict.fromkeys(_MENU_ITEMS[int(match.lastgroup[4:])][0] for match in matches))
+    drink_names = {name for name, _ in _BEVERAGES}
+    drink_matches = [match for match in matches if _MENU_ITEMS[int(match.lastgroup[4:])][0] in drink_names]
+    remainder = _MENU.sub(' ', body)
     qualifiers, remainder = _qualifiers(remainder, unknown_conflicts=len(matches) > 1)
     if qualifiers is None or not _only_filler(remainder):
         return None
-    if len(matches) > 1 and qualifiers:
+    if len(drink_matches) > 1 and qualifiers:
         clauses = [clause for clause in re.split(r'\band\b', body) if _DRINKS.search(clause)]
         trailing_both = bool(re.search(r'\bboth\b', body[matches[-1].end():]))
         for slot, value in tuple(qualifiers.items()):
@@ -219,7 +228,10 @@ def state_note(state):
                       for slot, fact in state.get('facts', {}).items())
     instruction = (f'You MUST ask ONE short {descriptions[action]} question now.' if action in descriptions
                    else 'Make one brief new contribution; a question is optional.')
-    return (f'Active cafe order. You are the barista, not the customer. Known: {known}. '
+    return (f'Active cafe role-play order. You are a friendly barista serving the learner as a customer. '
+            'Acknowledge the items they named, continue the order naturally, and never refuse to help with an order. '
+            'Do not invent menu availability or prices. '
+            f'Known: {known}. '
             f'Next action: {action}. {instruction} '
             'Do not recap the order, welcome again, ask its favourite, or speak as the customer.')
 

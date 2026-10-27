@@ -392,7 +392,12 @@ class DemoApplication:
         # corpus sample. No perceived labels or gold error events enter inference.
         row, missing = self._reference(text)
         if row is not None:
-            reference = {key: row[key] for key in ("prompt_text", "canonical_phones", "canonical_word_indices", "word_intervals") if key in row}
+            reference = {key: row[key] for key in ("prompt_text", "canonical_phones", "canonical_word_indices", "word_intervals", "word_all_variants") if key in row}
+            if "word_all_variants" not in reference:
+                from mdd.demo_reference import dictionary_reference
+                dict_row, _ = dictionary_reference(self.root, text)
+                if dict_row and "word_all_variants" in dict_row:
+                    reference["word_all_variants"] = dict_row["word_all_variants"]
         parent_text = text.strip()
         if live:
             if row is None:
@@ -563,7 +568,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                     self._send(200, file.read_bytes(), types[file.suffix])
                 else:
                     raise DemoError(404, "not_found", "Không tìm thấy tài nguyên.")
-            elif method == "POST" and path in {"/api/analyze", "/api/analyze-live", "/api/feedback", "/api/reference", "/api/chat/send", "/api/chat/speech", "/api/chat/topic", "/api/chat/cancel", "/api/chat/voice", "/api/chat/reference"}:
+            elif method == "POST" and path in {"/api/analyze", "/api/analyze-live", "/api/feedback", "/api/reference", "/api/chat/send", "/api/chat/speech", "/api/chat/topic", "/api/chat/cancel", "/api/chat/voice", "/api/chat/voice-sample", "/api/chat/reference"}:
                 if self.headers.get("Transfer-Encoding") is not None:
                     raise DemoError(400, "invalid_body", "Không hỗ trợ transfer encoding.")
                 if self.headers.get_content_type() != "application/json":
@@ -584,8 +589,12 @@ class DemoHandler(BaseHTTPRequestHandler):
                 except (OSError, UnicodeError, ValueError):
                     raise DemoError(400, "invalid_json", "JSON không hợp lệ hoặc chưa tải đủ.") from None
                 if path.startswith("/api/chat/"):
-                    handler = {"/api/chat/send": app.chat_service.submit, "/api/chat/speech": app.chat_service.submit_speech, "/api/chat/topic": app.chat_service.start_topic, "/api/chat/cancel": app.chat_service.cancel, "/api/chat/voice": app.chat_service.voice, "/api/chat/reference": app.chat_service.reference}[path]
+                    handler = {"/api/chat/send": app.chat_service.submit, "/api/chat/speech": app.chat_service.submit_speech, "/api/chat/topic": app.chat_service.start_topic, "/api/chat/cancel": app.chat_service.cancel, "/api/chat/voice": app.chat_service.voice, "/api/chat/voice-sample": app.chat_service.voice_sample, "/api/chat/reference": app.chat_service.reference}[path]
                     result = handler(body)
+                    if path == "/api/chat/voice-sample":
+                        audio, content_type = result
+                        self._send(200, audio, content_type)
+                        return
                 else:
                     result = app.feedback(body) if path == "/api/feedback" else app.reference_info(body) if path == "/api/reference" else app.analyze(body, live=path == "/api/analyze-live")
                 self._send_json(200, result)

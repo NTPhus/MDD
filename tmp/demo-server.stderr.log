@@ -1,0 +1,5 @@
+Exception: D:\NCC\MDD\scripts\run_demo.ps1:75
+Line |
+  75 |  . ITCODE -ne 0) { throw "Demo server exited with code $LASTEXITCODE." }
+     |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Demo server exited with code -1.

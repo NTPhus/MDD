@@ -152,7 +152,8 @@ def assessment_fields(root, text, evidence, *, confirmed=False, raw_comparison=N
     return {'assessment': {key: value for key, value in result.items()
                            if key not in {'comparison', 'target_words'}},
             'comparison': comparison, 'raw_comparison': raw_comparison,
-            'sound_candidates': sound_candidates(result, text, reference_confirmed=confirmed),
+            'sound_candidates': sound_candidates(result, text, reference_confirmed=confirmed,
+                                                 posterior_review=True),
             'target_words': result.get('target_words', []),
             'notice': ('Sound suggestions use the ASR transcript and may reflect misheard words. Edit the text only if it differs from what you said.' if not confirmed else
                        'Sound estimates use pronunciation variants and acoustic evidence; uncertain words are not marked wrong.')}

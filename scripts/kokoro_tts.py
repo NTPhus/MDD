@@ -117,8 +117,17 @@ def _start():
     if _PROCESS is not None and _PROCESS.poll() is None and _KEY==key:return _READY
     shutdown()
     CACHE.mkdir(parents=True,exist_ok=True)
+    # phonemizer copies its eSpeak DLL into a fresh temp directory before
+    # synthesizing. The demo may run under a restricted Windows account whose
+    # profile %TEMP% allows directory creation but denies writing the DLL.
+    # Keep the worker's temporary files under the writable project cache.
+    worker_temp=CACHE/('worker-tmp-'+secrets.token_hex(6))
+    worker_temp.mkdir(parents=True,exist_ok=True)
+    espeak_temp_dirs=[worker_temp/f'espeak-{index}' for index in range(8)]
+    for path in espeak_temp_dirs:path.mkdir()
     environment={**os.environ,'OMP_NUM_THREADS':'2','OPENBLAS_NUM_THREADS':'2',
-        'PYTHONIOENCODING':'utf-8','HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1'}
+        'PYTHONIOENCODING':'utf-8','HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1',
+        'KOKORO_ESPEAK_TEMP_DIRS':os.pathsep.join(map(str,espeak_temp_dirs))}
     with (CACHE/'worker.log').open('a',encoding='utf-8') as log:
         process=subprocess.Popen([str(ROOT/record['runtime_python']),'-X','utf8','-u',str(ROOT/'scripts/kokoro_worker.py')],
             cwd=ROOT,env=environment,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=log,

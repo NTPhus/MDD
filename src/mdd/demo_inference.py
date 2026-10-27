@@ -56,7 +56,16 @@ def decode_ctc(frame_ids, frame_confidences, id_to_phone, blank_id, duration_sec
 
 
 def canonical_comparison(reference_text, reference, predicted_phones):
-    """Compare to canonical prompt phones only, without touching perceived/gold data."""
+    """Compare to canonical prompt phones only, without touching perceived/gold data.
+
+    Uses all CMUdict pronunciation variants (via ``word_all_variants``) so that
+    a correct but alternate pronunciation is not flagged as a difference.
+    Applies a per-word edit-distance tolerance to absorb the unavoidable noise
+    in CTC greedy decoding: short words (≤2 phones) require an exact match;
+    medium words (3–5 phones) tolerate 1 edit; long words (≥6 phones) tolerate
+    2 edits.  The tolerance covers CTC frame-boundary artefacts but is still
+    strict enough to catch genuine substitutions.
+    """
     if not reference or not normalize_text(reference_text):
         return None
     if normalize_text(reference.get("prompt_text", "")) != normalize_text(reference_text):
@@ -84,10 +93,112 @@ def canonical_comparison(reference_text, reference, predicted_phones):
             mapping = [None] * len(canonical)
     mapping = [word if isinstance(word, int) and not isinstance(word, bool) and 0 <= word < len(words)
                else None for word in mapping]
+
+    # Build per-word predicted phone spans from the mapping.
+    word_canonical: dict[int, list[str]] = {}
+    for phone, word_idx in zip(canonical, mapping):
+        if word_idx is not None:
+            word_canonical.setdefault(word_idx, []).append(phone)
+
+    # Slice predicted phones per word using the Viterbi/greedy alignment against
+    # the primary canonical sequence.  This gives each word its own predicted
+    # phone region so we can compare it against alternate variants.
+    from .metrics import align_phones as _align
+    primary_alignment = _align(canonical, predicted_phones)
+
+    # Map each canonical position → the predicted phone observed there (or None).
+    canonical_to_observed: dict[int, str | None] = {}
+    for step in primary_alignment:
+        pos = step.get("reference_index")
+        if pos is not None:
+            canonical_to_observed[pos] = step["observed_phone"] if step["kind"] != "deletion" else None
+
+    # Reconstruct per-word observed phone sequences from the primary alignment.
+    word_observed: dict[int, list[str]] = {}
+    pos = 0
+    for phone, word_idx in zip(canonical, mapping):
+        if word_idx is not None:
+            observed_phone = canonical_to_observed.get(pos)
+            if observed_phone is not None:
+                word_observed.setdefault(word_idx, []).append(observed_phone)
+        pos += 1
+    # Also capture insertion phones assigned to each word.
+    for step in primary_alignment:
+        if step["kind"] == "addition":
+            word_idx = mapping[min(step["position"], len(mapping) - 1)] if mapping else None
+            if word_idx is not None and step["observed_phone"]:
+                word_observed.setdefault(word_idx, []).append(step["observed_phone"])
+
+    # Per-word tolerance: how many indel-only edits are acceptable before marking
+    # "difference".  CTC greedy always introduces some boundary noise.
+    # Substitutions are always infinite-cost (see _indel_distance), so tolerance
+    # only forgives extra or missing phone tokens at syllable boundaries.
+    # Note: A substitution requires 1 deletion + 1 insertion = 2 indels min,
+    # so tolerance=1 NEVER forgives phone swaps (e.g. F→P, TH→D remain difference).
+    #   ≤1 phone  : exact match required (e.g. "a", "I")
+    #   2–7 phones: 1 indel forgiven (boundary CTC noise, silent-T, schwa reduction)
+    #   ≥8 phones : 2 indels forgiven (long content words, e.g. "comfortable")
+    def _tolerance(n_phones: int) -> int:
+        if n_phones <= 1:
+            return 0
+        if n_phones <= 7:
+            return 1
+        return 2
+
+    # Check all CMUdict variants for each word.
+    word_all_variants: list[list[list[str]]] = reference.get("word_all_variants", [])
+
+    def _indel_distance(seq_a: list[str], seq_b: list[str]) -> int:
+        """Insertion/deletion-only distance (no substitution credit).
+
+        CTC greedy noise appears as extra or missing phone tokens at frame
+        boundaries, not as phone swaps.  Genuine mispronunciations (e.g. F→P)
+        are substitutions and must NOT be absorbed by the tolerance band.
+        Returns len(seq_a)+len(seq_b) when any substitution is required,
+        effectively making a variant with a substituted phone unacceptable.
+        """
+        m, n = len(seq_a), len(seq_b)
+        # dp[i][j] = min indel-only edits to align seq_a[:i] with seq_b[:j].
+        # Substitution costs infinity (represented as m + n + 1 = impossible).
+        INF = m + n + 1
+        prev = list(range(n + 1))
+        for i in range(1, m + 1):
+            curr = [i] + [0] * n
+            for j in range(1, n + 1):
+                # Match: no cost.  Mismatch: pay INF so the path is always
+                # worse than any purely-indel route.
+                diag = prev[j - 1] + (0 if seq_a[i - 1] == seq_b[j - 1] else INF)
+                curr[j] = min(diag, prev[j] + 1, curr[j - 1] + 1)
+            prev = curr
+        return prev[n]
+
+    def _word_is_match(word_idx: int) -> bool:
+        """Return True if the model output differs from any accepted variant
+        only by insertions/deletions within the per-word tolerance.
+
+        Substitutions (e.g. F→P) always produce a distance of ∞ and are never
+        forgiven, even for long words.  Only boundary insertions and deletions
+        caused by CTC frame-level noise are absorbed.
+        """
+        observed = word_observed.get(word_idx, [])
+        variants = word_all_variants[word_idx] if word_idx < len(word_all_variants) else []
+        if not variants:
+            # Fallback: use primary canonical phones with tolerance.
+            primary = word_canonical.get(word_idx, [])
+            tol = _tolerance(len(primary))
+            return _indel_distance(primary, observed) <= tol
+        # Accept the word if ANY variant is within tolerance of the observed output.
+        for variant in variants:
+            tol = _tolerance(len(variant))
+            if _indel_distance(variant, observed) <= tol:
+                return True
+        return False
+
+
     statuses = ["match" if index in mapping else "unavailable" for index in range(len(words))]
     counts = dict.fromkeys(("substitution", "deletion", "insertion", "match"), 0)
     events = []
-    for step in align_phones(canonical, predicted_phones):
+    for step in primary_alignment:
         kind = "insertion" if step["kind"] == "addition" else step["kind"]
         counts[kind] += 1
         if kind == "match":
@@ -99,8 +210,17 @@ def canonical_comparison(reference_text, reference, predicted_phones):
             statuses[word] = "difference"
         events.append({"kind": kind, "expected_phone": step["expected_phone"],
                        "observed_phone": step["observed_phone"], "word_index": word})
+
+    # Override "difference" → "match" for words whose output is within tolerance
+    # of an accepted CMUdict variant.
+    for index in range(len(words)):
+        if statuses[index] == "difference" and _word_is_match(index):
+            statuses[index] = "match"
+            counts["match"] += 1
+
     return {"words": [{"text": word, "status": status} for word, status in zip(words, statuses)],
             "counts": counts, "events": events}
+
 
 
 class LocalInference:

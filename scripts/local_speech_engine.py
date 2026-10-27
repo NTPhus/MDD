@@ -68,23 +68,38 @@ def dialogue_request(request, transcript):
                   "Do not guess the intended words, quote unclear words, correct grammar, or greet.")
         examples = []
     else:
-        system = ("Continue the English conversation from the LAST user message. Use earlier turns for context. "
-                  "Add a specific new reaction, answer, or relevant question. One or two short sentences; a question is optional. "
+        system = ("Continue the English conversation from the LAST user message, using the recent turns to remember what was said. "
+                  "Answer the user's actual question first, including a brief, honest answer when they ask about you; do not claim personal experiences. "
+                  "Then add a specific reaction or ask at most one short, open-ended follow-up that builds on a concrete detail and can gently expand the topic. "
+                  "Avoid generic questions such as 'How about you?' when the user has already asked you something. "
+                  "Use one or two short sentences; do not force a question when it would feel unnatural. "
                   "Do not greet again, repeat earlier questions, restate their sentence, or correct grammar. "
-                  "Follow a new subject. The first exchanges are style examples; actual conversation follows.")
+                  "Follow a new subject when the user changes it. The first exchanges are style examples; actual conversation follows.")
         examples = [{'role': 'user', 'content': 'I repair bicycles, mostly old ones.'},
                     {'role': 'assistant', 'content': 'What problems do you run into most often?'},
                     {'role': 'user', 'content': 'The brakes can be hard to adjust.'},
                     {'role': 'assistant', 'content': 'Do you test them one step at a time to find the cause?'},
                     {'role': 'user', 'content': 'I finally fixed it.'},
                     {'role': 'assistant', 'content': 'That must be a relief after all that effort.'}]
-    # The authored opening has already been spoken. Reinserting it before
-    # every real exchange anchors the tiny model to an old welcome/question.
-    history = list(request.get('history', [])) or conversation_history(request)
     topic_id = request.get('topic_id')
     if topic_id:
         topic = TOPICS[topic_id]
-        system += f"\nInitial topic: {topic['title']}. Follow the current message even if the subject changes."
+        if topic_id == 'food':
+            system += (" Role-play a friendly cafe server. The learner is a customer practising an order; "
+                       "acknowledge the items they name and continue the order naturally. Never refuse to help with an order "
+                       "or claim you cannot assist with ordering. Do not invent menu availability or prices.")
+            examples = [{'role': 'user', 'content': 'Could I have a tea, please?'},
+                        {'role': 'assistant', 'content': 'Of course! What size would you like?'},
+                        {'role': 'user', 'content': 'A medium tea, please.'},
+                        {'role': 'assistant', 'content': 'Certainly. Is that for here or to go?'}]
+        else:
+            system += (f" Speaking scenario: {topic['title']}. Play the role of {topic['role']}; "
+                       "keep the conversation natural and follow the learner if they change the subject.")
+    # The authored opening has already been spoken. Reinserting it before
+    # every real exchange anchors the tiny model to an old welcome/question.
+    history = list(request.get('history', [])) or conversation_history(request)
+    if topic_id:
+        system += f"\nCurrent scenario: {TOPICS[topic_id]['title']}. Stay in the scenario while it fits the learner's turn."
     turn = transcript if not request.get('reference_text') else 'I just practised reading: ' + request['reference_text']
     return {**request, 'model_id': 'qwen-base', 'generation_profile': 'conversation', 'example_message_count': len(examples),
             'messages': [{'role': 'system', 'content': system}, *examples,
@@ -695,9 +710,10 @@ class LocalSpeechEngine:
                 retry_messages[0]['content'] += '\nAsk only the missing detail specified above. Do not greet or ask for the order again.'
             else:
                 retry_messages[0]['content'] = (
-                    'You are talking with a friend in English. Reply directly to the last user message. '
-                    'If some words are unclear, ask one short question about what they mean. '
-                    'Otherwise answer or ask a relevant follow-up. Do not greet, thank, repeat their words, or restart earlier questions.')
+                    'You are talking with a friend in English. Use recent turns as context and reply directly to the last user message. '
+                    'Answer the user\'s actual question first, briefly and honestly; do not claim personal experiences. If the meaning is clear, add one specific reaction or ask at most one open-ended follow-up grounded in a detail they shared. '
+                    'Avoid generic questions and do not ask the same thing again. If some words are unclear, ask one short question about them. '
+                    'Do not greet, thank, repeat their words, or restart earlier questions.')
                 if regenerated:
                     retry_messages[0]['content'] += regeneration_note
             retry_request = {**reply_request, 'messages': retry_messages, 'max_tokens': 96, 'timeout': 35.}
@@ -805,35 +821,43 @@ class LocalSpeechEngine:
         if cancelled.is_set():
             return {'finish_reason': 'cancelled'}
         coaching_started = time.monotonic()
-        coaching = {'status': 'unavailable', 'feedback': {}, 'message': 'Review the available sound estimates below. You can edit the transcript if words were misheard.'}
+        coaching = {'status': 'not_needed', 'feedback': {}, 'model_id': 'qwen-trained',
+                    'message': 'No words were flagged by the acoustic comparison for Qwen to explain.'}
         comparison = result['comparison']
         has_differences = comparison is not None and any(word.get('status') == 'difference' for word in comparison.get('words', []))
-        # The experimental posterior feature validates word-level detection,
-        # not a precise substitution diagnosis. Keep the legacy sound coach
-        # limited to its original acoustic evidence condition.
-        if has_differences and reference is not None and 'assessment' not in result:
+        # Qwen LoRA explains only word differences already flagged by the
+        # acoustic comparison. It does not replace or alter that evidence.
+        if has_differences and reference is None:
+            coaching = {'status': 'unavailable', 'feedback': {}, 'model_id': 'qwen-trained',
+                        'message': 'An English pronunciation reference is unavailable, so Qwen LoRA was not asked to guess.'}
+        elif has_differences:
             try:
                 condition = native_condition(result['reference_text'], reference, [p['phone'] for p in result['phonemes']])
                 if condition.get('input_alignment_status') == 'ok':
                     emit({'type': 'stage', 'stage': 'coaching'})
                     if cancelled.is_set(): return {'finish_reason': 'cancelled'}
                     response = []
-                    meta = qwen.generate({**request, 'messages': messages(condition), 'max_tokens': 512, 'timeout': 110.}, cancelled,
+                    meta = qwen.generate({**request, 'model_id': 'qwen-trained', 'messages': messages(condition), 'max_tokens': 512, 'timeout': 110.}, cancelled,
                         lambda value: response.append(value['text']) if value['type'] == 'chunk' else None)
                     if cancelled.is_set(): return {'finish_reason': 'cancelled'}
                     feedback = grounded_coaching(''.join(response), meta['finish_reason'] == 'stop', comparison)
-                    coaching = {'status': 'ready', 'feedback': feedback, 'message': 'AI practice suggestions based on estimated sound differences.'}
+                    coaching = {'status': 'ready', 'feedback': feedback, 'model_id': 'qwen-trained',
+                                'message': 'Qwen LoRA suggestions grounded in the flagged sound differences.'}
+                else:
+                    coaching = {'status': 'unavailable', 'feedback': {}, 'model_id': 'qwen-trained',
+                                'message': 'The word alignment was incomplete, so Qwen LoRA was not asked to guess.'}
             except Exception:
                 if cancelled.is_set(): return {'finish_reason': 'cancelled'}
                 coaching = {'status': 'unavailable', 'feedback': {},
-                            'message': 'The coach did not produce grounded feedback. Review the sound estimates below or try a shorter recording.'}
-            coaching['model_id'] = request['model_id']
+                            'model_id': 'qwen-trained',
+                            'message': 'Qwen LoRA could not produce grounded feedback. The acoustic comparison remains available.'}
         coaching_latency = round(time.monotonic() - coaching_started, 3)
         result['coaching'] = coaching
         emit({'type': 'speech', 'speech': result})
         if cancelled.is_set():
             return {'finish_reason': 'cancelled'}
-        return {**reply_meta, "reply_model_id": "qwen-base", "coaching_model_id": request["model_id"],
+        return {**reply_meta, "reply_model_id": "qwen-base",
+                "coaching_model_id": result.get('coaching', {}).get('model_id'),
                 'reply_latency_sec': reply_latency, 'feedback_order': 'reply_first',
                 'correction_model_id': 'qwen-base', 'correction_status': result['correction']['status'], 'correction_latency_sec': correction_latency,
                 'completion_mode': 'not_needed' if rewrite_enabled else 'completion_only', 'dialogue_policy': 'natural_conversation',

@@ -1,0 +1,3 @@
+Speech models: preparing in the background.
+Local demo: http://127.0.0.1:8765
+Device policies: Qwen=auto, ASR=auto, phoneme=auto, CROTTC=auto. This server does not start or stop training.

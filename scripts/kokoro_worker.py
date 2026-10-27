@@ -12,6 +12,24 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 _DLL_HANDLES=[]
+_ESPEAK_TEMP_DIRS=None
+
+
+def phonemize(engine,text,language):
+    """Use parent-created DLL temp folders for Windows sandbox ACLs."""
+    import tempfile
+    global _ESPEAK_TEMP_DIRS
+    if os.name!='nt' or _ESPEAK_TEMP_DIRS is None:
+        return engine.tokenizer.phonemize(text,language)
+    original=tempfile.mkdtemp
+    def existing_tempdir(*args,**kwargs):
+        try:path=next(_ESPEAK_TEMP_DIRS)
+        except StopIteration:raise WorkerError('Kokoro exhausted its prepared eSpeak temp folders.','kokoro_temp_unavailable') from None
+        if not path.is_dir():raise WorkerError('Kokoro eSpeak temp folder is unavailable.','kokoro_temp_unavailable')
+        return str(path)
+    tempfile.mkdtemp=existing_tempdir
+    try:return engine.tokenizer.phonemize(text,language)
+    finally:tempfile.mkdtemp=original
 
 
 class WorkerError(RuntimeError):
@@ -138,6 +156,14 @@ def main():
         options.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session,telemetry=create_session(ort,model_path,options,config)
         engine=Kokoro.from_session(session,str(voice_path))
+    global _ESPEAK_TEMP_DIRS
+    raw_temp_dirs=os.environ.get('KOKORO_ESPEAK_TEMP_DIRS')
+    if os.name=='nt' and raw_temp_dirs:
+        allowed=(ROOT/'data/generated/tts/kokoro').resolve()
+        paths=[Path(value).resolve() for value in raw_temp_dirs.split(os.pathsep) if value]
+        if not paths or any(not path.is_relative_to(allowed) or not path.is_dir() for path in paths):
+            raise WorkerError('Prepared eSpeak temp folders are invalid.','kokoro_temp_unavailable')
+        _ESPEAK_TEMP_DIRS=iter(paths)
     load_sec=time.perf_counter()-load_started
     voices=sorted(v for v in engine.voices.files if v.startswith(('af_','am_','bf_','bm_')))
     logging.getLogger('kokoro_onnx').setLevel(logging.WARNING)
@@ -164,7 +190,7 @@ def main():
             started=time.perf_counter()
             with contextlib.redirect_stdout(sys.stderr):
                 language='en-gb' if voice.startswith('b') else 'en-us'
-                phonemes=engine.tokenizer.phonemize(text.strip(),language)
+                phonemes=phonemize(engine,text.strip(),language)
                 phonemize_sec=time.perf_counter()-started
                 infer_started=time.perf_counter()
                 audio,rate=engine.create(phonemes,voice=voice,speed=float(speed),lang=language,is_phonemes=True)

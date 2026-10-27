@@ -26,6 +26,7 @@ from .speech_practice import PRACTICE_PROMPTS
 from .speech_topics import TOPICS, public_topics, guidance
 from .chat_voices import load_voices, preview_stem
 from .tts_registry import kokoro_status
+from .chat_text import plain_speech_text
 
 ID = re.compile(r"[0-9a-f]{32}\Z")
 SYSTEM = ("You are a helpful conversational assistant. Answer the user's actual question clearly and concisely. "
@@ -80,6 +81,7 @@ class ChatService:
         self._lock = threading.RLock()
         self._generation_slot = threading.BoundedSemaphore(1)
         self._voice_slot = threading.BoundedSemaphore(1)
+        self._sample_voice_slot = threading.BoundedSemaphore(1)
         # One reply and one sentence example can synthesize concurrently. A
         # prefetched practice sentence must never occupy the reply's slot.
         self._sentence_voice_slot = threading.BoundedSemaphore(1)
@@ -256,6 +258,35 @@ class ChatService:
                 raise ChatError(503, 'chat_preview_unavailable', 'Chưa tải được bản nghe thử. Hãy thử lại.') from None
         return self._read_voice(path)
 
+    def voice_sample(self, payload):
+        if (not isinstance(payload, dict) or set(payload) != {'text', 'voice_id', 'speed'}
+                or not isinstance(payload.get('text'), str)):
+            raise ChatError(400, 'invalid_voice_sample', 'Yêu cầu nghe từ không hợp lệ.')
+        text = plain_speech_text(payload['text']).strip()
+        if not text or len(text) > 120 or len(text.split()) > 12:
+            raise ChatError(400, 'invalid_voice_sample', 'Từ hoặc cụm từ cần nghe quá dài.')
+        kokoro = kokoro_status(self.root)
+        if not kokoro['ready']:
+            raise ChatError(503, 'chat_voice_unavailable', 'Kokoro chưa sẵn sàng trên máy này.')
+        if not any(voice['id'] == payload['voice_id'] for voice in kokoro['voices']):
+            raise ChatError(400, 'invalid_voice_sample', 'Chọn một giọng Kokoro trong danh sách.')
+        speed = payload['speed']
+        if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not .5 <= speed <= 1.5:
+            raise ChatError(400, 'invalid_voice_sample', 'Tốc độ đọc phải trong khoảng 0.5–1.5.')
+        if not self._sample_voice_slot.acquire(blocking=False):
+            raise ChatError(409, 'chat_voice_busy', 'Giọng đọc chưa sẵn sàng; bạn thử lại sau nhé.')
+        try:
+            client = self._module('kokoro_tts').KokoroTTS(cache_dir=self.kokoro_cache_dir)
+            path = client.synthesize(text, locale='en-US', voice_id=payload['voice_id'], speed=speed)
+            return self._read_voice(path)
+        except ChatError:
+            raise
+        except Exception:
+            logging.getLogger(__name__).exception('Kokoro comparison word synthesis failed')
+            raise ChatError(503, 'chat_voice_unavailable', 'Không tạo được giọng Kokoro cho từ này.') from None
+        finally:
+            self._sample_voice_slot.release()
+
     def _validate(self, payload):
         if not isinstance(payload, dict) or set(payload) - {"model_id", "messages", "language", "request_id"}:
             raise ChatError(400, "invalid_chat", "Nội dung chat không hợp lệ.")
@@ -269,7 +300,8 @@ class ChatService:
         if not isinstance(request_id, str) or not ID.fullmatch(request_id):
             raise ChatError(400, "invalid_request_id", "Mã lượt chat không hợp lệ.")
         messages = payload.get("messages")
-        if not isinstance(messages, list) or not messages or len(messages) > 21 or len(messages) % 2 != 1:
+        # 25 complete prior exchanges plus the current user message.
+        if not isinstance(messages, list) or not messages or len(messages) > 51 or len(messages) % 2 != 1:
             raise ChatError(400, "invalid_chat_history", "Lịch sử chat phải kết thúc bằng câu của bạn.")
         cleaned = []
         for index, message in enumerate(messages):
@@ -279,7 +311,7 @@ class ChatService:
                     or not message["content"].strip() or len(message["content"]) > (2000 if expected == "user" else 12000)):
                 raise ChatError(400, "invalid_chat_history", "Tin nhắn hoặc vai trò trong lịch sử chat không hợp lệ.")
             cleaned.append({"role": expected, "content": message["content"].strip()})
-        if sum(len(m["content"]) for m in cleaned) > 16000:
+        if sum(len(m["content"]) for m in cleaned) > 40000:
             raise ChatError(413, "chat_history_too_long", "Cuộc trò chuyện đã dài; hãy bắt đầu cuộc trò chuyện mới.")
         system = SYSTEM + (" Reply in Vietnamese unless the user requests another language." if language == "vi-VN" else " Reply in English unless the user requests another language.")
         return model_id, request_id, [{"role": "system", "content": system}, *cleaned]
@@ -656,7 +688,9 @@ class ChatService:
                 raise ChatError(400, "speech_voice_language", "Speech practice uses an English voice.")
             if target == 'sentence' and (job.speech or {}).get('pronunciation_reference_ready') is False:
                 raise ChatError(409, 'sentence_reference_pending', 'Chờ xử lý câu đã nói xong rồi nghe đọc mẫu.')
-            reply_available = (target == "reply" and job.status in {"generating", "correcting", "coaching"}
+            # The reply can be complete even if a later pronunciation or
+            # coaching stage fails. Keep its already-published text speakable.
+            reply_available = (target == "reply" and job.status in {"generating", "correcting", "coaching", "error"}
                                and (job.speech or {}).get('reply_ready') is True and bool(job.text.strip()))
             sentence_available = (target == 'sentence' and job.status in {
                 'transcribing', 'analyzing', 'generating', 'correcting', 'coaching'}
@@ -664,10 +698,12 @@ class ChatService:
                 and bool(str(job.speech.get('reference_text') or job.speech.get('transcript') or '').strip()))
             if job.status != "ready" and not reply_available and not sentence_available:
                 raise ChatError(409, "chat_not_ready", "Chờ Qwen trả lời xong rồi tạo giọng đọc.")
-            spoken = job.text
+            spoken = plain_speech_text(job.text)
+            if target == "reply" and not spoken:
+                raise ChatError(400, "chat_reply_empty", "Câu trả lời không có nội dung để đọc.")
             if target == "sentence":
                 speech = job.speech or {}
-                spoken = str(speech.get("reference_text") or speech.get("transcript") or "").strip()
+                spoken = plain_speech_text(speech.get("reference_text") or speech.get("transcript") or "")
                 if not spoken or len(spoken) > 5000:
                     raise ChatError(400, "sentence_voice_unavailable", "Chưa có câu để đọc mẫu.")
                 if job.sentence_voice_text != spoken:

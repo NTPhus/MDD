@@ -27,14 +27,22 @@ def practice_reference(row: dict, text: str, mode: str, word_index: int = 0) -> 
                 or any(item.get("index") != index or key(item.get("text", "")) != key(words[index])
                        for index, item in enumerate(intervals))):
             raise ValueError("Câu này chưa có ranh giới từ phù hợp; hãy chọn câu mẫu khác.")
+    has_variants = "word_all_variants" in row
+    all_variants = row.get("word_all_variants", [])
     if mode == "word":
         if type(word_index) is not int or not 0 <= word_index < len(words):
             raise ValueError("Vị trí từ không hợp lệ.")
         phones = [phone for phone, index in zip(canonical, mapping) if index == word_index]
-        return words[word_index], {"prompt_text": words[word_index], "canonical_phones": phones,
-                                   "canonical_word_indices": [0] * len(phones)}
-    return text.strip(), {"prompt_text": text.strip(), "canonical_phones": list(canonical),
-                          "canonical_word_indices": list(mapping)}
+        res = {"prompt_text": words[word_index], "canonical_phones": phones,
+               "canonical_word_indices": [0] * len(phones)}
+        if has_variants:
+            res["word_all_variants"] = [all_variants[word_index]] if word_index < len(all_variants) else []
+        return words[word_index], res
+    res = {"prompt_text": text.strip(), "canonical_phones": list(canonical),
+           "canonical_word_indices": list(mapping)}
+    if has_variants:
+        res["word_all_variants"] = list(all_variants)
+    return text.strip(), res
 
 
 def prefix_comparison(text: str, reference: dict, phones: list[str]) -> dict:
@@ -56,7 +64,8 @@ def prefix_comparison(text: str, reference: dict, phones: list[str]) -> dict:
               "counts": dict.fromkeys(("match", "substitution", "deletion", "insertion"), 0), "events": []}
     if consumed:
         prefix = {"prompt_text": text, "canonical_phones": canonical[:consumed],
-                  "canonical_word_indices": mapping[:consumed]}
+                  "canonical_word_indices": mapping[:consumed],
+                  "word_all_variants": reference.get("word_all_variants", [])}
         compared = canonical_comparison(text, prefix, phones)
         result["counts"], result["events"] = compared["counts"], compared["events"]
         active = mapping[consumed - 1]

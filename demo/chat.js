@@ -1,10 +1,56 @@
 'use strict';
 
+function normalizeChatMarkdown(value) {
+  const entities = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  return String(value ?? '').replace(/&#(?:x([\da-f]+)|(\d+));?|&(nbsp|amp|lt|gt|quot|apos);/gi, (match, hex, decimal, named) => {
+    if (named) return entities[named.toLowerCase()] ?? match;
+    const code = Number.parseInt(hex || decimal, hex ? 16 : 10);
+    try { return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' '; }
+    catch { return ' '; }
+  }).replace(/\u00a0/g, ' ').replace(/\\([*_~`])/g, '$1')
+    // Repair duplicated/nested bold markers emitted by some chat responses.
+    .replace(/\*\*\s*\*\*([^*\n]+?)\*\*\s*\*\*/g, '**$1**');
+}
+
+function markdownRuns(value) {
+  let text = normalizeChatMarkdown(value)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s{0,3}(?:[-*+]\s+|\d+[.)]\s+)/gm, '');
+  const token = /(\*\*[^*\n]+?\*\*|__[^_\n]+?__|~~[^~\n]+?~~|`[^`\n]+`|(?<!\*)\*[^*\n]+?\*(?!\*)|(?<!_)_[^_\n]+?_(?!_))/g;
+  const runs = [];
+  let cursor = 0;
+  const plain = part => part.replace(/[\\*_~`]/g, '');
+  const push = (part, format = '') => { if (part) runs.push({ text: part, format }); };
+  for (const match of text.matchAll(token)) {
+    push(plain(text.slice(cursor, match.index)));
+    const raw = match[0];
+    let format, content;
+    if (raw.startsWith('**') && raw.endsWith('**')) { format = 'strong'; content = raw.slice(2, -2); }
+    else if (raw.startsWith('__') && raw.endsWith('__')) { format = 'strong'; content = raw.slice(2, -2); }
+    else if (raw.startsWith('~~') && raw.endsWith('~~')) { format = 'del'; content = raw.slice(2, -2); }
+    else if (raw.startsWith('`')) { format = 'code'; content = raw.slice(1, -1); }
+    else if (raw.startsWith('*') && raw.endsWith('*')) { format = 'em'; content = raw.slice(1, -1); }
+    else { format = 'em'; content = raw.slice(1, -1); }
+    push(content, format); cursor = match.index + raw.length;
+  }
+  push(plain(text.slice(cursor)));
+  return runs;
+}
+
+function plainSpeechText(value) {
+  return markdownRuns(value).map(run => run.text).join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // Show the completed reply before autoplay. Speech boundaries only move the
 // highlight; they never hide the words which have not been read yet.
 function replyReady(job) {
-  return job?.status === 'ready' || (job?.speech?.reply_ready === true
-    && !['error', 'cancelled', 'cancelling'].includes(job?.status));
+  // Pronunciation/coaching may fail after Qwen has already published a usable
+  // reply. That must not block reading the answer aloud.
+  return job?.status === 'ready' || (job?.speech?.reply_ready === true && Boolean(job?.text?.trim())
+    && !['cancelled', 'cancelling'].includes(job?.status));
 }
 function chatPollDelay(job) {
   // Any speech stage can finish the reply between polls. Observe that gate
@@ -16,7 +62,7 @@ class LiveReply {
   constructor({ onUpdate = () => {}, onVoice = () => {}, onError = () => {}, speak = null,
     cancelSpeech = () => {}, voice = true } = {}) {
     Object.assign(this, { onUpdate, onVoice, onError, speak, cancelSpeech });
-    this.text = ''; this.visible = 0; this.queuedUntil = 0; this.queue = []; this.active = null;
+    this.text = ''; this.spokenText = ''; this.visible = 0; this.queuedUntil = 0; this.queue = []; this.active = null;
     this.final = false; this.muted = !voice || !speak; this.closed = false;
     this.epoch = 0; this.range = null; this.rangeMode = null; this.readUntil = 0;
   }
@@ -33,7 +79,7 @@ class LiveReply {
       this.mute(); this.visible = 0; this.queuedUntil = 0;
       this.final = false;
     }
-    this.text = text; this.final ||= final;
+    this.text = text; this.spokenText = plainSpeechText(text); this.final ||= final;
     this.visible = this.final ? this.text.length : 0;
     // Paint all text synchronously before onVoice/speak can start playback.
     this.onUpdate(this.visibleText, this.range, this.rangeMode, this.readUntil);
@@ -43,8 +89,8 @@ class LiveReply {
     }
   }
   _queueClauses() {
-    while (this.queuedUntil < this.text.length) {
-      const tail = this.text.slice(this.queuedUntil);
+    while (this.queuedUntil < this.spokenText.length) {
+      const tail = this.spokenText.slice(this.queuedUntil);
       const sentence = /[.!?]+["'\)\]]*(?=\s|$)/.exec(tail);
       const words = [...tail.matchAll(/\S+\s+/g)];
       const shortEnd = words.length >= 12 ? words[11].index + words[11][0].length : 0;
@@ -284,6 +330,7 @@ function renderFluency(box, speech, pending = false) {
 if (typeof module === 'object' && module.exports) module.exports = { LiveReply, replyReady, chatPollDelay, prepareOpeningAudio, sharedVoiceRequest,
   voiceResourceKey, voiceCatalog, providerAvailable, preferredVoiceProvider, voiceSelection,
   pronunciationModels, preferredPronunciationModel, pronunciationRequest,
+  normalizeChatMarkdown, markdownRuns, plainSpeechText,
   conversationInterpretation, conversationUserText, conversationUserNote, updateUserSpeech, microphoneConstraints, pronunciationReferenceReady, pronunciationReferenceText,
   fluencyView, renderFluency };
 
@@ -474,10 +521,88 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     if (node('chat-repeat-clear')) node('chat-repeat-clear').hidden = !state.repeatTarget;
   }
   function soundText(event, symbols) {
-    const phone = value => value ? `${value}${symbols?.[value] ? ' /' + symbols[value] + '/' : ''}` : 'no sound';
-    if (event.kind === 'deletion') return `Possible omission: expected ${phone(event.expected_phone)}.`;
-    if (event.kind === 'insertion') return `Possible extra sound: ${phone(event.observed_phone)}.`;
-    return `Possible substitution: expected ${phone(event.expected_phone)}; detected ${phone(event.observed_phone)}.`;
+    const phone = value => value ? `${value}${symbols?.[value] ? ' /' + symbols[value] + '/' : ''}` : 'không tìm thấy âm khớp';
+    if (event.kind === 'deletion') return `Âm chuẩn ${phone(event.expected_phone)} không có âm tương ứng trong chuỗi mô hình dự đoán.`;
+    if (event.kind === 'insertion') return `Mô hình dự đoán thêm âm ${phone(event.observed_phone)}, không có âm tương ứng trong câu chuẩn.`;
+    return `Âm chuẩn ${phone(event.expected_phone)} · âm mô hình dự đoán ${phone(event.observed_phone)}.`;
+  }
+  function phonemePair(event, symbols) {
+    const phone = value => `${value}${symbols?.[value] ? ' · /' + symbols[value] + '/' : ''}`;
+    const side = (label, value, kind, missingText = 'Không tìm thấy âm khớp') => {
+      const item = make('span', 'chat-phoneme-side chat-phoneme-' + kind);
+      item.append(make('span', 'chat-phoneme-label', label), make('strong', '', value ? phone(value) : missingText));
+      if (!value && kind === 'heard') item.title = 'Không tìm thấy âm dự đoán khớp ở vị trí này; không có nghĩa là bản thu im lặng.';
+      return item;
+    };
+    const pair = make('div', 'chat-phoneme-pair');
+    if (event.kind === 'deletion') {
+      pair.append(side('Âm trong câu chuẩn', event.expected_phone, 'target'), side('Âm mô hình dự đoán', null, 'heard'));
+    } else if (event.kind === 'insertion') {
+      pair.append(side('Âm trong câu chuẩn', null, 'target', 'Không có âm tương ứng trong câu chuẩn'), side('Âm mô hình dự đoán', event.observed_phone, 'heard'));
+    } else {
+      pair.append(side('Âm trong câu chuẩn', event.expected_phone, 'target'), side('Âm mô hình dự đoán', event.observed_phone, 'heard'));
+    }
+    return pair;
+  }
+  function alignWords(heardText, targetText) {
+    const words = value => [...String(value || '').matchAll(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)].map(match => match[0]);
+    const heard = words(heardText), target = words(targetText);
+    if (!heard.length || !target.length || heard.length > 250 || target.length > 250) return null;
+    const key = value => value.toLocaleLowerCase('en-US').replaceAll('’', "'");
+    const rows = heard.length + 1, columns = target.length + 1;
+    const cost = Array.from({ length: rows }, () => Array(columns).fill(0));
+    for (let i = 0; i < rows; i++) cost[i][0] = i;
+    for (let j = 0; j < columns; j++) cost[0][j] = j;
+    for (let i = 1; i < rows; i++) for (let j = 1; j < columns; j++) {
+      cost[i][j] = key(heard[i - 1]) === key(target[j - 1]) ? cost[i - 1][j - 1]
+        : 1 + Math.min(cost[i - 1][j - 1], cost[i - 1][j], cost[i][j - 1]);
+    }
+    const edits = [];
+    let i = heard.length, j = target.length;
+    while (i || j) {
+      if (i && j && key(heard[i - 1]) === key(target[j - 1]) && cost[i][j] === cost[i - 1][j - 1]) {
+        i--; j--; continue;
+      }
+      if (i && j && cost[i][j] === cost[i - 1][j - 1] + 1) {
+        edits.push({ heard: heard[i - 1], target: target[j - 1] }); i--; j--; continue;
+      }
+      if (i && cost[i][j] === cost[i - 1][j] + 1) {
+        edits.push({ heard: heard[i - 1], target: null }); i--; continue;
+      }
+      edits.push({ heard: null, target: target[j - 1] }); j--;
+    }
+    return edits.reverse();
+  }
+  function renderWordRepairs(box, speech) {
+    const source = speech.reference_source;
+    const target = pronunciationReferenceText(speech);
+    const referenceIsIndependent = ['reading_prompt', 'corrected_sentence', 'user_confirmed'].includes(source);
+    const recovered = source === 'bert_inferred';
+    if (!referenceIsIndependent && !recovered) {
+      box.append(make('p', 'chat-word-repair-note', 'Chưa có câu chuẩn riêng để xác định bạn định nói từ nào. Câu ASR bên trên chỉ là điều hệ thống nghe được.'));
+      return;
+    }
+    const aligned = alignWords(speech.transcript, target);
+    if (!aligned) return;
+    const edits = aligned.filter(item => item.heard !== item.target);
+    if (!edits.length) {
+      box.append(make('p', 'chat-word-repair-note', recovered
+        ? 'Bản ASR khớp với câu hệ thống khôi phục; câu khôi phục vẫn là gợi ý.'
+        : 'Bản ASR khớp với câu chuẩn. Xem từng từ bên dưới để biết khác biệt ở cấp độ âm.'));
+      return;
+    }
+    const title = recovered ? 'Từ nghe được → từ trong câu khôi phục (gợi ý)'
+      : 'Từ nghe được → từ đúng trong câu chuẩn';
+    const list = make('div', 'chat-word-repairs');
+    list.append(make('p', 'chat-word-repairs-title', title));
+    for (const edit of edits) {
+      const pair = make('div', 'chat-word-repair');
+      pair.append(make('span', edit.heard ? 'chat-word-heard' : 'chat-word-missing', edit.heard || 'Không nghe ra từ'),
+        make('span', 'chat-word-repair-arrow', '→'),
+        make('span', edit.target ? 'chat-word-target' : 'chat-word-extra', edit.target || 'Không có trong câu chuẩn'));
+      list.append(pair);
+    }
+    box.append(list);
   }
   function wordPronunciation(speech, index) {
     const target = speech.target_words?.[index];
@@ -494,6 +619,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     const unconfirmed = speech.reference_source === 'asr';
     const candidates = new Map(candidateWords.map(word => [word.index, word]));
     box.append(make('summary', 'chat-pronunciation-title', 'Sound details'));
+    renderWordRepairs(box, speech);
+    box.append(make('p', 'chat-sound-word-label', 'Các từ bên dưới là từ trong câu chuẩn; bấm vào từ để xem âm nào có thể khác.'));
     if (diagnostic?.status === 'unavailable' && diagnostic.reason === 'reference_contains_unknown_words') {
       const missing = diagnostic.missing_words || speech.missing_words || speech.reference_resolution?.missing_words || [];
       box.append(make('p', 'chat-reference-note', `Chưa có phiên âm: ${missing.join(', ') || 'một số từ'}.`));
@@ -511,7 +638,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         const detail = make('details', 'chat-sound-word ' + displayedStatus);
         detail.dataset.evidence = candidate ? 'diagnostic' : difference ? 'model_difference' : 'undecided';
         detail.open = opened.has(index);
-        const title = make('summary', '', word.text);
+        const title = make('summary', 'chat-sound-word-summary', '');
+        title.append(make('span', 'chat-sound-word-text', word.text));
         title.title = descriptions.join('\n') || ({
           match: 'Chưa thấy khác biệt.',
           uncertain: 'Chưa đủ dữ liệu.',
@@ -519,33 +647,45 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         }[displayedStatus] || 'Chưa đủ dữ liệu.');
         detail.append(title);
         const body = make('div', 'chat-sound-detail');
+        const standardWord = make('p', 'chat-sound-reference-word');
+        standardWord.append(make('span', 'chat-phoneme-label', 'Từ chuẩn'), make('strong', 'chat-sound-target-word', word.text));
+        body.append(standardWord);
         const target = speech.target_words?.[index];
         const ipa = wordPronunciation(speech, index);
-        if (ipa) body.append(make('p', 'chat-sound-ipa', ipa));
-        if (target?.phones?.length) body.append(make('p', '', 'Target phones (ARPAbet): ' + target.phones.join(' ')));
-        descriptions.forEach(text => body.append(make('p', '', text)));
+        if (ipa) body.append(make('p', 'chat-sound-ipa chat-sound-target-pronunciation', ipa));
+        if (target?.phones?.length) body.append(make('p', 'chat-sound-target-arpabet', 'Âm chuẩn (ARPAbet): ' + target.phones.join(' ')));
+        events.forEach(event => body.append(phonemePair(event, speech.phone_symbols)));
+        if (!events.length) descriptions.forEach(text => body.append(make('p', '', text)));
         if (!descriptions.length && !ipa && !target?.phones?.length) body.append(make('p', '', title.title));
-        const listen = make('button', 'text-button chat-sound-listen', 'Hear this word'); listen.type = 'button';
-        listen.addEventListener('click', () => speakText(word.text, 'word-' + index)); body.append(listen); detail.append(body); words.append(detail);
+        const listen = make('button', 'text-button chat-sound-listen', 'Nghe từ chuẩn'); listen.type = 'button';
+        listen.title = `Nghe cách phát âm chuẩn của “${word.text}”.`;
+        listen.setAttribute('aria-label', `Nghe cách phát âm chuẩn của từ ${word.text}`);
+        listen.addEventListener('click', () => speakComparisonWord(word.text, 'word-' + index)); body.append(listen); detail.append(body); words.append(detail);
       });
       box.append(words);
+    if (speech.comparison.events?.length) {
+      box.append(make('p', 'chat-phoneme-note', '“Âm mô hình dự đoán” là âm Wav2vec nhận dạng được. “Không tìm thấy âm khớp” nghĩa là bộ căn chỉnh không ghép được âm ở vị trí đó, không khẳng định bản thu không có tiếng.'));
+    }
       if (focused >= 0) words.children[focused]?.querySelector('summary')?.focus({ preventScroll: true });
     }
     const coaching = speech.coaching;
-    if (coaching?.status === 'ready') {
+    if (coaching?.status === 'pending') {
+      box.append(make('p', 'chat-coaching-status', 'Qwen LoRA is checking the flagged words…'));
+    } else if (coaching?.status === 'ready') {
       const pairs = Object.entries(coaching.feedback || {});
-      for (const [word, tips] of pairs) {
-        const item = make('div', 'chat-coaching-tip'); item.append(make('strong', '', word));
-        for (const tip of tips) { item.append(make('p', '', tip.issue), make('p', 'chat-suggestion', tip.suggestion)); }
-        box.append(item);
+      if (pairs.length) {
+        box.append(make('p', 'chat-coaching-status', 'Pronunciation tips · Qwen LoRA'));
+        for (const [word, tips] of pairs) {
+          const item = make('div', 'chat-coaching-tip'); item.append(make('strong', '', word));
+          for (const tip of tips) { item.append(make('p', '', tip.issue), make('p', 'chat-suggestion', tip.suggestion)); }
+          box.append(item);
+        }
       }
+    } else if (['unavailable', 'not_needed'].includes(coaching?.status) && coaching?.model_id === 'qwen-trained') {
+      box.append(make('p', 'chat-coaching-status', coaching.message || 'Qwen LoRA could not produce pronunciation tips for this turn.'));
     }
     const target = pronunciationReferenceText(speech);
     if (target) {
-      const text = make('p', 'chat-sentence-text'), timing = make('span', 'chat-word-timing');
-      const sentenceRow = { text, timing }; timing.hidden = true;
-      paintText(sentenceRow, target, null);
-      const row = state.rows.get(turnId); if (row) row.sentenceRow = sentenceRow;
       const listenSentence = make('button', 'text-button chat-sentence-listen', 'Nghe cả câu'); listenSentence.type = 'button';
       listenSentence.prepend(icon('i-speaker'));
       listenSentence.addEventListener('click', () => {
@@ -553,7 +693,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
         if (state.speaking === 'sentence-' + turnId) stopSpeech();
         else if (turn) speak(turn, true);
       });
-      box.append(text, timing, listenSentence);
+      box.append(listenSentence);
     }
   }
   function render() {
@@ -766,8 +906,8 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     const pendingReference = state.referenceRequests.get(turn.jobId);
     const editorOpen = row.review.querySelector('.chat-reference-editor')?.open;
     const soundsOpen = row.review.querySelector('.chat-phonetic-choices')?.open;
-    const originalOpen = row.review.querySelector('.chat-original-transcript')?.open;
-    row.review.replaceChildren(); if (!pronunciationReferenceReady(speech) || !speech?.transcript) return;
+    row.review.replaceChildren(); row.sentenceRow = null;
+    if (!pronunciationReferenceReady(speech) || !speech?.transcript) return;
     const resolution = speech.reference_resolution || {};
     const { diagnostic, words: candidates } = diagnosticView(speech);
     const unconfirmed = speech.reference_source === 'asr';
@@ -778,11 +918,12 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     const targetLabel = speech.reference_source === 'user_confirmed' ? 'Câu đã xác nhận · đối chiếu phát âm'
       : speech.reference_source === 'reading_prompt' ? 'Câu đọc mẫu · đối chiếu phát âm'
         : speech.reference_source === 'bert_inferred' ? 'Câu gợi ý để đối chiếu phát âm' : 'Câu đối chiếu phát âm';
-    row.review.append(make('span', 'chat-review-label', targetLabel), make('p', 'chat-target-text', target));
-    const original = make('details', 'chat-original-transcript'); original.open = originalOpen ?? false;
-    original.append(make('summary', 'chat-reference-note', 'Xem bản nhận dạng gốc'),
-      make('p', 'chat-target-text', speech.transcript));
-    row.review.append(original);
+    const targetText = make('p', 'chat-target-text'), targetTiming = make('span', 'chat-word-timing');
+    targetTiming.hidden = true;
+    const sentenceRow = { text: targetText, timing: targetTiming };
+    paintText(sentenceRow, target, null);
+    row.sentenceRow = sentenceRow;
+    row.review.append(make('span', 'chat-review-label', targetLabel), targetText, targetTiming);
     let note = '';
     if (diagnostic?.status === 'unavailable' && diagnostic.reason === 'reference_contains_unknown_words') {
       const unknown = diagnostic.missing_words || missing;
@@ -815,7 +956,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
           phonetic.lang = 'en'; phonetic.setAttribute('aria-label', ipa ? 'Phiên âm: ' + ipa : 'Chưa có phiên âm');
           const listen = make('button', 'text-button chat-word-listen', 'Nghe'); listen.type = 'button';
           listen.prepend(icon('i-speaker')); listen.setAttribute('aria-label', 'Nghe từ ' + word.text);
-          listen.addEventListener('click', () => speakText(word.text, `word-${turn.id}-${word.index}`));
+           listen.addEventListener('click', () => speakComparisonWord(word.text, `word-${turn.id}-${word.index}`));
           practice.append(button, phonetic, listen); words.append(practice);
         }
         row.review.append(words);
@@ -1175,19 +1316,27 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     resetRows(); showError(); node('chat-audio-retry').hidden = true; state.lastAudio = null; render(); save();
   }
   function paintText(row, text, range, mode = null, readUntil = null) {
-    if (!text.startsWith(row.shownText || '')) { row.text.replaceChildren(); row.shownText = ''; row.readUntil = 0; }
-    if (Number.isInteger(readUntil) && readUntil >= 0) row.readUntil = Math.min(readUntil, text.length);
-    else if (range) row.readUntil = range.end;
-    const from = (row.shownText || '').length;
-    // Append words as safe DOM text, keeping earlier spans stable while speaking.
-    for (const match of text.slice(from).matchAll(/\s+|\S+/g)) {
-      if (/^\s/.test(match[0])) row.text.append(document.createTextNode(match[0]));
-      else {
-        const span = make('span', 'chat-reply-word', match[0]); span.dataset.start = from + match.index;
-        span.dataset.end = from + match.index + match[0].length; row.text.append(span);
+    const source = String(text || ''), spoken = plainSpeechText(source);
+    if (row.sourceText !== source) {
+      row.text.replaceChildren();
+      let offset = 0;
+      for (const run of markdownRuns(source)) {
+        const parent = run.format ? document.createElement(run.format) : row.text;
+        if (run.format) row.text.append(parent);
+        for (const match of run.text.matchAll(/\s+|\S+/g)) {
+          if (/^\s/.test(match[0])) parent.append(document.createTextNode(match[0]));
+          else {
+            const span = make('span', 'chat-reply-word', match[0]);
+            span.dataset.start = offset + match.index; span.dataset.end = offset + match.index + match[0].length;
+            parent.append(span);
+          }
+        }
+        offset += run.text.length;
       }
+      row.sourceText = source; row.shownText = spoken; row.readUntil = 0;
     }
-    row.shownText = text;
+    if (Number.isInteger(readUntil) && readUntil >= 0) row.readUntil = Math.min(readUntil, spoken.length);
+    else if (range) row.readUntil = range.end;
     for (const span of row.text.querySelectorAll('.chat-reply-word')) {
       const active = Boolean(range && +span.dataset.start < range.end && +span.dataset.end > range.start);
       span.classList.toggle('is-read', +span.dataset.end <= (row.readUntil || 0));
@@ -1245,7 +1394,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     for (let i = 0; i + 1 < turns.length; i += 2) if (turns[i].role === 'user' && turns[i + 1].role === 'assistant' && turns[i + 1].status === 'ready') {
       result.push({ role: 'user', content: userConversationText(turns[i]) }, { role: 'assistant', content: turns[i + 1].content });
     }
-    while (result.length > 20 || result.reduce((sum, x) => sum + x.content.length, 0) > 12000) result.splice(0, 2);
+    // Keep up to 25 complete exchanges (50 messages) for continuity. The
+    // server/model still trims complete older turns if its token window fills.
+    while (result.length > 50 || result.reduce((sum, x) => sum + x.content.length, 0) > 30000) result.splice(0, 2);
     return result;
   }
   function base64(buffer) {
@@ -1459,8 +1610,10 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   function stopSpeech(preserveOpening = null) {
     state.voiceStopped = true; state.speechEpoch++;
     const playback = state.playback; state.playback = null; playback?.tracker?.dispose();
+    playback?.controller?.abort();
+    if (playback?.url) URL.revokeObjectURL(playback.url);
     const activeRow = playback?.row || state.rows.get(playback?.turnId || state.speaking);
-    if (activeRow) { activeRow.readUntil = 0; paintText(activeRow, activeRow.shownText || '', null, null, 0); }
+    if (activeRow) { activeRow.readUntil = 0; paintText(activeRow, activeRow.sourceText || activeRow.shownText || '', null, null, 0); }
     if (state.audioFrame !== null) cancelAnimationFrame(state.audioFrame); state.audioFrame = null;
     state.liveReply?.mute(); cancelBrowserSpeech();
     if (state.recordingAudio) { state.recordingAudio.pause(); state.recordingAudio = null; }
@@ -1468,7 +1621,9 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     if (state.openingPending && state.openingPending !== preserveOpening) revealOpening(state.openingPending);
   }
   function speakText(text, id, turn = null, { opening = false } = {}) {
+    text = plainSpeechText(text);
     if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating) return;
+    if (!text) return;
     showError();
     stopSpeech(opening ? turn : null);
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { if (opening) revealOpening(turn); showError('Browser speech is unavailable. Select Kokoro or ai33 to hear a completed reply.'); return; }
@@ -1501,6 +1656,44 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
       }, 25000);
     } catch (error) { if (valid()) { if (opening) revealOpening(turn); finish(); showError('Không phát được giọng đọc. Bạn thử bấm Phát lại.'); } }
   }
+  async function speakComparisonWord(text, id) {
+    text = plainSpeechText(text);
+    if (currentVoiceProvider() !== 'kokoro') { speakText(text, id); return; }
+    if (state.recording || state.pending || state.stopping || state.referenceOperation?.regenerating || !text) return;
+    const selection = voiceSelection(state.config, 'kokoro', state.voiceId, state.voiceSpeed);
+    if (!selection.voice_id) { speakText(text, id); return; }
+    showError(); stopSpeech();
+    const epoch = state.speechEpoch, controller = new AbortController();
+    const playback = { controller };
+    state.playback = playback; state.speaking = id; render();
+    let timeout;
+    const current = () => epoch === state.speechEpoch && state.playback === playback && !state.destroyed;
+    const finish = () => {
+      if (!current()) return;
+      state.playback = null; state.audio = null; state.speaking = null;
+      if (playback.url) URL.revokeObjectURL(playback.url);
+      render();
+    };
+    try {
+      timeout = setTimeout(() => controller.abort(), 120000);
+      const response = await fetch('/api/chat/voice-sample', { method: 'POST', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice_id: selection.voice_id, speed: selection.speed }), signal: controller.signal });
+      if (!response.ok) {
+        let message = 'Không tạo được giọng Kokoro cho từ này.';
+        try { message = (await response.json()).message || message; } catch {}
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      if (!current()) return;
+      playback.url = URL.createObjectURL(blob);
+      const audio = new Audio(playback.url); state.audio = audio;
+      audio.onplaying = () => { if (current()) { state.speaking = id; render(); } };
+      audio.onended = finish; audio.onerror = () => { if (current()) { finish(); showError('Không phát được giọng Kokoro. Hãy thử lại.'); } };
+      await audio.play();
+    } catch (error) {
+      if (current()) { finish(); showError(error.name === 'AbortError' ? 'Tạo giọng Kokoro mất quá nhiều thời gian. Hãy thử lại.' : error.message || 'Không tạo được giọng Kokoro cho từ này.'); }
+    } finally { clearTimeout(timeout); }
+  }
   function autoplayReply(turn) {
     const revision = turnRevision(turn);
     if (!replyReady(turn) || !turn.content || !state.visible || state.voiceStopped
@@ -1519,7 +1712,7 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
     // Legacy sessions omitted provider and used AI33 voice IDs. Keep their
     // provider explicit rather than sending an AI33 ID to the new local default.
     turn[selectionField].provider ||= 'ai33';
-    const text = sentence ? pronunciationReferenceText(turn.speech) : turn.content;
+    const text = plainSpeechText(sentence ? pronunciationReferenceText(turn.speech) : turn.content);
     const revision = turnRevision(turn), target = sentence ? 'sentence' : 'reply';
     return { text, revision, selection: turn[selectionField],
       key: voiceResourceKey(turn.jobId, revision, target, turn[selectionField], text),
@@ -1601,11 +1794,17 @@ if (typeof module === 'object' && module.exports) module.exports = { LiveReply, 
   }
   async function speak(turn, sentence = false, { opening = false } = {}) {
     if (state.recording || state.pending || state.stopping || (state.referenceOperation?.regenerating && !replyReady(turn))) return;
-    const text = sentence ? pronunciationReferenceText(turn.speech) : turn.content;
+    const text = plainSpeechText(sentence ? pronunciationReferenceText(turn.speech) : turn.content);
     const playId = sentence ? 'sentence-' + turn.id : turn.id;
     if (!text) return;
     if (!serverVoiceSelected()) { speakText(text, playId, sentence ? null : turn, { opening }); return; }
-    if (!turn.jobId || (sentence ? turn.status !== 'ready' : !replyReady(turn))) { showError('Giọng đọc cần câu trả lời hoàn tất trong phiên hiện tại.'); return; }
+    if (sentence ? turn.status !== 'ready' : !replyReady(turn)) {
+      showError('Đợi câu trả lời hoàn tất rồi thử lại.'); return;
+    }
+    if (!turn.jobId) {
+      showError('Câu trả lời này được khôi phục từ lịch sử nên không còn phiên tạo giọng. Lựa chọn Kokoro/ai33 vẫn được lưu cho câu trả lời mới; chuyển sang Browser để đọc câu này.');
+      return;
+    }
     const info = voiceRequestInfo(turn, sentence), revision = info.revision;
     showError();
     stopSpeech(opening ? turn : null); const model = state.model, epoch = state.speechEpoch;
